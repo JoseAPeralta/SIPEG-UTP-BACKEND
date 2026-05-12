@@ -1,0 +1,10 @@
+node_modules
+.agents
+dist
+coverage
+generated
+src/generated
+package-lock.json
+.env
+.env.*
+!.env.example
