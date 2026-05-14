@@ -18,3 +18,13 @@ export interface RegisterUserResponse {
   user: AuthUserResponse;
   accessToken: string;
 }
+
+export interface LoginUserInput {
+  identificador: string;
+  contrasenia: string;
+}
+
+export interface LoginUserResponse {
+  user: AuthUserResponse;
+  accessToken: string;
+}

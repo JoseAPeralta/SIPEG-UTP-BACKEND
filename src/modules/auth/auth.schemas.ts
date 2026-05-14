@@ -4,6 +4,11 @@ import { isPanamanianCedula, normalizeCedula } from '../../utils/cedula.js';
 
 const trimmedString = z.string().trim();
 
+const isEmail = (value: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(value);
+};
+
 export const registerUserSchema = z.object({
   body: z.object({
     nombre: trimmedString.min(2, 'Nombre must be at least 2 characters.').max(100),
@@ -27,3 +32,15 @@ export const registerUserSchema = z.object({
 });
 
 export type RegisterUserSchemaBody = z.infer<typeof registerUserSchema>['body'];
+
+export const loginUserSchema = z.object({
+  body: z.object({
+    identificador: trimmedString.min(1, 'Identificador is required.').refine(
+      (value) => isEmail(value) || isPanamanianCedula(value),
+      'Identificador must be a valid email or cedula.'
+    ),
+    contrasenia: trimmedString.min(1, 'Contrasenia is required.'),
+  }),
+});
+
+export type LoginUserSchemaBody = z.infer<typeof loginUserSchema>['body'];
