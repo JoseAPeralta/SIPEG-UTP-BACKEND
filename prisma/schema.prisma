@@ -7,15 +7,277 @@ datasource db {
   provider = "postgresql"
 }
 
+enum RolGlobal {
+  usuario
+  admin
+}
+
+enum RolEvento {
+  organizador
+  editor
+  visor
+}
+
+enum TipoAula {
+  laboratorio
+  aula
+}
+
+enum EstadoPropuesta {
+  pendiente
+  aprobado
+  rechazado
+}
+
+enum MetodoAsistencia {
+  qr
+  manual
+}
+
 model User {
-  id           String   @id @default(cuid())
-  nombre       String   @db.VarChar(100)
-  apellido     String   @db.VarChar(100)
-  cedula       String   @unique @db.VarChar(30)
-  correo       String   @unique @db.VarChar(254)
-  passwordHash String   @map("password_hash") @db.VarChar(255)
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String    @id @default(cuid())
+  nombre       String    @db.VarChar(100)
+  apellido     String    @db.VarChar(100)
+  cedula       String    @unique @db.VarChar(30)
+  correo       String    @unique @db.VarChar(254)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  rolGlobal    RolGlobal @default(usuario)
+  activo       Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  facultyId    String?   @map("faculty_id")
+  faculty      Faculty?  @relation(fields: [facultyId], references: [id])
+
+  careerId     String?   @map("career_id")
+  career       Career?   @relation(fields: [careerId], references: [id])
+
+  collaborators    EventCollaborator[]
+  attendance       Attendance[]
+  certificates     Certificate[]
+  speakerProposals SpeakerProposal[]
 
   @@map("users")
+}
+
+model Faculty {
+  id          String    @id @default(cuid())
+  nombre      String    @db.VarChar(150)
+  codigo      String    @unique @db.VarChar(20)
+  descripcion String?   @db.Text
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  careers  Career[]
+  events   Event[]
+  users    User[]
+
+  @@map("faculties")
+}
+
+model Career {
+  id          String    @id @default(cuid())
+  nombre      String    @db.VarChar(150)
+  codigo      String    @unique @db.VarChar(20)
+  descripcion String?   @db.Text
+  activo      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  facultyId String @map("faculty_id")
+  faculty   Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  users User[]
+
+  @@map("careers")
+}
+
+model Event {
+  id            String    @id @default(cuid())
+  nombre        String    @db.VarChar(200)
+  descripcion   String?   @db.Text
+  label         String?   @db.VarChar(100)
+  bannerUrl     String?   @map("banner_url") @db.VarChar(500)
+  fechaInicio   DateTime  @map("fecha_inicio") @db.Date
+  fechaFin      DateTime  @map("fecha_fin") @db.Date
+  esSerie       Boolean   @default(false) @map("es_serie")
+  estado        String    @default("borrador") @db.VarChar(20)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  facultyId String? @map("faculty_id")
+  faculty   Faculty? @relation(fields: [facultyId], references: [id])
+
+  smallEvents       SmallEvent[]
+  collaborators     EventCollaborator[]
+  speakerProposals  SpeakerProposal[]
+
+  @@map("events")
+}
+
+model SmallEvent {
+  id             String    @id @default(cuid())
+  nombre         String    @db.VarChar(200)
+  descripcion   String?   @db.Text
+  tipo           String    @db.VarChar(50)
+  fecha          DateTime  @db.Date
+  horaInicio     DateTime  @map("hora_inicio") @db.Time
+  horaFin        DateTime  @map("hora_fin") @db.Time
+  capacidadMax   Int?      @map("capacidad_maxima")
+  bannerUrl      String?   @map("banner_url") @db.VarChar(500)
+  codigoQr       String?   @unique @map("codigo_qr") @db.VarChar(50)
+  codigoManual   String?   @map("codigo_manual") @db.VarChar(20)
+  equipment      String[]  @db.VarChar(255)
+  estado         String    @default("borrador") @db.VarChar(20)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  eventId String @map("event_id")
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  classroomId String? @map("classroom_id")
+  classroom   Classroom? @relation(fields: [classroomId], references: [id])
+
+  attendance   Attendance[]
+  certificates Certificate[]
+
+  @@map("small_events")
+}
+
+model Permission {
+  id          String    @id @default(cuid())
+  nombre      String    @unique @db.VarChar(50)
+  descripcion String?   @db.VarChar(200)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  collaboratorPermissions EventPermission[]
+
+  @@map("permissions")
+}
+
+model EventCollaborator {
+  id        String    @id @default(cuid())
+  rol       RolEvento @default(visor)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  eventId String @map("event_id")
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  permissions EventPermission[]
+
+  @@unique([eventId, userId])
+  @@map("event_collaborators")
+}
+
+model EventPermission {
+  id String @id @default(cuid())
+
+  collaboratorId String @map("collaborator_id")
+  collaborator   EventCollaborator @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+
+  permissionId String @map("permission_id")
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([collaboratorId, permissionId])
+  @@map("event_permissions")
+}
+
+model Attendance {
+  id          String        @id @default(cuid())
+  metodo      MetodoAsistencia
+  codigoUsado String?       @map("codigo_usado") @db.VarChar(20)
+  checkedInAt DateTime      @default(now()) @map("checked_in_at")
+
+  smallEventId String @map("small_event_id")
+  smallEvent   SmallEvent @relation(fields: [smallEventId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  certificate Certificate?
+
+  @@unique([smallEventId, userId])
+  @@map("attendance")
+}
+
+model Certificate {
+  id         String   @id @default(cuid())
+  codigo     String   @unique @db.VarChar(50)
+  urlPdf     String?  @map("url_pdf") @db.VarChar(500)
+  emitidoEn  DateTime @default(now()) @map("emitido_en")
+
+  attendanceId String @unique @map("attendance_id")
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  smallEventId String @map("small_event_id")
+  smallEvent   SmallEvent @relation(fields: [smallEventId], references: [id], onDelete: Cascade)
+
+  @@map("certificates")
+}
+
+model Classroom {
+  id        String    @id @default(cuid())
+  nombre    String    @db.VarChar(50)
+  tipo      TipoAula
+  capacidad Int
+  edificio  String?   @db.VarChar(50)
+  piso      Int?
+  activo    Boolean   @default(true)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  amenities    ClassroomAmenity[]
+  availability ClassroomAvailability[]
+  smallEvents  SmallEvent[]
+
+  @@map("classrooms")
+}
+
+model ClassroomAmenity {
+  amenity String @db.VarChar(50)
+
+  classroomId String @map("classroom_id")
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  @@id([classroomId, amenity])
+  @@map("classroom_amenities")
+}
+
+model ClassroomAvailability {
+  id          String  @id @default(cuid())
+  diaSemana   Int     @map("dia_semana")
+  horaInicio  DateTime @map("hora_inicio") @db.Time
+  horaFin     DateTime @map("hora_fin") @db.Time
+  periodo     String? @db.VarChar(30)
+
+  classroomId String @map("classroom_id")
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+
+  @@map("classroom_availability")
+}
+
+model SpeakerProposal {
+  id                String          @id @default(cuid())
+  titulo            String          @db.VarChar(200)
+  contenido         String          @db.Text
+  tipoPropuesta     String          @map("tipo_propuesta") @db.VarChar(30)
+  duracionEstimada  Int?            @map("duracion_estimada")
+  estado            EstadoPropuesta @default(pendiente)
+  enviadoEn         DateTime        @default(now()) @map("enviado_en")
+  actualizadoEn     DateTime        @updatedAt @map("actualizado_en")
+
+  speakerId String @map("speaker_id")
+  speaker   User   @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+
+  eventId String? @map("event_id")
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@map("speaker_proposals")
 }
