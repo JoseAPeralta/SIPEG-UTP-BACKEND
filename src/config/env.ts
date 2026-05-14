@@ -28,6 +28,14 @@ const envSchema = z
         message: 'CORS_ORIGIN cannot use * in production.',
       });
     }
+
+    if (value.NODE_ENV === 'production' && !value.JWT_ACCESS_SECRET) {
+      context.addIssue({
+        code: 'custom',
+        path: ['JWT_ACCESS_SECRET'],
+        message: 'JWT_ACCESS_SECRET is required in production.',
+      });
+    }
   });
 
 const parsedEnv = envSchema.safeParse(process.env);
