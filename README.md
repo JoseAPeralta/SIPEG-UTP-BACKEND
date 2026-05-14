@@ -71,6 +71,47 @@ Respuesta esperada:
 }
 ```
 
+### Registro de usuarios
+
+```http
+POST /api/v1/auth/register
+```
+
+Body esperado:
+
+```json
+{
+  "nombre": "Juan",
+  "apellido": "Perez",
+  "cedula": "8-123-4567",
+  "correo": "juan.perez@example.com",
+  "contrasenia": "Password123"
+}
+```
+
+La cedula acepta formatos panamenos de provincia y tipos especiales como `E`, `N`, `PE`, `AV` y `PI`.
+
+Respuesta esperada:
+
+```json
+{
+  "success": true,
+  "message": "User created successfully.",
+  "data": {
+    "user": {
+      "id": "ck...",
+      "nombre": "Juan",
+      "apellido": "Perez",
+      "cedula": "8-123-4567",
+      "correo": "juan.perez@example.com"
+    },
+    "accessToken": "jwt..."
+  }
+}
+```
+
+El backend guarda solo el hash de la contrasenia y nunca devuelve `passwordHash` ni `contrasenia`. `JWT_ACCESS_SECRET` debe estar configurado para emitir el token de acceso.
+
 ## Estructura Base
 
 ```txt
