@@ -16,6 +16,25 @@ npm install
 
 Configura las variables de entorno usando `.env.example` como referencia. Por ahora el servidor puede iniciar sin `DATABASE_URL` porque no se conecta a una base de datos al arrancar.
 
+## Docker
+
+Para levantar el backend junto con PostgreSQL en local:
+
+```bash
+docker compose up --build
+```
+
+La API queda disponible en `http://localhost:3000/api/v1/health`. PostgreSQL se expone solo en `127.0.0.1:${POSTGRES_PORT:-5432}` para uso local.
+
+Antes de usarlo fuera de desarrollo local, configura secretos reales en `.env` y no uses los valores por defecto de `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` ni `POSTGRES_PASSWORD`.
+
+Comandos utiles:
+
+```bash
+docker compose down
+docker compose down -v
+```
+
 ## Scripts
 
 - `npm run dev`: inicia el servidor en modo desarrollo con `tsx watch`.
