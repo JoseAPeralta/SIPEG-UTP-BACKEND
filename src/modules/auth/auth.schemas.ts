@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const panamanianCedulaRegex = /^(?:[1-9]|1[0-3]|E|N|PE|AV|PI)-[A-Z0-9]{1,4}-\d{1,6}$/;
+import { isPanamanianCedula, normalizeCedula } from '../../utils/cedula.js';
 
 const trimmedString = z.string().trim();
 
@@ -10,8 +10,8 @@ export const registerUserSchema = z.object({
     apellido: trimmedString.min(2, 'Apellido must be at least 2 characters.').max(100),
     cedula: trimmedString
       .min(1, 'Cedula is required.')
-      .transform((value) => value.toUpperCase())
-      .refine((value) => panamanianCedulaRegex.test(value), 'Cedula format is invalid.'),
+      .transform(normalizeCedula)
+      .refine(isPanamanianCedula, 'Cedula format is invalid.'),
     correo: trimmedString
       .email('Correo must be a valid email.')
       .max(254)
