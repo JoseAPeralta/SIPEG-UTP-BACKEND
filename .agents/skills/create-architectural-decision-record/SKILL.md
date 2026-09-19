@@ -34,13 +34,13 @@ The documentation file must follow the template below, ensuring that all section
 
 ```md
 ---
-title: "ADR-NNNN: [Decision Title]"
-status: "Proposed"
-date: "YYYY-MM-DD"
-authors: "[Stakeholder Names/Roles]"
-tags: ["architecture", "decision"]
-supersedes: ""
-superseded_by: ""
+title: 'ADR-NNNN: [Decision Title]'
+status: 'Proposed'
+date: 'YYYY-MM-DD'
+authors: '[Stakeholder Names/Roles]'
+tags: ['architecture', 'decision']
+supersedes: ''
+superseded_by: ''
 ---
 
 # ADR-NNNN: [Decision Title]
