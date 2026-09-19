@@ -64,7 +64,7 @@ docker compose -f compose.prod.yaml --env-file .env.prod up -d --build
 - El servicio `migrate` aplica las migraciones pendientes y termina; la API solo arranca si finaliza correctamente.
 - La base de datos no publica puertos al host; solo es accesible por la red interna de Compose.
 - `DATABASE_URL` se construye automaticamente con host `db` a partir de `POSTGRES_DB`, `POSTGRES_USER` y `POSTGRES_PASSWORD`; no la definas en `.env.prod`.
-- Los secretos son obligatorios: Compose falla si falta `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, `CORS_ORIGIN`, `POSTGRES_DB`, `POSTGRES_USER` o `POSTGRES_PASSWORD`.
+- Las variables obligatorias de Compose son: `CORS_ORIGIN`, `POSTGRES_DB`, `POSTGRES_USER` y `POSTGRES_PASSWORD`.
 - Si `POSTGRES_PASSWORD` contiene caracteres especiales (`@ : / ? # %`), codificalos en porcentaje o usa solo caracteres alfanumericos.
 - `IMAGE_TAG` permite etiquetar la imagen de la API (por defecto `latest`).
 - La API se detiene con `stop_grace_period: 15s`, mayor que el timeout interno de apagado ordenado.
@@ -121,51 +121,31 @@ Respuesta esperada:
   "data": {
     "status": "ok",
     "service": "sipeg-utp-backend",
-    "environment": "development"
+    "environment": "development",
+    "authJwksReachable": true
   }
 }
 ```
 
-### Registro de usuarios
+### Auth
 
-```http
-POST /api/v1/auth/register
-```
-
-Body esperado:
-
-```json
-{
-  "nombre": "Juan",
-  "apellido": "Perez",
-  "cedula": "8-123-4567",
-  "correo": "juan.perez@example.com",
-  "contrasenia": "Password123"
-}
-```
-
-La cedula acepta formatos panamenos de provincia y tipos especiales como `E`, `N`, `PE`, `AV` y `PI`.
-
-Respuesta esperada:
-
-```json
-{
-  "success": true,
-  "message": "User created successfully.",
-  "data": {
-    "user": {
-      "id": "ck...",
-      "nombre": "Juan",
-      "apellido": "Perez",
-      "cedula": "8-123-4567",
-      "correo": "juan.perez@example.com"
-    },
-    "accessToken": "jwt..."
-  }
-}
-```
-
-El backend guarda solo el hash de la contrasenia y nunca devuelve `passwordHash` ni `contrasenia`. `JWT_ACCESS_SECRET` debe estar configurado para emitir el token de acceso.
+- Password hashing con **Argon2id** (parametros OWASP: `t=2, m=19 MiB, p=1`).
+- Access tokens: JWT EdDSA Ed25519 (15 min) validados contra JWKS cacheado.
+- Refresh tokens: sesiones server-side (7 dias) con revocacion inmediata.
+- Endpoints principales (`/api/v1/auth/*`):
+  - `POST /auth/login` — devuelve access token + refresh token.
+  - `POST /auth/refresh` — emite nuevo access token.
+  - `POST /auth/logout` — invalida el refresh token.
+  - `POST /auth/register` — crea cuenta; envia email de verificacion.
+  - `POST /auth/verify-email` — confirma email.
+  - `POST /auth/forgot-password` / `reset-password` — recuperacion.
+- Rutas privadas: `Authorization: Bearer <accessToken>`.
+- Variables de entorno (sin prefijo del proveedor):
+  - `AUTH_SECRET` (requerido, generar con `openssl rand -base64 32`)
+  - `AUTH_URL` (default `http://localhost:3000`)
+  - `AUTH_TOKEN_TTL` (default `15m`)
+  - `AUTH_REFRESH_TTL` (default `7d`)
+  - Opcionales: `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_ARGON2_*`
 
 ## Estructura Base
 
@@ -177,16 +157,21 @@ src/
 |   |-- env.ts
 |   `-- prisma.ts
 |-- controllers/
+|   |-- events.controller.ts
 |   `-- health.controller.ts
 |-- models/
+|   |-- event.model.ts
 |   `-- health.model.ts
 |-- routes/
 |   |-- index.ts
+|   |-- events.routes.ts
+|   |-- events.routes.test.ts
 |   |-- health.routes.ts
 |   `-- health.routes.test.ts
 |-- middlewares/
 |   |-- error.middleware.ts
-|   `-- notFound.middleware.ts
+|   |-- notFound.middleware.ts
+|   `-- validate.middleware.ts
 `-- utils/
     |-- ApiError.ts
     |-- asyncHandler.ts
@@ -201,8 +186,8 @@ Ejemplos:
 
 - `src/routes/health.routes.ts`
 - `src/routes/health.routes.test.ts`
-- `src/controllers/example.controller.ts`
-- `src/controllers/example.controller.test.ts`
+- `src/routes/events.routes.ts`
+- `src/routes/events.routes.test.ts`
 
 ## Configuracion
 
