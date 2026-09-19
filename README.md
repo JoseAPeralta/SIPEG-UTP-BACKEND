@@ -99,6 +99,11 @@ Luego restaura `backup.sql` en el nuevo volumen antes de levantar la API. El nom
 - `pnpm run format`: formatea con Prettier.
 - `pnpm run format:check`: valida formato con Prettier.
 - `pnpm test`: ejecuta Vitest.
+- `pnpm run docs:generate`: regenera `openapi.json` desde los schemas Zod.
+- `pnpm run docs:check`: falla si `openapi.json` esta desactualizado (usar en CI).
+- `pnpm run api:collection:import`: regenera destructivamente la coleccion Bruno desde `openapi.json`.
+- `pnpm run api:run`: ejecuta toda la coleccion Bruno contra el environment `local`; puede modificar datos.
+- `pnpm run api:run:smoke`: ejecuta unicamente el health check de Bruno.
 - `pnpm run prisma:validate`: valida `prisma/schema.prisma`.
 - `pnpm run prisma:format`: formatea `prisma/schema.prisma`.
 - `pnpm run prisma:generate`: genera Prisma Client en `src/generated/prisma` sin conectarse a la base de datos.
@@ -127,6 +132,70 @@ Respuesta esperada:
   }
 }
 ```
+
+## Documentacion De API
+
+El contrato OpenAPI 3.1 se genera desde los schemas Zod (`src/**/*.schemas.ts`) con `zod-openapi`, de modo que validacion y documentacion no se desincronizan.
+
+- UI interactiva (Scalar): `http://localhost:3000/api/docs`.
+- Especificacion JSON: `http://localhost:3000/api/openapi.json`.
+- Ambas rutas estan detras de `DOCS_ENABLED` (habilitadas por defecto fuera de `NODE_ENV=production`).
+
+El documento se versiona como `openapi.json` en la raiz:
+
+```bash
+pnpm run docs:generate   # regenera openapi.json
+pnpm run docs:check      # falla si openapi.json esta desactualizado
+```
+
+Regla de flujo: al cambiar rutas, schemas de validacion o responses, ejecuta `pnpm run docs:generate` y commitea `openapi.json` junto al cambio. Los nombres de componentes (`UserProfile`, `PaginatedActivities`, ...) provienen de `.meta({ id })` y son parte del contrato: renombrarlos es un cambio incompatible para el frontend.
+
+### Cliente HTTP con Bruno
+
+La coleccion completa en `bruno/` se genera desde `openapi.json`, se agrupa por tags y se versiona como archivos `.bru`. El environment `local` apunta a `http://localhost:3000`; el request de login usa el usuario administrador del seed y guarda `data.accessToken`/`data.refreshToken` en variables de runtime para los endpoints privados.
+
+En el cliente visual de Bruno, despues de abrir la coleccion `bruno/` debes seleccionar el environment `local` en el selector superior derecho; por defecto queda en `No Environment`. Sin esa seleccion `{{baseUrl}}` no se resuelve y los requests fallan con `getaddrinfo ENOTFOUND {{baseurl}}`. Los scripts `pnpm run api:run*` no necesitan ese paso porque pasan `--env local`.
+
+```bash
+pnpm run api:run:smoke # seguro: solo GET /api/v1/health
+pnpm run api:run       # coleccion completa; contiene operaciones que modifican datos
+```
+
+`pnpm run api:collection:import` sobrescribe la coleccion: despues de reimportar hay que restaurar el script post-response de `Auth/Log in with email and password.bru`. No guardes tokens ni credenciales reales en archivos versionados; usa un archivo `*.private.bru`, ignorado por Git, o variables proporcionadas en runtime. El login tiene limite de 5 intentos por minuto.
+
+El `opencode.json` del proyecto registra el MCP oficial `@usebruno/mcp`, fijado a un commit porque todavia no se publica en npm, y lo limita a la coleccion `bruno/`. Reinicia opencode despues de cambiar esa configuracion. El agente debe inspeccionar el request antes de ejecutar POST/PATCH/DELETE y no ejecutar requests contra produccion sin aprobacion explicita. Si MCP no esta disponible, los scripts pnpm anteriores son el fallback.
+
+### Consumir el contrato desde el frontend
+
+El frontend vive en otro repositorio y puede generar tipos con `openapi-typescript`.
+
+Estrategia A (artefacto versionado, recomendada):
+
+```bash
+pnpm dlx openapi-typescript ../SIPEG-UTP-BACKEND/openapi.json -o src/api/schema.d.ts
+```
+
+Estrategia B (endpoint en vivo, requiere el backend levantado):
+
+```bash
+pnpm dlx openapi-typescript http://localhost:3000/api/openapi.json -o src/api/schema.d.ts
+```
+
+Cliente tipado opcional con `openapi-fetch`:
+
+```ts
+import createClient from 'openapi-fetch';
+
+import type { paths } from './api/schema';
+
+const api = createClient<paths>({ baseUrl: 'http://localhost:3000' });
+
+const { data, error } = await api.GET('/api/v1/activities', {
+  params: { query: { page: 1, limit: 20 } },
+});
+```
+
+Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth) y no forman parte del contrato documentado; el contrato publico es `/api/v1/*`.
 
 ### Auth
 
@@ -160,7 +229,10 @@ Respuesta esperada:
 
 - `GET /api/v1/activities` es publico y devuelve las proximas actividades: actividades `SCHEDULED`/`ONGOING` de programas `ACTIVE` con `date >= hoy` (zona institucional `America/Panama`).
 - Paginacion offset: `?page` (default 1) y `?limit` (default 20, maximo 50). Respuesta `data = { items, page, limit, total, totalPages }`.
-- Cada item incluye `eventProgram` (programa de eventos) y `organizationalUnit`; nunca expone `qrCode` ni `manualCode`.
+- `POST /api/v1/activities` (privado) crea una actividad dentro de un programa `ACTIVE`. Requiere el permiso `activity:create` en el programa (o rol `ADMIN`), queda en estado `DRAFT` y devuelve un DTO sin codigos.
+- Cuerpo de creacion: `name`, `type`, `date` (`YYYY-MM-DD`), `startTime`/`endTime` (`HH:mm`) y `eventProgramId` (obligatorio); opcionales `description`, `maxCapacity`, `bannerUrl`, `classroomId`, `speakerId` y `equipment[]`.
+- Cada item incluye `eventProgram` (programa de eventos) y `organizationalUnit`; la lista no expone codigos de check-in.
+- Los codigos de check-in (`code`) viven en `attendance` (uno por inscripcion, unico global) y no en la actividad. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 - Terminologia: "evento" se usa coloquialmente, pero el nombre oficial del recurso es **actividad** (`/activities`). La ruta `/events` fue retirada.
 
 ## Datos De Prueba (Seed)
@@ -204,6 +276,10 @@ src/
 |-- controllers/
 |   |-- activities.controller.ts
 |   `-- health.controller.ts
+|-- docs/
+|   |-- openapi.ts
+|   |-- schemas.ts
+|   `-- generate.ts
 |-- lib/
 |   |-- auth.ts
 |   `-- password.ts

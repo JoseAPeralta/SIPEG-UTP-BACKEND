@@ -71,6 +71,11 @@ pnpm run start
 pnpm run lint
 pnpm test
 pnpm run test:coverage
+pnpm run docs:generate
+pnpm run docs:check
+pnpm run api:collection:import
+pnpm run api:run:smoke
+pnpm run api:run
 pnpm prisma generate
 pnpm prisma validate
 pnpm prisma format
@@ -87,6 +92,10 @@ Rules:
 - Use one-shot validation commands. Avoid watch or long-running development servers unless the user asks.
 - Run `pnpm test` when adding or modifying tested behavior.
 - Run `pnpm run build` or `pnpm exec tsc --noEmit` before considering substantial TypeScript changes complete when tooling is configured.
+- Run `pnpm run docs:generate` after changing routes, request schemas, or response schemas, and commit `openapi.json` with the change. Run `pnpm run docs:check` to detect drift.
+- `bruno/` is the versioned HTTP client collection imported from `openapi.json`. `pnpm run api:collection:import` is destructive and overwrites manual collection changes, including the login token-capture script.
+- Prefer `pnpm run api:run:smoke` for safe connectivity checks. The full `pnpm run api:run` includes state-changing requests and must not target production without explicit user approval.
+- Bruno MCP is pinned to an exact commit of the official `usebruno/bruno-mcp` repository until an npm release exists. Inspect requests before POST/PATCH/DELETE, and fall back to the pnpm/Bruno CLI scripts if MCP is unavailable.
 
 ## Expected Backend Structure
 
@@ -125,7 +134,7 @@ prisma/
 `-- seed.ts
 ```
 
-> Estado actual: modulos `auth`, `authorization`, `users` y `events` implementados. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
+> Estado actual: modulos `auth`, `authorization`, `users` y `activities` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
 
 Rules:
 
@@ -146,6 +155,7 @@ NODE_ENV=development
 PORT=3000
 DATABASE_URL=""
 CORS_ORIGIN="http://localhost:5173"
+DOCS_ENABLED=true
 ```
 
 Rules:
@@ -204,6 +214,11 @@ For errors:
 - Use pagination for list endpoints that can grow.
 - Prefer cursor pagination for large or frequently changing lists; offset pagination is acceptable for simple administrative lists.
 - Use filters for event-program and activity lists, reports, attendance records, organizational units, careers, and classroom availability.
+- Document endpoints with the code-first OpenAPI 3.1 pipeline: Zod schemas are the single source of truth, `zod-openapi` builds the document, and `pnpm run docs:generate` writes `openapi.json`.
+- Keep public request and response schemas in the module `*.schemas.ts`; never document raw Prisma models or internal Better Auth fields. Fixed component names come from `.meta({ id })` and are breaking changes for the frontend when renamed.
+- Serve the contract at `/api/openapi.json` and the Scalar UI at `/api/docs`, gated by `DOCS_ENABLED` (default enabled outside production).
+- Keep the Bruno collection under `bruno/` aligned with `openapi.json`; after a destructive import, restore the login post-response script that captures `data.accessToken` and `data.refreshToken`.
+- Never commit real Bruno tokens or production credentials. Use ignored `bruno/environments/*.private.bru` overrides or runtime variables.
 - Do not return password hashes, refresh tokens, JWT internals, raw database errors, internal-only IDs, or sensitive audit information.
 - Keep frontend URLs out of controllers except for explicitly configured redirects or CORS rules.
 
@@ -414,8 +429,9 @@ For errors:
 
 - Allow an attendance record to represent registration before check-in and presence after check-in.
 - Register attendance for a specific activity.
+- Store a single per-registration `code` (unique global) on `attendance`; it is the QR/manual check-in validation method. See `docs/adr/adr-0004-attendance-checkin-codes.md`.
 - Support QR code attendance.
-- Support manual attendance codes.
+- Support manual attendance codes (`method` records `QR`/`MANUAL`).
 - Prevent duplicate attendance records when the business rule requires unique attendance per user and activity.
 - Validate activity availability before accepting attendance.
 - Keep attendance operations auditable when possible.
