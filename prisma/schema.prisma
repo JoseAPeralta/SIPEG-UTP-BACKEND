@@ -75,6 +75,8 @@ model User {
   lastName             String     @map("last_name") @db.VarChar(100)
   identificationNumber String     @unique @map("identification_number") @db.VarChar(30)
   email                String     @unique @db.VarChar(254)
+  emailVerified        Boolean    @default(false) @map("email_verified")
+  image                String?    @db.VarChar(500)
   passwordHash         String     @map("password_hash") @db.VarChar(255)
   globalRole           GlobalRole @default(USER) @map("global_role")
   isActive             Boolean    @default(true) @map("is_active")
@@ -87,6 +89,8 @@ model User {
   careerId String? @map("career_id")
   career   Career? @relation(fields: [careerId], references: [id], onDelete: SetNull)
 
+  sessions            Session[]
+  accounts            Account[]
   createdPrograms     EventProgram[]
   presentedActivities Activity[]
   collaborations      Collaboration[]
@@ -437,4 +441,62 @@ model Alert {
   @@index([activityId])
   @@index([certificateId])
   @@map("alerts")
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  ipAddress String?  @map("ip_address") @db.VarChar(45)
+  userAgent String?  @map("user_agent") @db.VarChar(500)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @map("access_token") @db.Text
+  refreshToken          String?   @map("refresh_token") @db.Text
+  idToken               String?   @map("id_token") @db.Text
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz(3)
+  scope                 String?   @db.Text
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Verification {
+  id         String   @id
+  identifier String   @db.VarChar(254)
+  value      String   @db.Text
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@index([expiresAt])
+  @@map("verifications")
+}
+
+model Jwks {
+  id         String   @id
+  publicKey  String   @map("public_key") @db.Text
+  privateKey String   @map("private_key") @db.Text
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("jwks")
 }
