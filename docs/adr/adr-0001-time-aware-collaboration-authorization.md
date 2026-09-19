@@ -1,11 +1,11 @@
 ---
-title: "ADR-0001: Autorizacion por colaboracion con ventanas temporales y delegacion atenuada"
-status: "Accepted"
-date: "2026-09-19"
-authors: "Equipo backend SIPEG UTP"
-tags: ["architecture", "security", "authorization"]
-supersedes: ""
-superseded_by: ""
+title: 'ADR-0001: Autorizacion por colaboracion con ventanas temporales y delegacion atenuada'
+status: 'Accepted'
+date: '2026-09-19'
+authors: 'Equipo backend SIPEG UTP'
+tags: ['architecture', 'security', 'authorization']
+supersedes: ''
+superseded_by: ''
 ---
 
 # ADR-0001: Autorizacion por colaboracion con ventanas temporales y delegacion atenuada

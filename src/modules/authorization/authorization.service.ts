@@ -1,10 +1,6 @@
 import { getPrismaClient } from '../../config/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
-import type {
-  AuthorizationScope,
-  GrantEnvelope,
-  ResolvedScope,
-} from './authorization.types.js';
+import type { AuthorizationScope, GrantEnvelope, ResolvedScope } from './authorization.types.js';
 import { PERMISSION_NAMES, type PermissionName } from './permissions.js';
 
 interface GrantRecord {
@@ -108,10 +104,15 @@ export const getPermissionEnvelopes = async (
       }
 
       const current = envelopes.get(name);
-      envelopes.set(name, current ? mergeEnvelope(current, grant) : {
-        validFrom: grant.validFrom,
-        validUntil: grant.validUntil,
-      });
+      envelopes.set(
+        name,
+        current
+          ? mergeEnvelope(current, grant)
+          : {
+              validFrom: grant.validFrom,
+              validUntil: grant.validUntil,
+            },
+      );
     }
   }
 

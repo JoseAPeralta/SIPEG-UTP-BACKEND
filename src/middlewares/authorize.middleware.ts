@@ -1,18 +1,15 @@
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler } from 'express';
 
 import { getEffectivePermissions } from '../modules/authorization/authorization.service.js';
 import type { AuthorizationScope } from '../modules/authorization/authorization.types.js';
-import {
-  PERMISSION_NAMES,
-  type PermissionName,
-} from '../modules/authorization/permissions.js';
+import { PERMISSION_NAMES, type PermissionName } from '../modules/authorization/permissions.js';
 import { ApiError } from '../utils/ApiError.js';
 import { requireAuthenticatedUser } from './authenticate.middleware.js';
 
 export type GlobalRole = 'USER' | 'ADMIN';
 
 export type ScopeResolver = (
-  req: Express.Request,
+  req: Request,
 ) => Promise<AuthorizationScope | undefined> | AuthorizationScope | undefined;
 
 export const requireRole = (...allowed: GlobalRole[]): RequestHandler => {
@@ -32,7 +29,7 @@ export const requireRole = (...allowed: GlobalRole[]): RequestHandler => {
 export const requireAdmin: RequestHandler = requireRole('ADMIN');
 
 export const requireOwnership = (
-  selector: (req: Express.Request) => string | undefined,
+  selector: (req: Request) => string | undefined,
 ): RequestHandler => {
   return (req, _res, next) => {
     try {

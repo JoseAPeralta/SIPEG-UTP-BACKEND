@@ -322,15 +322,8 @@ export interface ResolvedScope {
 
 ```ts
 import { getPrismaClient } from '../../config/prisma.js';
-import {
-  PERMISSION_NAMES,
-  type PermissionName,
-} from './permissions.js';
-import type {
-  AuthorizationScope,
-  GrantEnvelope,
-  ResolvedScope,
-} from './authorization.types.js';
+import { PERMISSION_NAMES, type PermissionName } from './permissions.js';
+import type { AuthorizationScope, GrantEnvelope, ResolvedScope } from './authorization.types.js';
 import { ApiError } from '../../utils/ApiError.js';
 
 const grantWindowWhere = (now: Date) => ({
@@ -399,14 +392,8 @@ export const getPermissionEnvelopes = async (
       const current = envelopes.get(name);
       const earlier = current?.validFrom ?? grant.validFrom ?? null;
       const later = current?.validUntil ?? grant.validUntil ?? null;
-      const validFrom =
-        current?.validFrom === null || grant.validFrom === null
-          ? null
-          : earlier;
-      const validUntil =
-        current?.validUntil === null || grant.validUntil === null
-          ? null
-          : later;
+      const validFrom = current?.validFrom === null || grant.validFrom === null ? null : earlier;
+      const validUntil = current?.validUntil === null || grant.validUntil === null ? null : later;
       envelopes.set(name, { validFrom, validUntil });
     }
   }
@@ -578,14 +565,14 @@ Expected: FAIL — `requirePermission` is not exported.
 ```ts
 import type { PermissionName } from '../modules/authorization/permissions.js';
 
-    interface RequestAuthorization {
-      permissions: Set<PermissionName>;
-    }
+interface RequestAuthorization {
+  permissions: Set<PermissionName>;
+}
 
-    interface Request {
-      user?: AuthenticatedUser;
-      authorization?: RequestAuthorization;
-    }
+interface Request {
+  user?: AuthenticatedUser;
+  authorization?: RequestAuthorization;
+}
 ```
 
 `authorize.middleware.ts` add:

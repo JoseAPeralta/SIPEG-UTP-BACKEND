@@ -1,11 +1,11 @@
 ---
-title: "ADR-0002: Zona horaria institucional America/Panama"
-status: "Accepted"
-date: "2026-09-19"
-authors: "Equipo backend SIPEG UTP"
-tags: ["architecture", "datetime", "institutional"]
-supersedes: ""
-superseded_by: ""
+title: 'ADR-0002: Zona horaria institucional America/Panama'
+status: 'Accepted'
+date: '2026-09-19'
+authors: 'Equipo backend SIPEG UTP'
+tags: ['architecture', 'datetime', 'institutional']
+supersedes: ''
+superseded_by: ''
 ---
 
 # ADR-0002: Zona horaria institucional America/Panama
