@@ -5,7 +5,7 @@ import {
   exportJWK,
   generateKeyPair,
   SignJWT,
-  type KeyLike,
+  type CryptoKey,
 } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -86,7 +86,7 @@ const loadApp = async (prisma: PrismaMock) => {
 };
 
 describe('users routes', () => {
-  let privateKey: KeyLike;
+  let privateKey: CryptoKey;
 
   beforeAll(async () => {
     const kp = await generateKeyPair('EdDSA', { crv: 'Ed25519' });

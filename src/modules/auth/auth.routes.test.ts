@@ -81,7 +81,7 @@ describe('auth routes', () => {
   let authMock: AuthMock;
 
   beforeAll(async () => {
-    const kp = await generateKeyPair('EdDSA', { crv: 'Ed25519' });
+    const kp = await generateKeyPair('EdDSA', { crv: 'Ed25519', extractable: true });
     const publicJwk = await exportJWK(kp.publicKey);
     const privateJwk = await exportJWK(kp.privateKey);
     const kid = await calculateJwkThumbprint(publicJwk);
