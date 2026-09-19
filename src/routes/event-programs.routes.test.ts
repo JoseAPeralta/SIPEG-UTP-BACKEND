@@ -3,9 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 interface EventProgramsServiceMock {
   createEventProgram: ReturnType<typeof vi.fn>;
+  listEventPrograms: ReturnType<typeof vi.fn>;
+  updateEventProgram: ReturnType<typeof vi.fn>;
 }
 
-const buildServiceMock = (): EventProgramsServiceMock => ({ createEventProgram: vi.fn() });
+const buildServiceMock = (): EventProgramsServiceMock => ({
+  createEventProgram: vi.fn(),
+  listEventPrograms: vi.fn(),
+  updateEventProgram: vi.fn(),
+});
 
 interface PrismaMock {
   user: { findUnique: ReturnType<typeof vi.fn> };
@@ -24,7 +30,13 @@ const adminRecord = {
 
 const userRecord = { ...adminRecord, id: 'user-001', globalRole: 'USER' };
 
-const loadApp = async (service: EventProgramsServiceMock, prisma = createPrismaMock()) => {
+const loadApp = async (
+  service: EventProgramsServiceMock,
+  prisma = createPrismaMock(),
+  permissions: string[] = ['program:create'],
+  getEffectivePermissions = vi.fn(),
+) => {
+  getEffectivePermissions.mockResolvedValue(new Set(permissions));
   process.env['NODE_ENV'] = 'test';
   process.env['AUTH_SECRET'] = 'a'.repeat(32);
   process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
@@ -53,7 +65,7 @@ const loadApp = async (service: EventProgramsServiceMock, prisma = createPrismaM
     },
   }));
   vi.doMock('../modules/authorization/authorization.service.js', () => ({
-    getEffectivePermissions: vi.fn().mockResolvedValue(new Set(['program:create'])),
+    getEffectivePermissions,
   }));
 
   const { app } = await import('../app.js');
@@ -84,6 +96,11 @@ const eventProgramDetail = {
   },
 };
 
+const eventProgramListItem = {
+  ...eventProgramDetail,
+  status: 'ACTIVE',
+};
+
 describe('event program routes', () => {
   afterEach(() => {
     vi.doUnmock('../modules/event-programs/event-programs.service.js');
@@ -91,6 +108,83 @@ describe('event program routes', () => {
     vi.doUnmock('../utils/jwt-verifier.js');
     vi.doUnmock('../lib/auth.js');
     vi.doUnmock('../modules/authorization/authorization.service.js');
+  });
+
+  it('returns paginated active event programs without authentication', async () => {
+    const service = buildServiceMock();
+    service.listEventPrograms.mockResolvedValue({
+      items: [eventProgramListItem],
+      page: 1,
+      limit: 20,
+      total: 1,
+      totalPages: 1,
+    });
+    const app = await loadApp(service);
+
+    const response = await request(app).get('/api/v1/event-programs').expect(200);
+
+    expect(response.body).toEqual({
+      success: true,
+      message: 'Event programs retrieved successfully.',
+      data: {
+        items: [eventProgramListItem],
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      },
+    });
+  });
+
+  it('applies default pagination when no query is provided', async () => {
+    const service = buildServiceMock();
+    service.listEventPrograms.mockResolvedValue({
+      items: [],
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+    });
+    const app = await loadApp(service);
+
+    await request(app).get('/api/v1/event-programs').expect(200);
+
+    expect(service.listEventPrograms).toHaveBeenCalledWith({ page: 1, limit: 20 });
+  });
+
+  it('forwards parsed pagination and filters', async () => {
+    const service = buildServiceMock();
+    service.listEventPrograms.mockResolvedValue({
+      items: [],
+      page: 2,
+      limit: 10,
+      total: 0,
+      totalPages: 0,
+    });
+    const app = await loadApp(service);
+
+    await request(app)
+      .get(
+        '/api/v1/event-programs?page=2&limit=10&organizationalUnitId=unit-001&unitType=FACULTY&q=congreso',
+      )
+      .expect(200);
+
+    expect(service.listEventPrograms).toHaveBeenCalledWith({
+      page: 2,
+      limit: 10,
+      organizationalUnitId: 'unit-001',
+      unitType: 'FACULTY',
+      q: 'congreso',
+    });
+  });
+
+  it('rejects an invalid unit type before the service', async () => {
+    const service = buildServiceMock();
+    const app = await loadApp(service);
+
+    await request(app).get('/api/v1/event-programs?unitType=CAMPUS').expect(400);
+
+    expect(service.listEventPrograms).not.toHaveBeenCalled();
   });
 
   it('rejects create requests without a token', async () => {
@@ -148,5 +242,149 @@ describe('event program routes', () => {
       .send({ ...validCreateBody, endDate: '2026-10-01' })
       .expect(400);
     expect(service.createEventProgram).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /api/v1/event-programs/:id', () => {
+  afterEach(() => {
+    vi.doUnmock('../modules/event-programs/event-programs.service.js');
+    vi.doUnmock('../config/prisma.js');
+    vi.doUnmock('../utils/jwt-verifier.js');
+    vi.doUnmock('../lib/auth.js');
+    vi.doUnmock('../modules/authorization/authorization.service.js');
+  });
+
+  const updateBody = { name: '  Congreso actualizado  ', label: 'CI-2026' };
+  const parsedUpdateBody = { name: 'Congreso actualizado', label: 'CI-2026' };
+
+  const updatedEventProgramDetail = {
+    ...eventProgramDetail,
+    name: parsedUpdateBody.name,
+    label: parsedUpdateBody.label,
+    status: 'ACTIVE',
+  };
+
+  it('rejects update requests without a token', async () => {
+    const service = buildServiceMock();
+    const app = await loadApp(service);
+
+    await request(app).patch('/api/v1/event-programs/program-001').send(updateBody).expect(401);
+    expect(service.updateEventProgram).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-admin without program:update on the scope', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(userRecord);
+    const app = await loadApp(service, prisma, ['program:create']);
+
+    await request(app)
+      .patch('/api/v1/event-programs/program-001')
+      .set('Authorization', 'Bearer user-001')
+      .send(updateBody)
+      .expect(403);
+    expect(service.updateEventProgram).not.toHaveBeenCalled();
+  });
+
+  it('updates an event program for an authorized collaborator in scope', async () => {
+    const service = buildServiceMock();
+    service.updateEventProgram.mockResolvedValue(updatedEventProgramDetail);
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(userRecord);
+    const getEffectivePermissions = vi.fn();
+    const app = await loadApp(service, prisma, ['program:update'], getEffectivePermissions);
+
+    const response = await request(app)
+      .patch('/api/v1/event-programs/program-001')
+      .set('Authorization', 'Bearer user-001')
+      .send(updateBody)
+      .expect(200);
+
+    expect(getEffectivePermissions).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-001' }),
+      { eventProgramId: 'program-001' },
+    );
+    expect(service.updateEventProgram).toHaveBeenCalledWith('program-001', parsedUpdateBody);
+    expect(response.body).toEqual({
+      success: true,
+      message: 'Event program updated successfully.',
+      data: updatedEventProgramDetail,
+    });
+  });
+
+  it('updates an event program for an admin', async () => {
+    const service = buildServiceMock();
+    service.updateEventProgram.mockResolvedValue(updatedEventProgramDetail);
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp(service, prisma);
+
+    await request(app)
+      .patch('/api/v1/event-programs/program-001')
+      .set('Authorization', 'Bearer admin-001')
+      .send(updateBody)
+      .expect(200);
+
+    expect(service.updateEventProgram).toHaveBeenCalledWith('program-001', parsedUpdateBody);
+  });
+
+  it('rejects an empty body before the service', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp(service, prisma);
+
+    await request(app)
+      .patch('/api/v1/event-programs/program-001')
+      .set('Authorization', 'Bearer admin-001')
+      .send({})
+      .expect(400);
+    expect(service.updateEventProgram).not.toHaveBeenCalled();
+  });
+
+  it('rejects immutable fields before the service', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp(service, prisma);
+
+    await request(app)
+      .patch('/api/v1/event-programs/program-001')
+      .set('Authorization', 'Bearer admin-001')
+      .send({ status: 'ACTIVE', isDefault: true })
+      .expect(400);
+    expect(service.updateEventProgram).not.toHaveBeenCalled();
+  });
+
+  it('propagates a missing event program as 404', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp(service, prisma);
+    const { ApiError } = await import('../utils/ApiError.js');
+    service.updateEventProgram.mockRejectedValue(new ApiError(404, 'Event program not found.'));
+
+    await request(app)
+      .patch('/api/v1/event-programs/missing')
+      .set('Authorization', 'Bearer admin-001')
+      .send(updateBody)
+      .expect(404);
+  });
+
+  it('propagates an archived event program as 409', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp(service, prisma);
+    const { ApiError } = await import('../utils/ApiError.js');
+    service.updateEventProgram.mockRejectedValue(
+      new ApiError(409, 'Archived event programs cannot be modified.'),
+    );
+
+    await request(app)
+      .patch('/api/v1/event-programs/program-001')
+      .set('Authorization', 'Bearer admin-001')
+      .send(updateBody)
+      .expect(409);
   });
 });

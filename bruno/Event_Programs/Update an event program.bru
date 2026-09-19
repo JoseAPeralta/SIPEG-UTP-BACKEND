@@ -1,0 +1,37 @@
+meta {
+  name: Update an event program
+  type: http
+  seq: 2
+  tags: [
+    Event_Programs
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/event-programs/:id
+  body: json
+  auth: bearer
+}
+
+params:path {
+  id: {{programId}}
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "",
+    "description": "",
+    "label": "",
+    "bannerUrl": "",
+    "startDate": "",
+    "endDate": ""
+  }
+}
+
+docs {
+  Partially updates name, description, label, bannerUrl, startDate and endDate of a specific event program. Requires the program:update permission on the program scope, or the ADMIN role. Archived programs cannot be modified.
+}
