@@ -187,6 +187,7 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - `server.ts` inicia el servidor y gestiona apagado ordenado.
 - `app.ts` configura Express, middleware global, rutas, not-found y errores.
 - Los modulos de dominio viven bajo `src/modules`.
+- Cada modulo es autocontenido: controlador, rutas, schemas, servicio, OpenAPI y pruebas viven bajo `src/modules/<modulo>`; `src/routes.ts` solo agrega y monta los routers.
 - Las rutas conectan paths, validacion, middleware y controladores.
 - Los controladores manejan HTTP y delegan reglas de negocio.
 - Los servicios contienen reglas de negocio y decisiones sensibles.

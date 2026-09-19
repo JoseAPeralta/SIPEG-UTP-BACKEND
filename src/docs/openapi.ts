@@ -4,7 +4,7 @@ import { activitiesPaths } from '../modules/activities/activities.openapi.js';
 import { authPaths } from '../modules/auth/auth.openapi.js';
 import { eventProgramsPaths } from '../modules/event-programs/event-programs.openapi.js';
 import { usersPaths } from '../modules/users/users.openapi.js';
-import { healthPaths } from './health.openapi.js';
+import { healthPaths } from '../modules/health/health.openapi.js';
 import { bearerAuthSecurityScheme } from './schemas.js';
 
 const document: ZodOpenApiObject = {

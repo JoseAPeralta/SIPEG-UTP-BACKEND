@@ -103,6 +103,7 @@ Rules:
 src/
 |-- app.ts
 |-- server.ts
+|-- routes.ts
 |-- config/
 |   |-- env.ts
 |   `-- prisma.ts
@@ -112,6 +113,7 @@ src/
 |   |-- permissions/
 |   |-- event-programs/
 |   |-- activities/
+|   |-- health/
 |   |-- attendance/
 |   |-- certificates/
 |   |-- classrooms/
@@ -134,11 +136,12 @@ prisma/
 `-- seed.ts
 ```
 
-> Estado actual: modulos `auth`, `authorization`, `users` y `activities` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
+> Estado actual: modulos `auth`, `authorization`, `users`, `event-programs`, `activities` y `health` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
 
 Rules:
 
 - Follow existing structure when it exists.
+- Keep each module self-contained under `src/modules/<module>/`: controller, routes, schemas, service, OpenAPI paths and tests live together. `src/routes.ts` only aggregates and mounts module routers.
 - Keep files focused. Split only when it improves clarity or testability.
 - Keep controllers focused on HTTP concerns: DTO extraction, status codes, response shape, and delegating to services.
 - Keep services focused on business rules.

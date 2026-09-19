@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { HealthStatusResponse } from '../models/health.model.js';
+import type { HealthStatusResponse } from './health.model.js';
 
 export const healthResponseSchema = z
   .object({

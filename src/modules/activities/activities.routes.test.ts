@@ -61,11 +61,11 @@ const loadApp = async (options: {
   process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
   process.env['AUTH_URL'] = 'http://localhost:3000';
   vi.resetModules();
-  vi.doMock('../modules/activities/activities.service.js', () => options.service);
-  vi.doMock('../config/prisma.js', () => ({
+  vi.doMock('./activities.service.js', () => options.service);
+  vi.doMock('../../config/prisma.js', () => ({
     getPrismaClient: () => options.prisma ?? createPrismaMock(),
   }));
-  vi.doMock('../utils/jwt-verifier.js', () => ({
+  vi.doMock('../../utils/jwt-verifier.js', () => ({
     getJwtVerifier: () => ({
       verify: async (token: string) => {
         const resolver = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
@@ -81,7 +81,7 @@ const loadApp = async (options: {
       refresh: async () => {},
     }),
   }));
-  vi.doMock('../lib/auth.js', () => ({
+  vi.doMock('../../lib/auth.js', () => ({
     auth: {
       api: {
         signInEmail: vi.fn(),
@@ -96,11 +96,11 @@ const loadApp = async (options: {
     },
   }));
   vi.doMock(
-    '../modules/authorization/authorization.service.js',
+    '../authorization/authorization.service.js',
     () =>
       options.authorization ?? { getEffectivePermissions: vi.fn().mockResolvedValue(new Set()) },
   );
-  const { app } = await import('../app.js');
+  const { app } = await import('../../app.js');
   return app;
 };
 
@@ -185,19 +185,19 @@ describe('activity routes', () => {
   });
 
   afterEach(() => {
-    vi.doUnmock('../modules/activities/activities.service.js');
-    vi.doUnmock('../config/prisma.js');
-    vi.doUnmock('../utils/jwt-verifier.js');
-    vi.doUnmock('../lib/auth.js');
-    vi.doUnmock('../modules/authorization/authorization.service.js');
+    vi.doUnmock('./activities.service.js');
+    vi.doUnmock('../../config/prisma.js');
+    vi.doUnmock('../../utils/jwt-verifier.js');
+    vi.doUnmock('../../lib/auth.js');
+    vi.doUnmock('../authorization/authorization.service.js');
   });
 
   afterAll(() => {
-    vi.doUnmock('../modules/activities/activities.service.js');
-    vi.doUnmock('../config/prisma.js');
-    vi.doUnmock('../utils/jwt-verifier.js');
-    vi.doUnmock('../lib/auth.js');
-    vi.doUnmock('../modules/authorization/authorization.service.js');
+    vi.doUnmock('./activities.service.js');
+    vi.doUnmock('../../config/prisma.js');
+    vi.doUnmock('../../utils/jwt-verifier.js');
+    vi.doUnmock('../../lib/auth.js');
+    vi.doUnmock('../authorization/authorization.service.js');
   });
 
   it('returns paginated upcoming activities', async () => {
