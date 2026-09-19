@@ -1,15 +1,46 @@
-import { rateLimit } from 'express-rate-limit';
+import type { RequestHandler } from 'express';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
-import { errorResponse } from '../utils/response.js';
+import { ApiError } from '../utils/ApiError.js';
 
-export const authRateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: 'draft-8',
-  legacyHeaders: false,
-  handler: (_req, res) => {
-    res
-      .status(429)
-      .json(errorResponse('Too many authentication requests. Please try again later.'));
-  },
+interface AuthRateLimitOptions {
+  windowMs: number;
+  max: number;
+  message?: string;
+}
+
+const keyByUserOrIp = (req: Express.Request): string => {
+  if (req.user?.id) return `user:${req.user.id}`;
+  return `ip:${ipKeyGenerator(req.ip ?? 'unknown')}`;
+};
+
+export const authRateLimit = ({ windowMs, max, message }: AuthRateLimitOptions): RequestHandler => {
+  return rateLimit({
+    windowMs,
+    limit: max,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator: keyByUserOrIp,
+    handler: (_req, _res, next) => {
+      next(new ApiError(429, message ?? 'Too many requests, please try again later.'));
+    },
+  });
+};
+
+export const loginRateLimit = authRateLimit({
+  windowMs: 60_000,
+  max: 5,
+  message: 'Too many login attempts. Try again in one minute.',
+});
+
+export const registerRateLimit = authRateLimit({
+  windowMs: 60_000,
+  max: 3,
+  message: 'Too many registration attempts. Try again in one minute.',
+});
+
+export const passwordResetRateLimit = authRateLimit({
+  windowMs: 60_000,
+  max: 3,
+  message: 'Too many password reset attempts. Try again in one minute.',
 });
