@@ -48,7 +48,10 @@ const activityPayload = {
   endTime: '10:00',
   capacity: 30,
   bannerUrl: null,
-  speaker: { id: 'user-002', firstName: 'Ana', lastName: 'Gomez' },
+  speakers: [
+    { id: 'speaker-001', firstName: 'Ana', lastName: 'Gomez' },
+    { id: 'speaker-002', firstName: 'Luis', lastName: 'Mora' },
+  ],
   classroom: { id: 'classroom-001', name: 'Laboratorio 3', building: 'Edificio B' },
   eventProgram: { id: 'program-001', name: 'Semana de Ingenieria', label: 'SI-2026' },
   organizationalUnit: { id: 'unit-001', name: 'Facultad de Ingenieria', type: 'FACULTY' },
@@ -61,7 +64,7 @@ describe('activityListItemSchema', () => {
         ...activityPayload,
         description: null,
         bannerUrl: null,
-        speaker: null,
+        speakers: [],
         classroom: null,
       }),
     ).not.toThrow();
@@ -130,7 +133,7 @@ describe('createActivitySchema', () => {
     expect(parsed.body.eventProgramId).toBe('program-001');
   });
 
-  it('accepts optional fields including equipment', () => {
+  it('accepts optional fields including equipment and speakers', () => {
     const parsed = createActivitySchema.parse({
       body: {
         ...createPayload,
@@ -138,13 +141,92 @@ describe('createActivitySchema', () => {
         maxCapacity: 30,
         bannerUrl: 'https://example.com/banner.png',
         classroomId: 'classroom-001',
-        speakerId: 'user-001',
+        speakers: [{ firstName: 'Ana', lastName: 'Gomez', email: 'ana@example.com' }],
         equipment: ['Proyector', 'Pizarra'],
       },
     });
 
     expect(parsed.body.equipment).toEqual(['Proyector', 'Pizarra']);
     expect(parsed.body.maxCapacity).toBe(30);
+    expect(parsed.body.speakers).toHaveLength(1);
+  });
+
+  it('accepts inline speakers and normalizes their email', () => {
+    const parsed = createActivitySchema.parse({
+      body: {
+        ...createPayload,
+        speakers: [
+          {
+            firstName: '  Ana ',
+            lastName: ' Gomez ',
+            email: ' Ana.Gomez@Example.com ',
+            organization: ' UTP ',
+          },
+        ],
+      },
+    });
+
+    expect(parsed.body.speakers).toEqual([
+      {
+        firstName: 'Ana',
+        lastName: 'Gomez',
+        email: 'ana.gomez@example.com',
+        organization: 'UTP',
+      },
+    ]);
+  });
+
+  it('accepts a speaker without email', () => {
+    const parsed = createActivitySchema.parse({
+      body: {
+        ...createPayload,
+        speakers: [{ firstName: 'Marco', lastName: 'Santos', organization: 'Colegio' }],
+      },
+    });
+
+    expect(parsed.body.speakers).toEqual([
+      { firstName: 'Marco', lastName: 'Santos', organization: 'Colegio' },
+    ]);
+  });
+
+  it('rejects duplicated speaker emails regardless of case', () => {
+    expect(() =>
+      createActivitySchema.parse({
+        body: {
+          ...createPayload,
+          speakers: [
+            { firstName: 'Ana', lastName: 'Gomez', email: 'ana@example.com' },
+            { firstName: 'Ana', lastName: 'Gomez', email: 'ANA@example.com' },
+          ],
+        },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects more than ten speakers', () => {
+    const speakers = Array.from({ length: 11 }, (_, index) => ({
+      firstName: `Ponente${index}`,
+      lastName: 'Demo',
+    }));
+
+    expect(() => createActivitySchema.parse({ body: { ...createPayload, speakers } })).toThrow();
+  });
+
+  it('rejects an invalid speaker email', () => {
+    expect(() =>
+      createActivitySchema.parse({
+        body: {
+          ...createPayload,
+          speakers: [{ firstName: 'Ana', lastName: 'Gomez', email: 'not-an-email' }],
+        },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects the legacy speakerId field', () => {
+    expect(() =>
+      createActivitySchema.parse({ body: { ...createPayload, speakerId: 'user-001' } }),
+    ).toThrow();
   });
 
   it('rejects unknown fields', () => {
@@ -203,7 +285,7 @@ const activityDetailPayload = {
   bannerUrl: null,
   status: 'DRAFT',
   equipment: ['Proyector'],
-  speaker: null,
+  speakers: [],
   classroom: null,
   eventProgram: { id: 'program-001', name: 'Semana de Ingenieria', label: 'SI-2026' },
   organizationalUnit: { id: 'unit-001', name: 'Facultad de Ingenieria', type: 'FACULTY' },

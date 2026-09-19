@@ -3,7 +3,7 @@ import type { ActivityStatus, ActivityType } from '../../src/generated/prisma/en
 import { dateOffset, logStep, requireEntry, seedId, timeOfDay } from './helpers.js';
 import type { OrganizationCatalog } from './organizations.seed.js';
 import type { SeedProgram } from './programs.seed.js';
-import type { SeedUser } from './users.seed.js';
+import type { SeedSpeaker } from './speakers.seed.js';
 
 type ProgramRef = { type: 'unit'; unitKey: string } | { type: 'additional'; programKey: string };
 
@@ -18,7 +18,7 @@ interface ActivityCatalogEntry {
   endHour: number;
   maxCapacity: number;
   classroomKey: string | null;
-  speakerKey: string | null;
+  speakerKeys: readonly string[];
   status: ActivityStatus;
   equipment: readonly string[];
 }
@@ -35,7 +35,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 12,
     maxCapacity: 60,
     classroomKey: 'aula-101',
-    speakerKey: 'speaker-carlos',
+    speakerKeys: ['speaker-carlos'],
     status: 'COMPLETED',
     equipment: ['Proyector', 'Pizarra'],
   },
@@ -50,7 +50,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 12,
     maxCapacity: 24,
     classroomKey: 'lab-electronica',
-    speakerKey: 'org-fic',
+    speakerKeys: ['org-fic', 'speaker-externo-luisa'],
     status: 'SCHEDULED',
     equipment: ['Dron', 'Proyector', 'Estación total'],
   },
@@ -65,7 +65,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 10,
     maxCapacity: 40,
     classroomKey: 'aula-101',
-    speakerKey: 'speaker-carlos',
+    speakerKeys: ['speaker-carlos'],
     status: 'CANCELLED',
     equipment: ['Proyector'],
   },
@@ -80,7 +80,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 11,
     maxCapacity: 120,
     classroomKey: 'auditorio',
-    speakerKey: 'speaker-carlos',
+    speakerKeys: ['speaker-carlos', 'speaker-externo-marco'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Micrófono'],
   },
@@ -95,7 +95,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 17,
     maxCapacity: 35,
     classroomKey: 'aula-201',
-    speakerKey: 'speaker-diana',
+    speakerKeys: ['speaker-diana'],
     status: 'COMPLETED',
     equipment: ['Proyector', 'Computadoras'],
   },
@@ -110,7 +110,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 12,
     maxCapacity: 40,
     classroomKey: 'aula-102',
-    speakerKey: 'org-fii',
+    speakerKeys: ['org-fii'],
     status: 'SCHEDULED',
     equipment: ['Proyector'],
   },
@@ -125,7 +125,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 11,
     maxCapacity: 35,
     classroomKey: 'aula-201',
-    speakerKey: 'org-fim',
+    speakerKeys: ['org-fim'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Sensores'],
   },
@@ -140,7 +140,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 17,
     maxCapacity: 25,
     classroomKey: 'lab-redes',
-    speakerKey: 'speaker-ana',
+    speakerKeys: ['speaker-ana'],
     status: 'COMPLETED',
     equipment: ['Computadoras', 'Proyector'],
   },
@@ -155,7 +155,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 17,
     maxCapacity: 80,
     classroomKey: null,
-    speakerKey: 'speaker-ana',
+    speakerKeys: ['speaker-ana'],
     status: 'ONGOING',
     equipment: ['Proyector', 'Micrófono'],
   },
@@ -170,7 +170,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 11,
     maxCapacity: 24,
     classroomKey: 'lab-quimica',
-    speakerKey: 'speaker-ivan',
+    speakerKeys: ['speaker-ivan'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Mesas'],
   },
@@ -185,7 +185,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 12,
     maxCapacity: 60,
     classroomKey: 'sala-conferencias',
-    speakerKey: 'org-sub-acad',
+    speakerKeys: ['org-sub-acad'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Pizarra'],
   },
@@ -200,7 +200,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 10,
     maxCapacity: 40,
     classroomKey: 'aula-102',
-    speakerKey: 'org-sub-admin',
+    speakerKeys: ['org-sub-admin'],
     status: 'COMPLETED',
     equipment: ['Proyector'],
   },
@@ -215,7 +215,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 16,
     maxCapacity: 120,
     classroomKey: 'auditorio',
-    speakerKey: 'org-sub-vida',
+    speakerKeys: ['org-sub-vida'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Micrófono'],
   },
@@ -230,7 +230,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 15,
     maxCapacity: 60,
     classroomKey: 'sala-conferencias',
-    speakerKey: 'org-sub-ipe',
+    speakerKeys: ['org-sub-ipe'],
     status: 'SCHEDULED',
     equipment: ['Proyector'],
   },
@@ -245,7 +245,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 12,
     maxCapacity: 20,
     classroomKey: 'lab-mecanica',
-    speakerKey: 'org-fic',
+    speakerKeys: ['org-fic'],
     status: 'COMPLETED',
     equipment: ['Computadoras', 'Mesa de ensayos'],
   },
@@ -260,7 +260,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 12,
     maxCapacity: 40,
     classroomKey: 'aula-101',
-    speakerKey: 'speaker-carlos',
+    speakerKeys: ['speaker-carlos'],
     status: 'COMPLETED',
     equipment: ['Proyector'],
   },
@@ -275,7 +275,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 17,
     maxCapacity: 24,
     classroomKey: 'lab-electronica',
-    speakerKey: 'org-fic',
+    speakerKeys: ['org-fic'],
     status: 'COMPLETED',
     equipment: ['GNSS', 'Proyector'],
   },
@@ -290,7 +290,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 11,
     maxCapacity: 120,
     classroomKey: 'auditorio',
-    speakerKey: 'speaker-ana',
+    speakerKeys: ['speaker-ana'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Micrófono', 'Streaming'],
   },
@@ -305,7 +305,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 17,
     maxCapacity: 25,
     classroomKey: 'lab-redes',
-    speakerKey: 'speaker-ana',
+    speakerKeys: ['speaker-ana'],
     status: 'SCHEDULED',
     equipment: ['Computadoras', 'Proyector'],
   },
@@ -320,7 +320,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 12,
     maxCapacity: 60,
     classroomKey: 'sala-conferencias',
-    speakerKey: 'speaker-diana',
+    speakerKeys: ['speaker-diana'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Micrófono'],
   },
@@ -335,7 +335,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 12,
     maxCapacity: 120,
     classroomKey: 'auditorio',
-    speakerKey: 'org-sub-vida',
+    speakerKeys: ['org-sub-vida'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Micrófono'],
   },
@@ -350,7 +350,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 16,
     maxCapacity: 35,
     classroomKey: 'aula-201',
-    speakerKey: 'org-sub-vida',
+    speakerKeys: ['org-sub-vida'],
     status: 'SCHEDULED',
     equipment: ['Proyector', 'Muestras'],
   },
@@ -365,7 +365,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 11,
     maxCapacity: 60,
     classroomKey: 'sala-conferencias',
-    speakerKey: 'org-sub-ipe',
+    speakerKeys: ['org-sub-ipe'],
     status: 'COMPLETED',
     equipment: ['Proyector'],
   },
@@ -380,7 +380,7 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     endHour: 16,
     maxCapacity: 40,
     classroomKey: 'aula-102',
-    speakerKey: 'org-sub-ipe',
+    speakerKeys: ['org-sub-ipe'],
     status: 'COMPLETED',
     equipment: ['Proyector', 'Pizarra'],
   },
@@ -398,7 +398,7 @@ export interface SeedActivity {
 export interface SeedActivityInput {
   catalog: OrganizationCatalog;
   additionalPrograms: Map<string, SeedProgram>;
-  users: Map<string, SeedUser>;
+  speakers: Map<string, SeedSpeaker>;
   classrooms: Map<string, string>;
 }
 
@@ -428,9 +428,9 @@ export const seedActivities = async (
     const classroomId = activity.classroomKey
       ? requireEntry(input.classrooms, activity.classroomKey, 'aula')
       : null;
-    const speakerId = activity.speakerKey
-      ? requireEntry(input.users, activity.speakerKey, 'usuario').id
-      : null;
+    const speakerIds = activity.speakerKeys.map(
+      (speakerKey) => requireEntry(input.speakers, speakerKey, 'ponente').id,
+    );
     const activityId = seedId('activity', activity.key);
 
     const data = {
@@ -444,7 +444,6 @@ export const seedActivities = async (
       status: activity.status,
       eventProgramId: programId,
       classroomId,
-      speakerId,
     };
 
     const existing = await prisma.activity.findUnique({
@@ -466,6 +465,12 @@ export const seedActivities = async (
     await prisma.activityEquipment.deleteMany({ where: { activityId: record.id } });
     await prisma.activityEquipment.createMany({
       data: activity.equipment.map((name) => ({ activityId: record.id, name })),
+      skipDuplicates: true,
+    });
+
+    await prisma.activitySpeaker.deleteMany({ where: { activityId: record.id } });
+    await prisma.activitySpeaker.createMany({
+      data: speakerIds.map((speakerId) => ({ activityId: record.id, speakerId })),
       skipDuplicates: true,
     });
 

@@ -5,6 +5,11 @@
 **Justificación evaluada:** [`ER-design-justification.md`](./ER-design-justification.md)  
 **Requisitos de referencia:** [`AGENTS.md`](../../AGENTS.md) y [`CONTEXT.md`](../../CONTEXT.md)
 
+> Nota (2026-09-19): este informe evalúa el ER previo al catálogo `speakers`.
+> Hoy los ponentes no requieren cuenta (`speakers.user_id` opcional) y una
+> actividad puede tener varios mediante `activity_speakers`; las referencias a
+> `activities.speaker_id` describen el diseño anterior.
+
 ## 1. Resumen ejecutivo
 
 El modelo entidad-relación propuesto representa una plataforma académica organizada alrededor de **programas de eventos** y **actividades**. La distinción es apropiada: el programa funciona como unidad administrativa, de permisos y clasificación; la actividad representa el evento concreto al que se asignan fecha, horario, ponente, aula, asistencia y certificados.

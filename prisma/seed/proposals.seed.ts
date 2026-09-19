@@ -2,6 +2,7 @@ import type { PrismaClient } from '../../src/generated/prisma/client.js';
 import type { ActivityType, ProposalStatus } from '../../src/generated/prisma/enums.js';
 import { instantOffset, logStep, requireEntry, seedId } from './helpers.js';
 import type { OrganizationCatalog } from './organizations.seed.js';
+import type { SeedSpeaker } from './speakers.seed.js';
 import type { SeedUser } from './users.seed.js';
 
 interface ProposalVersionCatalogEntry {
@@ -160,6 +161,7 @@ export const seedProposals = async (
   input: {
     catalog: OrganizationCatalog;
     users: Map<string, SeedUser>;
+    speakers: Map<string, SeedSpeaker>;
   },
   now: Date = new Date(),
 ): Promise<Map<string, SeedProposal>> => {
@@ -168,7 +170,7 @@ export const seedProposals = async (
 
   for (const proposal of PROPOSALS) {
     const unit = requireEntry(input.catalog.units, proposal.unitKey, 'unidad organizativa');
-    const speaker = requireEntry(input.users, proposal.speakerKey, 'usuario ponente');
+    const speaker = requireEntry(input.speakers, proposal.speakerKey, 'ponente');
     const reviewer = requireEntry(input.users, proposal.reviewerKey, 'usuario revisor');
     const submittedAt = instantOffset(proposal.submittedOffsetDays, 10, 0, now);
 
@@ -246,16 +248,16 @@ export const seedProposals = async (
       },
     });
 
-    if (proposal.respondedOffsetDays !== null) {
+    if (proposal.respondedOffsetDays !== null && speaker.userId !== null) {
       const respondedAt = instantOffset(proposal.respondedOffsetDays, 12, 0, now);
       await prisma.alert.upsert({
         where: { id: seedId('alert', 'proposal_responded', proposal.key) },
-        update: { isRead: true, recipientId: speaker.id, proposalId: id },
+        update: { isRead: true, recipientId: speaker.userId, proposalId: id },
         create: {
           id: seedId('alert', 'proposal_responded', proposal.key),
           type: 'PROPOSAL_RESPONDED',
           isRead: true,
-          recipientId: speaker.id,
+          recipientId: speaker.userId,
           proposalId: id,
           createdAt: respondedAt,
         },

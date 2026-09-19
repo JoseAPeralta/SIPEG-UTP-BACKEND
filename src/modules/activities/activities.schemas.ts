@@ -26,6 +26,47 @@ const activitySpeakerSummarySchema = z
   .object({ id: z.string(), firstName: z.string(), lastName: z.string() })
   .meta({ id: 'ActivitySpeakerSummary', description: 'Public speaker summary of an activity.' });
 
+const activitySpeakerInputSchema = z
+  .object({
+    firstName: z
+      .string()
+      .trim()
+      .min(1, 'First name is required.')
+      .max(100, 'First name cannot exceed 100 characters.'),
+    lastName: z
+      .string()
+      .trim()
+      .min(1, 'Last name is required.')
+      .max(100, 'Last name cannot exceed 100 characters.'),
+    email: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .email('Email must be a valid email.')
+      .max(254, 'Email cannot exceed 254 characters.')
+      .nullish(),
+    organization: z
+      .string()
+      .trim()
+      .max(150, 'Organization cannot exceed 150 characters.')
+      .nullish(),
+  })
+  .strict()
+  .meta({
+    id: 'ActivitySpeakerInput',
+    description: 'Inline speaker data accepted when creating an activity.',
+  });
+
+const uniqueSpeakerEmails = (
+  speakers: readonly { email?: string | null | undefined }[],
+): boolean => {
+  const emails = speakers
+    .map((speaker) => speaker.email)
+    .filter((email): email is string => typeof email === 'string');
+
+  return new Set(emails).size === emails.length;
+};
+
 const activityClassroomSummarySchema = z
   .object({ id: z.string(), name: z.string(), building: z.string().nullable() })
   .meta({ id: 'ActivityClassroomSummary', description: 'Classroom assigned to an activity.' });
@@ -56,7 +97,7 @@ export const activityListItemSchema = z
     endTime: z.string().meta({ description: 'Institutional end time in HH:mm format.' }),
     capacity: z.number().int().nullable(),
     bannerUrl: z.string().nullable(),
-    speaker: activitySpeakerSummarySchema.nullable(),
+    speakers: z.array(activitySpeakerSummarySchema),
     classroom: activityClassroomSummarySchema.nullable(),
     eventProgram: activityProgramSummarySchema,
     organizationalUnit: activityOrganizationalUnitSchema,
@@ -122,7 +163,11 @@ export const createActivitySchema = z.object({
       bannerUrl: z.string().url('Banner URL must be a valid URL.').max(500).nullish(),
       eventProgramId: z.string().trim().min(1, 'Event program is required.'),
       classroomId: z.string().trim().min(1, 'Classroom identifier is invalid.').nullish(),
-      speakerId: z.string().trim().min(1, 'Speaker identifier is invalid.').nullish(),
+      speakers: z
+        .array(activitySpeakerInputSchema)
+        .max(10, 'No more than 10 speakers are allowed.')
+        .refine(uniqueSpeakerEmails, 'Speaker emails must be unique.')
+        .optional(),
       equipment: z
         .array(z.string().trim().min(1, 'Equipment name cannot be empty.').max(255))
         .max(20, 'No more than 20 equipment items are allowed.')
@@ -153,7 +198,7 @@ export const activityDetailSchema = z
       description: 'Activity lifecycle status.',
     }),
     equipment: z.array(z.string()).meta({ description: 'Required equipment names.' }),
-    speaker: activitySpeakerSummarySchema.nullable(),
+    speakers: z.array(activitySpeakerSummarySchema),
     classroom: activityClassroomSummarySchema.nullable(),
     eventProgram: activityProgramSummarySchema,
     organizationalUnit: activityOrganizationalUnitSchema,

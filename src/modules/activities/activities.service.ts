@@ -17,7 +17,10 @@ const activitySelect = {
   endTime: true,
   maxCapacity: true,
   bannerUrl: true,
-  speaker: { select: { id: true, firstName: true, lastName: true } },
+  speakers: {
+    select: { speaker: { select: { id: true, firstName: true, lastName: true } } },
+    orderBy: { speaker: { lastName: 'asc' } },
+  },
   classroom: { select: { id: true, name: true, building: true } },
   eventProgram: {
     select: {
@@ -39,7 +42,7 @@ interface ActivityRecord {
   endTime: Date;
   maxCapacity: number | null;
   bannerUrl: string | null;
-  speaker: { id: string; firstName: string; lastName: string } | null;
+  speakers: { speaker: { id: string; firstName: string; lastName: string } }[];
   classroom: { id: string; name: string; building: string | null } | null;
   eventProgram: {
     id: string;
@@ -66,13 +69,11 @@ const toActivityListItem = (record: ActivityRecord): ActivityListItem => {
     endTime: formatTime(record.endTime),
     capacity: record.maxCapacity,
     bannerUrl: record.bannerUrl,
-    speaker: record.speaker
-      ? {
-          id: record.speaker.id,
-          firstName: record.speaker.firstName,
-          lastName: record.speaker.lastName,
-        }
-      : null,
+    speakers: record.speakers.map(({ speaker }) => ({
+      id: speaker.id,
+      firstName: speaker.firstName,
+      lastName: speaker.lastName,
+    })),
     classroom: record.classroom
       ? {
           id: record.classroom.id,
@@ -185,19 +186,20 @@ export const createActivity = async (input: CreateActivityBody): Promise<Activit
     }
   }
 
-  if (input.speakerId) {
-    const speaker = await prisma.user.findUnique({
-      where: { id: input.speakerId },
-      select: { id: true, isActive: true },
-    });
+  const speakerEmails = (input.speakers ?? [])
+    .map((speaker) => speaker.email)
+    .filter((email): email is string => typeof email === 'string');
 
-    if (!speaker) {
-      throw new ApiError(404, 'Speaker not found.');
-    }
-    if (!speaker.isActive) {
-      throw new ApiError(400, 'Speaker is not active.');
-    }
-  }
+  const usersByEmail = speakerEmails.length
+    ? await prisma.user.findMany({
+        where: { email: { in: speakerEmails } },
+        select: { id: true, email: true },
+      })
+    : [];
+
+  const userIdByEmail = new Map(
+    usersByEmail.map((user) => [user.email.toLowerCase(), user.id] as const),
+  );
 
   const startTime = new Date(`1970-01-01T${input.startTime}:00.000Z`);
   const endTime = new Date(`1970-01-01T${input.endTime}:00.000Z`);
@@ -215,7 +217,40 @@ export const createActivity = async (input: CreateActivityBody): Promise<Activit
       status: 'DRAFT',
       eventProgramId: program.id,
       classroomId: input.classroomId ?? null,
-      speakerId: input.speakerId ?? null,
+      ...(input.speakers?.length
+        ? {
+            speakers: {
+              create: input.speakers.map((speaker) =>
+                speaker.email
+                  ? {
+                      speaker: {
+                        connectOrCreate: {
+                          where: { email: speaker.email },
+                          create: {
+                            firstName: speaker.firstName,
+                            lastName: speaker.lastName,
+                            email: speaker.email,
+                            organization: speaker.organization ?? null,
+                            userId: userIdByEmail.get(speaker.email) ?? null,
+                          },
+                        },
+                      },
+                    }
+                  : {
+                      speaker: {
+                        create: {
+                          firstName: speaker.firstName,
+                          lastName: speaker.lastName,
+                          email: null,
+                          organization: speaker.organization ?? null,
+                          userId: null,
+                        },
+                      },
+                    },
+              ),
+            },
+          }
+        : {}),
       ...(input.equipment?.length
         ? {
             equipment: {

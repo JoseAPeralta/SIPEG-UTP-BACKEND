@@ -38,7 +38,7 @@ export interface ActivityDetail {
   bannerUrl: string | null;
   status: ActivityStatus;
   equipment: string[];
-  speaker: ActivitySpeakerSummary | null;
+  speakers: ActivitySpeakerSummary[];
   classroom: ActivityClassroomSummary | null;
   eventProgram: ActivityProgramSummary;
   organizationalUnit: ActivityOrganizationalUnit;
@@ -54,7 +54,7 @@ export interface ActivityListItem {
   endTime: string;
   capacity: number | null;
   bannerUrl: string | null;
-  speaker: ActivitySpeakerSummary | null;
+  speakers: ActivitySpeakerSummary[];
   classroom: ActivityClassroomSummary | null;
   eventProgram: ActivityProgramSummary;
   organizationalUnit: ActivityOrganizationalUnit;

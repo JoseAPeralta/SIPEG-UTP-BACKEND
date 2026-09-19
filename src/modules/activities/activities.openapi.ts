@@ -35,7 +35,7 @@ export const activitiesPaths: ZodOpenApiPathsObject = {
       tags: ['Activities'],
       summary: 'Create an activity',
       description:
-        'Creates an activity in DRAFT status inside an ACTIVE event program. Requires the activity:create permission on the target program (or the ADMIN role).',
+        'Creates an activity in DRAFT status inside an ACTIVE event program. Accepts inline speakers; a speaker is reused when the email matches an existing catalog entry and linked to a platform user when the email matches an account. Speakers do not need a platform account. Requires the activity:create permission on the target program (or the ADMIN role).',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,

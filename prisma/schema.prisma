@@ -101,16 +101,15 @@ model User {
 
   headedUnits OrganizationalUnit[] @relation("OrganizationalUnitHead")
 
-  sessions            Session[]
-  accounts            Account[]
-  createdPrograms     EventProgram[]
-  presentedActivities Activity[]
-  collaborations      Collaboration[]
-  grantedPermissions  CollaborationPermission[] @relation("GrantedCollaborationPermissions")
-  attendance          Attendance[]
-  speakerProposals    SpeakerProposal[]
-  proposalFeedback    ProposalFeedback[]
-  alerts              Alert[]
+  sessions           Session[]
+  accounts           Account[]
+  createdPrograms    EventProgram[]
+  collaborations     Collaboration[]
+  grantedPermissions CollaborationPermission[] @relation("GrantedCollaborationPermissions")
+  attendance         Attendance[]
+  speakerProfile     Speaker?
+  proposalFeedback   ProposalFeedback[]
+  alerts             Alert[]
 
   @@index([unitId])
   @@index([careerId])
@@ -219,9 +218,7 @@ model Activity {
   classroomId String?    @map("classroom_id")
   classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
 
-  speakerId String? @map("speaker_id")
-  speaker   User?   @relation(fields: [speakerId], references: [id], onDelete: SetNull)
-
+  speakers       ActivitySpeaker[]
   equipment      ActivityEquipment[]
   collaborations Collaboration[]
   attendance     Attendance[]
@@ -230,7 +227,6 @@ model Activity {
   @@index([eventProgramId, date, status])
   @@index([status, date, startTime])
   @@index([classroomId, date, startTime])
-  @@index([speakerId])
   @@map("activities")
 }
 
@@ -241,6 +237,37 @@ model ActivityEquipment {
 
   @@id([activityId, name])
   @@map("activity_equipment")
+}
+
+model Speaker {
+  id           String   @id @default(cuid())
+  firstName    String   @map("first_name") @db.VarChar(100)
+  lastName     String   @map("last_name") @db.VarChar(100)
+  email        String?  @unique @db.VarChar(254)
+  organization String?  @db.VarChar(150)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  userId String? @unique @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  activities ActivitySpeaker[]
+  proposals  SpeakerProposal[]
+
+  @@index([lastName, firstName])
+  @@map("speakers")
+}
+
+model ActivitySpeaker {
+  activityId String   @map("activity_id")
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  speakerId String  @map("speaker_id")
+  speaker   Speaker @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, speakerId])
+  @@index([speakerId])
+  @@map("activity_speakers")
 }
 
 model Collaboration {
@@ -372,8 +399,8 @@ model SpeakerProposal {
   submittedAt       DateTime       @default(now()) @map("submitted_at") @db.Timestamptz(3)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  speakerId String @map("speaker_id")
-  speaker   User   @relation(fields: [speakerId], references: [id], onDelete: Restrict)
+  speakerId String  @map("speaker_id")
+  speaker   Speaker @relation(fields: [speakerId], references: [id], onDelete: Restrict)
 
   eventProgramId String       @map("event_program_id")
   eventProgram   EventProgram @relation(fields: [eventProgramId], references: [id], onDelete: Restrict)

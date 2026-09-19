@@ -410,7 +410,7 @@ For errors:
 - Event-program collaborators and permissions are inherited by their activities by default.
 - Create activities only inside an existing event program.
 - Allow new activities only in active event programs.
-- Activities include name, type, speaker, classroom, date, time, required equipment, and banner.
+- Activities include name, type, one or more speakers, classroom, date, time, required equipment, and banner.
 - Add collaborators and permissions directly to activities when local access is required.
 - Expose inherited and local permissions through the API with an explicit precedence rule.
 - Archive event programs instead of deleting them physically.
@@ -457,7 +457,7 @@ For errors:
 ### Speaker Registration
 
 - Provide a speaker registration endpoint.
-- Require the speaker to have or create a user account before submitting a proposal.
+- Allow speakers to submit proposals without a platform account; the `speakers` catalog links a `userId` only when an account exists.
 - Capture first name and last name.
 - Capture email.
 - Capture CV.

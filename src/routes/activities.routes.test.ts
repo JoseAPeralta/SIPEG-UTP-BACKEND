@@ -114,7 +114,7 @@ const activityItem = {
   endTime: '17:00',
   capacity: 35,
   bannerUrl: null,
-  speaker: { id: 'user-001', firstName: 'Carlos', lastName: 'Rivera' },
+  speakers: [{ id: 'speaker-001', firstName: 'Carlos', lastName: 'Rivera' }],
   classroom: { id: 'classroom-001', name: 'Laboratorio 3', building: 'Edificio B' },
   eventProgram: { id: 'program-001', name: 'Programa de Ingenieria', label: null },
   organizationalUnit: {
@@ -136,7 +136,7 @@ const activityDetail = {
   bannerUrl: null,
   status: 'DRAFT',
   equipment: ['Proyector'],
-  speaker: null,
+  speakers: [],
   classroom: null,
   eventProgram: { id: 'program-001', name: 'Programa de Ingenieria', label: null },
   organizationalUnit: {
@@ -153,6 +153,12 @@ const validCreateBody = {
   startTime: '08:00',
   endTime: '10:00',
   eventProgramId: 'program-001',
+  speakers: [{ firstName: ' Ana ', lastName: ' Gomez ', email: ' Ana.Gomez@Example.com ' }],
+};
+
+const parsedCreateBody = {
+  ...validCreateBody,
+  speakers: [{ firstName: 'Ana', lastName: 'Gomez', email: 'ana.gomez@example.com' }],
 };
 
 describe('activity routes', () => {
@@ -308,12 +314,27 @@ describe('activity routes', () => {
       .send(validCreateBody)
       .expect(201);
 
-    expect(service.createActivity).toHaveBeenCalledWith(validCreateBody);
+    expect(service.createActivity).toHaveBeenCalledWith(parsedCreateBody);
     expect(response.body).toEqual({
       success: true,
       message: 'Activity created successfully.',
       data: activityDetail,
     });
+  });
+
+  it('rejects the legacy speakerId field before the service', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp({ service, prisma });
+
+    await request(app)
+      .post('/api/v1/activities')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ ...validCreateBody, speakerId: 'user-001' })
+      .expect(400);
+
+    expect(service.createActivity).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid create body before the service', async () => {
