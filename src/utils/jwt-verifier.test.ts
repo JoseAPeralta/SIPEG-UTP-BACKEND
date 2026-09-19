@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createJwtVerifierWithLocalJwks } from './jwt-verifier.js';
-import { createTestJwks, signTestToken } from '../../tests/helpers/auth-helpers.js';
+import { createTestJwks, signTestToken } from '../test-helpers/auth-helpers.js';
 
 const issuer = 'http://localhost:3000';
 const audience = 'http://localhost:3000';
