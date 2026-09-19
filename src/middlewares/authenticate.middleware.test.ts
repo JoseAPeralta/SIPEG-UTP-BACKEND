@@ -5,7 +5,7 @@ import {
   exportJWK,
   calculateJwkThumbprint,
   SignJWT,
-  type KeyLike,
+  type CryptoKey,
 } from 'jose';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -25,7 +25,7 @@ const baseEnv = () => {
 };
 
 describe('authenticate middleware', () => {
-  let privateKey: KeyLike;
+  let privateKey: CryptoKey;
   let kid: string;
   let jwks: { keys: unknown[] };
 
