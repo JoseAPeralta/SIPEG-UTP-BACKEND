@@ -1,5 +1,5 @@
-import type { RequestHandler } from 'express';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import type { Request, RequestHandler } from 'express';
+import rateLimit from 'express-rate-limit';
 
 import { ApiError } from '../utils/ApiError.js';
 
@@ -9,9 +9,9 @@ interface AuthRateLimitOptions {
   message?: string;
 }
 
-const keyByUserOrIp = (req: Express.Request): string => {
+const keyByUserOrIp = (req: Request): string => {
   if (req.user?.id) return `user:${req.user.id}`;
-  return `ip:${ipKeyGenerator(req.ip ?? 'unknown')}`;
+  return `ip:${req.ip ?? 'unknown'}`;
 };
 
 export const authRateLimit = ({ windowMs, max, message }: AuthRateLimitOptions): RequestHandler => {
