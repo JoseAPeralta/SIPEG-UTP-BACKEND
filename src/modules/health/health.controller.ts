@@ -1,8 +1,8 @@
 import type { RequestHandler } from 'express';
 
-import { env } from '../config/env.js';
-import type { HealthStatusResponse } from '../models/health.model.js';
-import { successResponse } from '../utils/response.js';
+import { env } from '../../config/env.js';
+import { successResponse } from '../../utils/response.js';
+import type { HealthStatusResponse } from './health.model.js';
 
 const checkJwks = async (): Promise<boolean> => {
   try {

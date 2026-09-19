@@ -1,15 +1,12 @@
 import type { RequestHandler } from 'express';
 
-import type {
-  CreateActivityBody,
-  ListActivitiesQuery,
-} from '../modules/activities/activities.schemas.js';
+import { asyncHandler } from '../../utils/asyncHandler.js';
+import { successResponse } from '../../utils/response.js';
+import type { CreateActivityBody, ListActivitiesQuery } from './activities.schemas.js';
 import {
   createActivity as createActivityService,
   listUpcomingActivities,
-} from '../modules/activities/activities.service.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
-import { successResponse } from '../utils/response.js';
+} from './activities.service.js';
 
 export const getActivities: RequestHandler = asyncHandler(async (req, res) => {
   const query = req.query as unknown as ListActivitiesQuery;

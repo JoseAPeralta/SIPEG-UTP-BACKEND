@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 describe('health routes', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.doUnmock('../lib/auth.js');
-    vi.doUnmock('../config/prisma.js');
+    vi.doUnmock('../../lib/auth.js');
+    vi.doUnmock('../../config/prisma.js');
   });
 
   it('returns the service health status with authJwksReachable flag', async () => {
@@ -14,7 +14,7 @@ describe('health routes', () => {
     process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
     process.env['AUTH_URL'] = 'http://localhost:3000';
     vi.resetModules();
-    vi.doMock('../lib/auth.js', () => ({
+    vi.doMock('../../lib/auth.js', () => ({
       auth: {
         options: { baseURL: 'http://localhost:3000' },
         api: {
@@ -29,10 +29,10 @@ describe('health routes', () => {
         },
       },
     }));
-    vi.doMock('../config/prisma.js', () => ({ getPrismaClient: () => ({}) }));
+    vi.doMock('../../config/prisma.js', () => ({ getPrismaClient: () => ({}) }));
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
 
-    const { app } = await import('../app.js');
+    const { app } = await import('../../app.js');
     const response = await request(app).get('/api/v1/health').expect(200);
 
     expect(response.body.success).toBe(true);

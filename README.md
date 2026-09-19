@@ -279,12 +279,10 @@ Notas:
 src/
 |-- app.ts
 |-- server.ts
+|-- routes.ts
 |-- config/
 |   |-- env.ts
 |   `-- prisma.ts
-|-- controllers/
-|   |-- activities.controller.ts
-|   `-- health.controller.ts
 |-- docs/
 |   |-- openapi.ts
 |   |-- schemas.ts
@@ -303,11 +301,9 @@ src/
 |   |-- activities/
 |   |-- auth/
 |   |-- authorization/
+|   |-- event-programs/
+|   |-- health/
 |   `-- users/
-|-- routes/
-|   |-- activities.routes.ts
-|   |-- health.routes.ts
-|   `-- index.ts
 |-- types/
 `-- utils/
 
@@ -326,10 +322,10 @@ Los tests se mantienen al lado del archivo que validan usando el patron `*.test.
 
 Ejemplos:
 
-- `src/routes/health.routes.ts`
-- `src/routes/health.routes.test.ts`
-- `src/routes/activities.routes.ts`
-- `src/routes/activities.routes.test.ts`
+- `src/modules/health/health.routes.ts`
+- `src/modules/health/health.routes.test.ts`
+- `src/modules/activities/activities.routes.ts`
+- `src/modules/activities/activities.routes.test.ts`
 
 ## Configuracion
 

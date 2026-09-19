@@ -1,18 +1,18 @@
 import type { RequestHandler } from 'express';
 
-import { requireAuthenticatedUser } from '../middlewares/authenticate.middleware.js';
+import { requireAuthenticatedUser } from '../../middlewares/authenticate.middleware.js';
+import { asyncHandler } from '../../utils/asyncHandler.js';
+import { successResponse } from '../../utils/response.js';
 import type {
   CreateEventProgramBody,
   ListEventProgramsQuery,
   UpdateEventProgramBody,
-} from '../modules/event-programs/event-programs.schemas.js';
+} from './event-programs.schemas.js';
 import {
   createEventProgram as createEventProgramService,
   listEventPrograms as listEventProgramsService,
   updateEventProgram as updateEventProgramService,
-} from '../modules/event-programs/event-programs.service.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
-import { successResponse } from '../utils/response.js';
+} from './event-programs.service.js';
 
 export const getEventPrograms: RequestHandler = asyncHandler(async (req, res) => {
   const query = req.query as unknown as ListEventProgramsQuery;

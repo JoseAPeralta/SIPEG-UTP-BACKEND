@@ -1,6 +1,6 @@
 import type { ZodOpenApiPathsObject } from 'zod-openapi';
 
-import { apiSuccessResponse } from './schemas.js';
+import { apiSuccessResponse } from '../../docs/schemas.js';
 import { healthResponseSchema } from './health.schemas.js';
 
 export const healthPaths: ZodOpenApiPathsObject = {

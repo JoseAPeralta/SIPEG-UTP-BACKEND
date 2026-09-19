@@ -42,15 +42,15 @@ const loadApp = async (
   process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
   process.env['AUTH_URL'] = 'http://localhost:3000';
   vi.resetModules();
-  vi.doMock('../modules/event-programs/event-programs.service.js', () => service);
-  vi.doMock('../config/prisma.js', () => ({ getPrismaClient: () => prisma }));
-  vi.doMock('../utils/jwt-verifier.js', () => ({
+  vi.doMock('./event-programs.service.js', () => service);
+  vi.doMock('../../config/prisma.js', () => ({ getPrismaClient: () => prisma }));
+  vi.doMock('../../utils/jwt-verifier.js', () => ({
     getJwtVerifier: () => ({
       verify: async (token: string) => ({ sub: token }),
       refresh: async () => {},
     }),
   }));
-  vi.doMock('../lib/auth.js', () => ({
+  vi.doMock('../../lib/auth.js', () => ({
     auth: {
       api: {
         signInEmail: vi.fn(),
@@ -64,11 +64,11 @@ const loadApp = async (
       },
     },
   }));
-  vi.doMock('../modules/authorization/authorization.service.js', () => ({
+  vi.doMock('../authorization/authorization.service.js', () => ({
     getEffectivePermissions,
   }));
 
-  const { app } = await import('../app.js');
+  const { app } = await import('../../app.js');
   return app;
 };
 
@@ -103,11 +103,11 @@ const eventProgramListItem = {
 
 describe('event program routes', () => {
   afterEach(() => {
-    vi.doUnmock('../modules/event-programs/event-programs.service.js');
-    vi.doUnmock('../config/prisma.js');
-    vi.doUnmock('../utils/jwt-verifier.js');
-    vi.doUnmock('../lib/auth.js');
-    vi.doUnmock('../modules/authorization/authorization.service.js');
+    vi.doUnmock('./event-programs.service.js');
+    vi.doUnmock('../../config/prisma.js');
+    vi.doUnmock('../../utils/jwt-verifier.js');
+    vi.doUnmock('../../lib/auth.js');
+    vi.doUnmock('../authorization/authorization.service.js');
   });
 
   it('returns paginated active event programs without authentication', async () => {
@@ -247,11 +247,11 @@ describe('event program routes', () => {
 
 describe('PATCH /api/v1/event-programs/:id', () => {
   afterEach(() => {
-    vi.doUnmock('../modules/event-programs/event-programs.service.js');
-    vi.doUnmock('../config/prisma.js');
-    vi.doUnmock('../utils/jwt-verifier.js');
-    vi.doUnmock('../lib/auth.js');
-    vi.doUnmock('../modules/authorization/authorization.service.js');
+    vi.doUnmock('./event-programs.service.js');
+    vi.doUnmock('../../config/prisma.js');
+    vi.doUnmock('../../utils/jwt-verifier.js');
+    vi.doUnmock('../../lib/auth.js');
+    vi.doUnmock('../authorization/authorization.service.js');
   });
 
   const updateBody = { name: '  Congreso actualizado  ', label: 'CI-2026' };
@@ -361,7 +361,7 @@ describe('PATCH /api/v1/event-programs/:id', () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockResolvedValue(adminRecord);
     const app = await loadApp(service, prisma);
-    const { ApiError } = await import('../utils/ApiError.js');
+    const { ApiError } = await import('../../utils/ApiError.js');
     service.updateEventProgram.mockRejectedValue(new ApiError(404, 'Event program not found.'));
 
     await request(app)
@@ -376,7 +376,7 @@ describe('PATCH /api/v1/event-programs/:id', () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockResolvedValue(adminRecord);
     const app = await loadApp(service, prisma);
-    const { ApiError } = await import('../utils/ApiError.js');
+    const { ApiError } = await import('../../utils/ApiError.js');
     service.updateEventProgram.mockRejectedValue(
       new ApiError(409, 'Archived event programs cannot be modified.'),
     );

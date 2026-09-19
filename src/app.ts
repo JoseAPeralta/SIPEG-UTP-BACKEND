@@ -9,7 +9,7 @@ import { env } from './config/env.js';
 import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { notFoundHandler } from './middlewares/notFound.middleware.js';
-import { apiRoutes } from './routes/index.js';
+import { apiRoutes } from './routes.js';
 import { ApiError } from './utils/ApiError.js';
 
 const allowedOrigins = [

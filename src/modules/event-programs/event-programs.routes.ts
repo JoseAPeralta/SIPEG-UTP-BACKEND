@@ -1,19 +1,19 @@
 import { Router } from 'express';
 
+import { authenticate } from '../../middlewares/authenticate.middleware.js';
+import { requirePermission } from '../../middlewares/authorize.middleware.js';
+import { validate } from '../../middlewares/validate.middleware.js';
+import { PERMISSIONS } from '../authorization/permissions.js';
 import {
   createEventProgram,
   getEventPrograms,
   updateEventProgram,
-} from '../controllers/event-programs.controller.js';
-import { authenticate } from '../middlewares/authenticate.middleware.js';
-import { requirePermission } from '../middlewares/authorize.middleware.js';
-import { validate } from '../middlewares/validate.middleware.js';
-import { PERMISSIONS } from '../modules/authorization/permissions.js';
+} from './event-programs.controller.js';
 import {
   createEventProgramSchema,
   listEventProgramsQuerySchema,
   updateEventProgramSchema,
-} from '../modules/event-programs/event-programs.schemas.js';
+} from './event-programs.schemas.js';
 
 export const eventProgramsRoutes = Router();
 

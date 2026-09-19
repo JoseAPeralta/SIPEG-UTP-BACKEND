@@ -1,14 +1,11 @@
 import { Router } from 'express';
 
-import { createActivity, getActivities } from '../controllers/activities.controller.js';
-import { authenticate } from '../middlewares/authenticate.middleware.js';
-import { requirePermission } from '../middlewares/authorize.middleware.js';
-import { validate } from '../middlewares/validate.middleware.js';
-import {
-  createActivitySchema,
-  listActivitiesQuerySchema,
-} from '../modules/activities/activities.schemas.js';
-import { PERMISSIONS } from '../modules/authorization/permissions.js';
+import { authenticate } from '../../middlewares/authenticate.middleware.js';
+import { requirePermission } from '../../middlewares/authorize.middleware.js';
+import { validate } from '../../middlewares/validate.middleware.js';
+import { PERMISSIONS } from '../authorization/permissions.js';
+import { createActivity, getActivities } from './activities.controller.js';
+import { createActivitySchema, listActivitiesQuerySchema } from './activities.schemas.js';
 
 export const activitiesRoutes = Router();
 
