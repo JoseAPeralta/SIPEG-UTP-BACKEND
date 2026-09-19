@@ -17,7 +17,7 @@
 - **ORM**: Prisma.
 - **Authentication**: JWT-based authentication and authorization.
 - **Language**: TypeScript.
-- **Package manager**: npm.
+- **Package manager**: pnpm.
 
 ## Current Repository State
 
@@ -64,20 +64,20 @@ Use these skills as the source of project-specific operating knowledge:
 Target commands for a complete backend project:
 
 ```bash
-npm install
-npm run dev
-npm run build
-npm run start
-npm run lint
-npm test
-npm run test:coverage
-npx prisma generate
-npx prisma validate
-npx prisma format
-npx prisma migrate dev
-npx prisma migrate deploy
-npx prisma studio
-npx prisma db seed
+pnpm install
+pnpm run dev
+pnpm run build
+pnpm run start
+pnpm run lint
+pnpm test
+pnpm run test:coverage
+pnpm prisma generate
+pnpm prisma validate
+pnpm prisma format
+pnpm prisma migrate dev
+pnpm prisma migrate deploy
+pnpm prisma studio
+pnpm prisma db seed
 ```
 
 Rules:
@@ -85,8 +85,8 @@ Rules:
 - If a command is not configured yet, add it only when needed by the task.
 - Prefer existing project scripts over raw tools once scripts exist.
 - Use one-shot validation commands. Avoid watch or long-running development servers unless the user asks.
-- Run `npm test` when adding or modifying tested behavior.
-- Run `npm run build` or `npx tsc --noEmit` before considering substantial TypeScript changes complete when tooling is configured.
+- Run `pnpm test` when adding or modifying tested behavior.
+- Run `pnpm run build` or `pnpm exec tsc --noEmit` before considering substantial TypeScript changes complete when tooling is configured.
 
 ## Expected Backend Structure
 
@@ -225,10 +225,10 @@ For errors:
 - For Prisma 6 or `prisma-client-js` setups, follow the existing project pattern unless a migration is explicitly requested.
 - For MongoDB projects, do not apply SQL adapter guidance.
 - Keep all schema changes in `prisma/schema.prisma` and generate migrations when schema changes are part of the task.
-- Run `npx prisma validate` and `npx prisma format` after meaningful schema edits when Prisma is configured.
-- Run `npx prisma generate` after changing the Prisma schema.
-- Use `npx prisma migrate dev` during development when creating migrations.
-- Use `npx prisma migrate deploy` for production deployment flows.
+- Run `pnpm prisma validate` and `pnpm prisma format` after meaningful schema edits when Prisma is configured.
+- Run `pnpm prisma generate` after changing the Prisma schema.
+- Use `pnpm prisma migrate dev` during development when creating migrations.
+- Use `pnpm prisma migrate deploy` for production deployment flows.
 - Commit Prisma migrations when schema changes are part of the requested work and the user asks for a commit.
 - Use `select` or `omit` to avoid returning sensitive fields.
 - Use transactions for multi-step writes that must succeed or fail together.

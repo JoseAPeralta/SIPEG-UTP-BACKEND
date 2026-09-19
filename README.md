@@ -5,13 +5,13 @@ Backend REST API para SIPEG UTP. Este repositorio contiene solo el backend Node.
 ## Requisitos
 
 - Node.js 24.x o superior.
-- npm 11.x o superior.
+- pnpm 12.x o superior (via corepack).
 - PostgreSQL sera necesario cuando se implementen modulos con persistencia.
 
 ## Instalacion
 
 ```bash
-npm install
+pnpm install
 ```
 
 Configura las variables de entorno usando `.env.example` como referencia. Por ahora el servidor puede iniciar sin `DATABASE_URL` porque no se conecta a una base de datos al arrancar.
@@ -37,19 +37,19 @@ docker compose down -v
 
 ## Scripts
 
-- `npm run dev`: inicia el servidor en modo desarrollo con `tsx watch`.
-- `npm run build`: compila TypeScript hacia `dist/` sin incluir `*.test.ts`.
-- `npm run start`: ejecuta el build compilado.
-- `npm run typecheck`: valida tipos sin emitir archivos.
-- `npm run lint`: ejecuta ESLint.
-- `npm run lint:fix`: aplica fixes disponibles de ESLint.
-- `npm run format`: formatea con Prettier.
-- `npm run format:check`: valida formato con Prettier.
-- `npm test`: ejecuta Vitest.
-- `npm run prisma:validate`: valida `prisma/schema.prisma`.
-- `npm run prisma:format`: formatea `prisma/schema.prisma`.
-- `npm run prisma:generate`: genera Prisma Client en `src/generated/prisma` sin conectarse a la base de datos.
-- `npm run prisma:migrate:dev`: crea y aplica migraciones de desarrollo; requiere una `DATABASE_URL` valida.
+- `pnpm run dev`: inicia el servidor en modo desarrollo con `tsx watch`.
+- `pnpm run build`: compila TypeScript hacia `dist/` sin incluir `*.test.ts`.
+- `pnpm run start`: ejecuta el build compilado.
+- `pnpm run typecheck`: valida tipos sin emitir archivos.
+- `pnpm run lint`: ejecuta ESLint.
+- `pnpm run lint:fix`: aplica fixes disponibles de ESLint.
+- `pnpm run format`: formatea con Prettier.
+- `pnpm run format:check`: valida formato con Prettier.
+- `pnpm test`: ejecuta Vitest.
+- `pnpm run prisma:validate`: valida `prisma/schema.prisma`.
+- `pnpm run prisma:format`: formatea `prisma/schema.prisma`.
+- `pnpm run prisma:generate`: genera Prisma Client en `src/generated/prisma` sin conectarse a la base de datos.
+- `pnpm run prisma:migrate:dev`: crea y aplica migraciones de desarrollo; requiere una `DATABASE_URL` valida.
 
 ## API Inicial
 
@@ -162,5 +162,5 @@ Prisma queda configurado para PostgreSQL, pero el backend no inicializa Prisma a
 Prisma genera el cliente en `src/generated/prisma`. Ese directorio esta ignorado por Git y debe regenerarse cuando cambie el schema.
 
 ```bash
-npm run prisma:generate
+pnpm run prisma:generate
 ```

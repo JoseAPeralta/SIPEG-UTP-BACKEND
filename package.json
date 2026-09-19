@@ -32,9 +32,9 @@
     "prisma:migrate:dev": "prisma migrate dev"
   },
   "engines": {
-    "node": ">=24.0.0",
-    "npm": ">=11.0.0"
+    "node": ">=24.0.0"
   },
+  "packageManager": "pnpm@12.4.1",
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",

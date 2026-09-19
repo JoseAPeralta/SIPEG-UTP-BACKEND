@@ -21,7 +21,7 @@ El backend debe soportar usuarios, autenticacion, permisos, eventos, asistencia,
 ## Estado Actual Del Repositorio
 
 - El repositorio puede estar en estado inicial de scaffold.
-- Si faltan `src/`, `prisma/`, `tsconfig.json`, scripts de npm o `.env.example`, deben crearse solo cuando la tarea lo requiera.
+- Si faltan `src/`, `prisma/`, `tsconfig.json`, scripts de pnpm o `.env.example`, deben crearse solo cuando la tarea lo requiera.
 - Las convenciones en `AGENTS.md` describen la arquitectura objetivo y deben aplicarse incrementalmente.
 - No se deben agregar dependencias, modulos vacios o placeholders solo para aparentar estructura.
 
@@ -32,7 +32,7 @@ El backend debe soportar usuarios, autenticacion, permisos, eventos, asistencia,
 - Express.
 - Prisma ORM.
 - JWT para autenticacion y autorizacion.
-- npm como package manager.
+- pnpm como package manager.
 
 ## Lenguaje De Dominio
 
@@ -177,8 +177,8 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Revisar la version real de Prisma antes de copiar patrones de los skills.
 - Para Prisma 7 con SQL, considerar `prisma.config.ts`, output explicito del generator y driver adapters.
 - Para configuraciones Prisma existentes, seguir el patron actual salvo que el usuario pida migrar.
-- Ejecutar `npx prisma validate`, `npx prisma format` y `npx prisma generate` cuando se modifique el schema y Prisma este configurado.
-- Crear migraciones con `npx prisma migrate dev` cuando haya cambios de schema.
+- Ejecutar `pnpm prisma validate`, `pnpm prisma format` y `pnpm prisma generate` cuando se modifique el schema y Prisma este configurado.
+- Crear migraciones con `pnpm prisma migrate dev` cuando haya cambios de schema.
 - Usar transacciones para escrituras relacionadas que deban ser atomicas.
 - Usar `select` u `omit` para evitar devolver datos sensibles.
 - Evitar raw SQL salvo razon concreta y segura.
