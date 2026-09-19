@@ -2,3 +2,5 @@ allowBuilds:
   '@prisma/engines': true
   esbuild: true
   prisma: true
+minimumReleaseAgeExclude:
+  - '@types/node@24.13.6'
