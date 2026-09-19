@@ -18,3 +18,11 @@ export interface EventProgramDetail {
   endDate: string | null;
   organizationalUnit: EventProgramOrganizationalUnit;
 }
+
+export interface PaginatedEventPrograms {
+  items: EventProgramDetail[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}

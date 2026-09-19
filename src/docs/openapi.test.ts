@@ -16,7 +16,9 @@ const expectedOperations = [
   'PATCH /api/v1/users/me',
   'GET /api/v1/activities',
   'POST /api/v1/activities',
+  'GET /api/v1/event-programs',
   'POST /api/v1/event-programs',
+  'PATCH /api/v1/event-programs/{id}',
   'GET /api/v1/health',
 ].sort();
 
@@ -52,6 +54,7 @@ describe('openApiDocument', () => {
 
   it('keeps public operations without bearer security', () => {
     expect(openApiDocument.paths?.['/api/v1/activities']?.get?.security).toBeUndefined();
+    expect(openApiDocument.paths?.['/api/v1/event-programs']?.get?.security).toBeUndefined();
     expect(openApiDocument.paths?.['/api/v1/health']?.get?.security).toBeUndefined();
   });
 
@@ -69,6 +72,17 @@ describe('openApiDocument', () => {
     expect(operation?.security).toEqual([{ bearerAuth: [] }]);
     expect(operation?.responses?.['201']).toBeDefined();
     expect(openApiDocument.components?.schemas).toHaveProperty('EventProgramDetail');
+  });
+
+  it('marks event program update with bearer security, a path param and a 200 response', () => {
+    const operation = openApiDocument.paths?.['/api/v1/event-programs/{id}']?.patch;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(names).toContain('id');
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['409']).toBeDefined();
   });
 
   it('documents rate limiting on the limited auth operations', () => {
@@ -97,5 +111,15 @@ describe('openApiDocument', () => {
 
     expect(names).toContain('page');
     expect(names).toContain('limit');
+  });
+
+  it('documents the event program list query parameters', () => {
+    const parameters = openApiDocument.paths?.['/api/v1/event-programs']?.get?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(names).toEqual(
+      expect.arrayContaining(['page', 'limit', 'organizationalUnitId', 'unitType', 'q']),
+    );
+    expect(openApiDocument.components?.schemas).toHaveProperty('PaginatedEventPrograms');
   });
 });
