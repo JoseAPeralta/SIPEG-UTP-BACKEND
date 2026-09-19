@@ -35,7 +35,7 @@ export const auth = betterAuth({
   },
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: true,
+    requireEmailVerification: false,
     minPasswordLength: 12,
     maxPasswordLength: 128,
     autoSignIn: false,
@@ -45,7 +45,7 @@ export const auth = betterAuth({
     },
   },
   emailVerification: {
-    sendOnSignUp: true,
+    sendOnSignUp: false,
     autoSignInAfterVerification: true,
     expiresIn: 60 * 60 * 24,
   },
@@ -67,7 +67,6 @@ export const auth = betterAuth({
   session: {
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
-    cookieCache: { enabled: true, maxAge: 60 * 5 },
   },
   plugins: [
     jwt({
@@ -86,6 +85,7 @@ export const auth = betterAuth({
       },
       jwks: {
         keyPairConfig: { alg: 'EdDSA', crv: 'Ed25519' },
+        disablePrivateKeyEncryption: true,
       },
       adapter: {
         getJwks: async () => {
@@ -129,3 +129,24 @@ export const auth = betterAuth({
 
 export type Auth = typeof auth;
 export type Session = Auth['$Infer']['Session'];
+
+export const ensureJwks = async (): Promise<void> => {
+  const prisma = getPrismaClient();
+  const existing = await prisma.jwks.count();
+  if (existing > 0) return;
+  await auth.api.getToken({
+    headers: { origin: env.AUTH_URL },
+    asResponse: false,
+  }).catch(() => {
+    // The first call may fail if there is no session; we only need it to trigger JWKS creation.
+  });
+  const after = await prisma.jwks.count();
+  if (after === 0) {
+    const response = await auth.handler(
+      new Request(`${env.AUTH_URL}/api/auth/jwks`, { method: 'GET' }),
+    );
+    if (!response.ok && response.status !== 401) {
+      throw new Error(`Failed to initialize JWKS: ${response.status}`);
+    }
+  }
+};
