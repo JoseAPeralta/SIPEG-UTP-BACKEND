@@ -12,7 +12,9 @@ import { ApiError } from './utils/ApiError.js';
 
 const allowedOrigins = [
   env.CORS_ORIGIN,
-  ...(env.TRUSTED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean) ?? []),
+  ...(env.TRUSTED_ORIGINS?.split(',')
+    .map((o) => o.trim())
+    .filter(Boolean) ?? []),
 ];
 
 export const app = express();

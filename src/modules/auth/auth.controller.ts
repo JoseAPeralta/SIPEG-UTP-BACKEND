@@ -62,9 +62,9 @@ export const verifyEmailHandler: RequestHandler = asyncHandler(async (req, res) 
 
 export const forgotPasswordHandler: RequestHandler = asyncHandler(async (req, res) => {
   await requestPasswordReset(req.body as ForgotPasswordBody);
-  res.status(200).json(
-    successResponse('If the email is registered, a reset link has been sent.', {}),
-  );
+  res
+    .status(200)
+    .json(successResponse('If the email is registered, a reset link has been sent.', {}));
 });
 
 export const resetPasswordHandler: RequestHandler = asyncHandler(async (req, res) => {

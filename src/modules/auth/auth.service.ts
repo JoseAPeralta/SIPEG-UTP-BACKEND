@@ -69,10 +69,7 @@ const loadSigningKey = async () => {
     throw new ApiError(500, 'No JWKS available for signing.');
   }
   const privateJwk = JSON.parse(latest.privateKey) as Record<string, unknown>;
-  return importJWK(
-    { ...privateJwk, alg: 'EdDSA' } as Parameters<typeof importJWK>[0],
-    'EdDSA',
-  );
+  return importJWK({ ...privateJwk, alg: 'EdDSA' } as Parameters<typeof importJWK>[0], 'EdDSA');
 };
 
 const signAccessJwt = async (input: SignAccessTokenInput): Promise<string> => {
@@ -145,7 +142,7 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
     };
   } catch (error) {
     throwBetterAuthError(error);
-    throw new Error('unreachable');
+    throw new Error('Failed to login.', { cause: error });
   }
 };
 
@@ -168,7 +165,7 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
     return { userId: result.user.id };
   } catch (error) {
     throwBetterAuthError(error);
-    throw new Error('unreachable');
+    throw new Error('Failed to register user.', { cause: error });
   }
 };
 
@@ -212,7 +209,7 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throwBetterAuthError(error);
-    throw new Error('unreachable');
+    throw new Error('Failed to refresh token.', { cause: error });
   }
 };
 
