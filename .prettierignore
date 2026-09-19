@@ -4,6 +4,7 @@ dist
 coverage
 generated
 src/generated
+openapi.json
 pnpm-lock.yaml
 .env
 .env.*
