@@ -7,15 +7,18 @@
 .parcel-cache
 .stylelintcache
 .vscode
+.opencode
 coverage
 dist
 generated
 node_modules
+**/node_modules
 src/generated
+src/**/*.test.ts
 
 .env
 .env.*
-!.env.example
+.env.example
 
 *.log
 *.pid
@@ -26,6 +29,18 @@ src/generated
 yarn-debug.log*
 yarn-error.log*
 
+docs
+CONTEXT.md
+AGENTS.md
+README.md
+skills-lock.json
+eslint.config.js
+prettier.config.js
+.prettierignore
+vitest.config.ts
+.node-version
+
 Dockerfile
-docker-compose*.yml
 .dockerignore
+compose*.yaml
+docker-compose*.yml
