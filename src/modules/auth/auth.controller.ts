@@ -1,16 +1,73 @@
+import type { RequestHandler } from 'express';
+
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { successResponse } from '../../utils/response.js';
-import { loginUser, registerUser } from './auth.service.js';
-import type { LoginUserSchemaBody, RegisterUserSchemaBody } from './auth.schemas.js';
+import type {
+  ForgotPasswordBody,
+  LoginBody,
+  LogoutBody,
+  RefreshBody,
+  RegisterBody,
+  ResetPasswordBody,
+  VerifyEmailBody,
+} from './auth.schemas.js';
+import {
+  loginWithPassword,
+  logoutUser,
+  refreshAccessToken,
+  registerUser,
+  requestPasswordReset,
+  resetPassword,
+  verifyEmail,
+} from './auth.service.js';
 
-export const register = asyncHandler(async (req, res) => {
-  const result = await registerUser(req.body as RegisterUserSchemaBody);
-
-  res.status(201).json(successResponse('User created successfully.', result));
+const formatAuthSuccess = (
+  result: Awaited<ReturnType<typeof loginWithPassword>>,
+): Record<string, unknown> => ({
+  accessToken: result.accessToken,
+  accessTokenExpiresAt: result.accessTokenExpiresAt.toISOString(),
+  refreshToken: result.refreshToken,
+  refreshTokenExpiresAt: result.refreshTokenExpiresAt.toISOString(),
+  tokenType: 'Bearer',
 });
 
-export const login = asyncHandler(async (req, res) => {
-  const result = await loginUser(req.body as LoginUserSchemaBody);
+export const login: RequestHandler = asyncHandler(async (req, res) => {
+  const result = await loginWithPassword(req.body as LoginBody);
+  res.status(200).json(successResponse('Login successful.', formatAuthSuccess(result)));
+});
 
-  res.status(200).json(successResponse('Login successful.', result));
+export const register: RequestHandler = asyncHandler(async (req, res) => {
+  const result = await registerUser(req.body as RegisterBody);
+  res.status(201).json(
+    successResponse('Registration successful. Check your email to verify your account.', {
+      userId: result.userId,
+    }),
+  );
+});
+
+export const refresh: RequestHandler = asyncHandler(async (req, res) => {
+  const result = await refreshAccessToken(req.body as RefreshBody);
+  res.status(200).json(successResponse('Token refreshed.', formatAuthSuccess(result)));
+});
+
+export const logout: RequestHandler = asyncHandler(async (req, res) => {
+  await logoutUser(req.body as LogoutBody);
+  res.status(200).json(successResponse('Logout successful.', {}));
+});
+
+export const verifyEmailHandler: RequestHandler = asyncHandler(async (req, res) => {
+  await verifyEmail(req.body as VerifyEmailBody);
+  res.status(200).json(successResponse('Email verified successfully.', {}));
+});
+
+export const forgotPasswordHandler: RequestHandler = asyncHandler(async (req, res) => {
+  await requestPasswordReset(req.body as ForgotPasswordBody);
+  res
+    .status(200)
+    .json(successResponse('If the email is registered, a reset link has been sent.', {}));
+});
+
+export const resetPasswordHandler: RequestHandler = asyncHandler(async (req, res) => {
+  await resetPassword(req.body as ResetPasswordBody);
+  res.status(200).json(successResponse('Password reset successfully.', {}));
 });
