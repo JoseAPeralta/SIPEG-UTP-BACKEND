@@ -1,0 +1,72 @@
+name: sipeg-utp-prod
+
+services:
+  migrate:
+    build:
+      context: .
+      target: migrate
+    image: sipeg-utp-backend:migrate
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - sipeg-utp-prod
+
+  api:
+    build:
+      context: .
+      target: runtime
+    image: sipeg-utp-backend:${IMAGE_TAG:-latest}
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      AUTH_URL: ${AUTH_URL:?AUTH_URL is required}
+    ports:
+      - '${PORT:-3000}:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    stop_grace_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - sipeg-utp-prod
+
+  db:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - sipeg-utp-prod
+
+volumes:
+  postgres_data:
+
+networks:
+  sipeg-utp-prod:
+    driver: bridge

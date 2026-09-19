@@ -1,0 +1,10 @@
+node_modules
+.agents
+dist
+coverage
+generated
+src/generated
+pnpm-lock.yaml
+.env
+.env.*
+!.env.example

@@ -1,0 +1,74 @@
+name: sipeg-utp-dev
+
+services:
+  migrate:
+    build:
+      context: .
+      target: migrate
+    image: sipeg-utp-backend:migrate-dev
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sipeg}:${POSTGRES_PASSWORD:-sipeg_password}@db:5432/${POSTGRES_DB:-sipeg_utp}?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: 'no'
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - sipeg-utp-dev
+
+  api:
+    build:
+      context: .
+      target: dev
+    image: sipeg-utp-backend:dev
+    init: true
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sipeg}:${POSTGRES_PASSWORD:-sipeg_password}@db:5432/${POSTGRES_DB:-sipeg_utp}?schema=public
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+    ports:
+      - '${PORT:-3000}:3000'
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - sipeg-utp-dev
+
+  db:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sipeg_utp}
+      POSTGRES_USER: ${POSTGRES_USER:-sipeg}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sipeg_password}
+    ports:
+      - '127.0.0.1:${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - sipeg-utp-dev
+
+volumes:
+  postgres_data:
+
+networks:
+  sipeg-utp-dev:
+    driver: bridge
