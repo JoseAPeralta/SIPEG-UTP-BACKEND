@@ -1,7 +1,13 @@
 import type { RequestHandler } from 'express';
 
-import type { ListActivitiesQuery } from '../modules/activities/activities.schemas.js';
-import { listUpcomingActivities } from '../modules/activities/activities.service.js';
+import type {
+  CreateActivityBody,
+  ListActivitiesQuery,
+} from '../modules/activities/activities.schemas.js';
+import {
+  createActivity as createActivityService,
+  listUpcomingActivities,
+} from '../modules/activities/activities.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { successResponse } from '../utils/response.js';
 
@@ -10,4 +16,11 @@ export const getActivities: RequestHandler = asyncHandler(async (req, res) => {
   const result = await listUpcomingActivities(query);
 
   res.status(200).json(successResponse('Activities retrieved successfully.', result));
+});
+
+export const createActivity: RequestHandler = asyncHandler(async (req, res) => {
+  const body = req.body as CreateActivityBody;
+  const result = await createActivityService(body);
+
+  res.status(201).json(successResponse('Activity created successfully.', result));
 });

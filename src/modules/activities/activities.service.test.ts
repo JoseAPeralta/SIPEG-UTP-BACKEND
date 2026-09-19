@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { CreateActivityBody } from './activities.schemas.js';
+
 interface ActivityRecord {
   id: string;
   name: string;
@@ -194,5 +196,192 @@ describe('activities service', () => {
     const result = await listUpcomingActivities({ page: 1, limit: 20 }, NOW);
 
     expect(result).toEqual({ items: [], page: 1, limit: 20, total: 0, totalPages: 0 });
+  });
+});
+
+interface CreatePrismaMock {
+  eventProgram: { findUnique: ReturnType<typeof vi.fn> };
+  classroom: { findUnique: ReturnType<typeof vi.fn> };
+  user: { findUnique: ReturnType<typeof vi.fn> };
+  activity: { create: ReturnType<typeof vi.fn> };
+}
+
+const createCreatePrismaMock = (): CreatePrismaMock => ({
+  eventProgram: { findUnique: vi.fn() },
+  classroom: { findUnique: vi.fn() },
+  user: { findUnique: vi.fn() },
+  activity: { create: vi.fn() },
+});
+
+const loadCreateService = async (prisma: CreatePrismaMock) => {
+  vi.resetModules();
+  vi.doMock('../../config/prisma.js', () => ({
+    getPrismaClient: () => prisma,
+  }));
+
+  return import('./activities.service.js');
+};
+
+const activeProgram = {
+  id: 'program-001',
+  status: 'ACTIVE',
+  isDefault: true,
+  startDate: null,
+  endDate: null,
+};
+
+const createBody: CreateActivityBody = {
+  name: 'Introduccion a TypeScript',
+  type: 'WORKSHOP',
+  date: '2026-09-20',
+  startTime: '08:00',
+  endTime: '10:00',
+  eventProgramId: 'program-001',
+};
+
+const createdRecord = {
+  id: 'activity-001',
+  name: 'Introduccion a TypeScript',
+  description: null,
+  type: 'WORKSHOP' as const,
+  date: new Date('2026-09-20T00:00:00.000Z'),
+  startTime: new Date('1970-01-01T08:00:00.000Z'),
+  endTime: new Date('1970-01-01T10:00:00.000Z'),
+  maxCapacity: null,
+  bannerUrl: null,
+  status: 'DRAFT' as const,
+  equipment: [{ name: 'Proyector' }],
+  speaker: null,
+  classroom: null,
+  eventProgram: {
+    id: 'program-001',
+    name: 'Programa de Ingenieria',
+    label: null,
+    organizationalUnit: {
+      id: 'faculty-001',
+      name: 'Ingenieria de Sistemas Computacionales',
+      type: 'FACULTY' as const,
+    },
+  },
+};
+
+describe('createActivity', () => {
+  afterEach(() => {
+    vi.doUnmock('../../config/prisma.js');
+  });
+
+  it('rejects when the event program does not exist', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(null);
+    const { createActivity } = await loadCreateService(prisma);
+
+    await expect(createActivity(createBody)).rejects.toMatchObject({ statusCode: 404 });
+    expect(prisma.activity.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the event program is not active', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ ...activeProgram, status: 'DRAFT' });
+    const { createActivity } = await loadCreateService(prisma);
+
+    await expect(createActivity(createBody)).rejects.toMatchObject({ statusCode: 400 });
+    expect(prisma.activity.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a date outside a non-default program range', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({
+      ...activeProgram,
+      isDefault: false,
+      startDate: new Date('2026-10-01T00:00:00.000Z'),
+      endDate: new Date('2026-10-31T00:00:00.000Z'),
+    });
+    const { createActivity } = await loadCreateService(prisma);
+
+    await expect(createActivity(createBody)).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('rejects a missing or inactive classroom', async () => {
+    const missing = createCreatePrismaMock();
+    missing.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    missing.classroom.findUnique.mockResolvedValue(null);
+    const { createActivity: createWithMissing } = await loadCreateService(missing);
+
+    await expect(
+      createWithMissing({ ...createBody, classroomId: 'classroom-001' }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    const inactive = createCreatePrismaMock();
+    inactive.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    inactive.classroom.findUnique.mockResolvedValue({ id: 'classroom-001', isActive: false });
+    const { createActivity: createWithInactive } = await loadCreateService(inactive);
+
+    await expect(
+      createWithInactive({ ...createBody, classroomId: 'classroom-001' }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('rejects a missing or inactive speaker', async () => {
+    const missing = createCreatePrismaMock();
+    missing.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    missing.user.findUnique.mockResolvedValue(null);
+    const { createActivity: createWithMissing } = await loadCreateService(missing);
+
+    await expect(createWithMissing({ ...createBody, speakerId: 'user-001' })).rejects.toMatchObject(
+      { statusCode: 404 },
+    );
+
+    const inactive = createCreatePrismaMock();
+    inactive.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    inactive.user.findUnique.mockResolvedValue({ id: 'user-001', isActive: false });
+    const { createActivity: createWithInactive } = await loadCreateService(inactive);
+
+    await expect(
+      createWithInactive({ ...createBody, speakerId: 'user-001' }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+  });
+
+  it('creates a DRAFT activity with parsed date, time and equipment', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    prisma.activity.create.mockResolvedValue(createdRecord);
+    const { createActivity } = await loadCreateService(prisma);
+
+    const result = await createActivity({ ...createBody, equipment: ['Proyector'] });
+
+    expect(prisma.activity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'DRAFT',
+          date: new Date('2026-09-20T00:00:00.000Z'),
+          startTime: new Date('1970-01-01T08:00:00.000Z'),
+          endTime: new Date('1970-01-01T10:00:00.000Z'),
+          equipment: {
+            createMany: { data: [{ name: 'Proyector' }], skipDuplicates: true },
+          },
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      id: 'activity-001',
+      name: 'Introduccion a TypeScript',
+      description: null,
+      type: 'WORKSHOP',
+      date: '2026-09-20',
+      startTime: '08:00',
+      endTime: '10:00',
+      capacity: null,
+      bannerUrl: null,
+      status: 'DRAFT',
+      equipment: ['Proyector'],
+      speaker: null,
+      classroom: null,
+      eventProgram: { id: 'program-001', name: 'Programa de Ingenieria', label: null },
+      organizationalUnit: {
+        type: 'FACULTY',
+        id: 'faculty-001',
+        name: 'Ingenieria de Sistemas Computacionales',
+      },
+    });
   });
 });

@@ -24,6 +24,26 @@ export interface ActivityOrganizationalUnit {
   name: string;
 }
 
+export type ActivityStatus = 'DRAFT' | 'SCHEDULED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
+
+export interface ActivityDetail {
+  id: string;
+  name: string;
+  description: string | null;
+  type: ActivityType;
+  date: string;
+  startTime: string;
+  endTime: string;
+  capacity: number | null;
+  bannerUrl: string | null;
+  status: ActivityStatus;
+  equipment: string[];
+  speaker: ActivitySpeakerSummary | null;
+  classroom: ActivityClassroomSummary | null;
+  eventProgram: ActivityProgramSummary;
+  organizationalUnit: ActivityOrganizationalUnit;
+}
+
 export interface ActivityListItem {
   id: string;
   name: string;
