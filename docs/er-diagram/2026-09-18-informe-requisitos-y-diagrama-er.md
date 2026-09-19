@@ -97,7 +97,7 @@ Como el modelo solo expresa concesiones, la interpretación coherente actual es 
 
 ### 3.5 Asistencia y certificados
 
-`attendance` garantiza un registro por usuario y actividad. La fila nace con `registered_at`; `method`, `used_code` y `checked_in_at` se completan durante el check-in. `certificates` depende uno a uno de una asistencia y evita duplicar usuario o actividad.
+`attendance` garantiza un registro por usuario y actividad. La fila nace con `registered_at` y su propio `code` único de validación; `method` y `checked_in_at` se completan durante el check-in. `certificates` depende uno a uno de una asistencia y evita duplicar usuario o actividad. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 
 La normalización es correcta y permite distinguir registro de presencia. La entidad todavía no representa cancelación, ausencia ni lista de espera.
 
@@ -143,21 +143,20 @@ Las alertas pueden referenciar exactamente una propuesta, programa, actividad o 
 
 ### 4.3 Actividades
 
-| Requisito                           | Soporte                    | Estado   | Observación                                  |
-| ----------------------------------- | -------------------------- | -------- | -------------------------------------------- |
-| Toda actividad pertenece a programa | FK `NOT NULL`              | Cubierto | No existen actividades independientes        |
-| Crear solo en programa activo       | `ProgramStatus.ACTIVE`     | Parcial  | Regla transaccional entre entidades          |
-| Nombre y descripción                | Campos explícitos          | Cubierto | Descripción opcional                         |
-| Tipo                                | `ActivityType`             | Cubierto | Incluye `OTHER`                              |
-| Ponente                             | `speaker_id?`              | Parcial  | Debe definirse cuándo pasa a ser obligatorio |
-| Aula                                | `classroom_id?`            | Parcial  | Admite actividades sin aula; falta modalidad |
-| Fecha y hora                        | Campos explícitos          | Cubierto | Falta política de zona horaria y medianoche  |
-| Capacidad                           | `max_capacity?`            | Parcial  | Falta obligatoriedad por estado/tipo         |
-| Equipamiento                        | `activity_equipment`       | Cubierto | Dominio abierto de nombres                   |
-| Banner                              | `banner_url?`              | Cubierto | Falta metadata del archivo                   |
-| Estados                             | `ActivityStatus`           | Cubierto | Faltan transiciones permitidas               |
-| Código QR                           | `qr_code UQ`               | Parcial  | Falta expiración y rotación                  |
-| Código manual                       | Unique dentro del programa | Parcial  | Falta seguridad y ventana de uso             |
+| Requisito                           | Soporte                | Estado   | Observación                                  |
+| ----------------------------------- | ---------------------- | -------- | -------------------------------------------- |
+| Toda actividad pertenece a programa | FK `NOT NULL`          | Cubierto | No existen actividades independientes        |
+| Crear solo en programa activo       | `ProgramStatus.ACTIVE` | Parcial  | Regla transaccional entre entidades          |
+| Nombre y descripción                | Campos explícitos      | Cubierto | Descripción opcional                         |
+| Tipo                                | `ActivityType`         | Cubierto | Incluye `OTHER`                              |
+| Ponente                             | `speaker_id?`          | Parcial  | Debe definirse cuándo pasa a ser obligatorio |
+| Aula                                | `classroom_id?`        | Parcial  | Admite actividades sin aula; falta modalidad |
+| Fecha y hora                        | Campos explícitos      | Cubierto | Falta política de zona horaria y medianoche  |
+| Capacidad                           | `max_capacity?`        | Parcial  | Falta obligatoriedad por estado/tipo         |
+| Equipamiento                        | `activity_equipment`   | Cubierto | Dominio abierto de nombres                   |
+| Banner                              | `banner_url?`          | Cubierto | Falta metadata del archivo                   |
+| Estados                             | `ActivityStatus`       | Cubierto | Faltan transiciones permitidas               |
+| Código de validación                | `attendance.code UQ`   | Cubierto | Único por inscripción; falta expiración      |
 
 ### 4.4 Colaboradores y permisos
 
@@ -173,17 +172,17 @@ Las alertas pueden referenciar exactamente una propuesta, programa, actividad o 
 
 ### 4.5 Asistencia
 
-| Requisito                          | Soporte                  | Estado      | Observación                                  |
-| ---------------------------------- | ------------------------ | ----------- | -------------------------------------------- |
-| Registrar asistencia por actividad | `attendance.activity_id` | Cubierto    | FK obligatoria                               |
-| Asociar usuario                    | `user_id`                | Cubierto    | FK obligatoria                               |
-| Registro previo                    | `registered_at`          | Cubierto    | Existe antes del check-in                    |
-| QR/manual                          | `method?` y `used_code?` | Cubierto    | Ambos son obligatorios al completar check-in |
-| Evitar duplicados                  | UQ actividad-usuario     | Cubierto    | Protección declarativa                       |
-| Auditar instante                   | `checked_in_at?`         | Cubierto    | Falta actor, dispositivo u origen            |
-| Validar capacidad                  | Conteo y `max_capacity`  | Parcial     | Requiere bloqueo o actualización atómica     |
-| Distinguir registro y presencia    | Timestamps diferenciados | Cubierto    | Mantiene una sola fila                       |
-| Cancelación/lista de espera        | Sin estado específico    | No cubierto | Requiere entidad o estados adicionales       |
+| Requisito                          | Soporte                  | Estado      | Observación                                               |
+| ---------------------------------- | ------------------------ | ----------- | --------------------------------------------------------- |
+| Registrar asistencia por actividad | `attendance.activity_id` | Cubierto    | FK obligatoria                                            |
+| Asociar usuario                    | `user_id`                | Cubierto    | FK obligatoria                                            |
+| Registro previo                    | `registered_at`          | Cubierto    | Existe antes del check-in                                 |
+| QR/manual                          | `code` y `method?`       | Cubierto    | `code` nace en la inscripción; `method` al hacer check-in |
+| Evitar duplicados                  | UQ actividad-usuario     | Cubierto    | Protección declarativa                                    |
+| Auditar instante                   | `checked_in_at?`         | Cubierto    | Falta actor, dispositivo u origen                         |
+| Validar capacidad                  | Conteo y `max_capacity`  | Parcial     | Requiere bloqueo o actualización atómica                  |
+| Distinguir registro y presencia    | Timestamps diferenciados | Cubierto    | Mantiene una sola fila                                    |
+| Cancelación/lista de espera        | Sin estado específico    | No cubierto | Requiere entidad o estados adicionales                    |
 
 ### 4.6 Certificados
 
@@ -285,7 +284,7 @@ Cuando una unidad inactiva se reactiva, la misma transacción bloquea ambos regi
 3. Se reserva cupo de forma atómica y se crea la fila con `registered_at`.
 4. Durante el check-in se recupera esa misma fila.
 5. Se valida método, código, vigencia y correspondencia.
-6. Se completan `method`, `used_code` y `checked_in_at` de forma idempotente, exigiendo `checked_in_at >= registered_at`.
+6. Se completan `method` y `checked_in_at` de forma idempotente, exigiendo `checked_in_at >= registered_at`; el `code` ya existe desde la inscripción.
 
 La comprobación de cupo y la escritura deben formar una única transacción para evitar que solicitudes simultáneas excedan la capacidad.
 

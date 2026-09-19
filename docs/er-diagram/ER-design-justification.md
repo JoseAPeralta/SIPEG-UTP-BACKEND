@@ -137,8 +137,6 @@ Restricciones:
 - `end_time`
 - `max_capacity?`
 - `banner_url?`
-- `qr_code (UQ)`
-- `manual_code?`
 - `status`
 - `event_program_id (FK)`
 - `classroom_id (FK?)`
@@ -150,7 +148,6 @@ Restricciones:
 
 - `event_program_id` es obligatorio y usa `ON DELETE RESTRICT`.
 - `start_time < end_time` y `max_capacity > 0` cuando se informa capacidad.
-- `UNIQUE (event_program_id, manual_code)` evita códigos manuales repetidos dentro de un programa.
 - La fecha debe respetar el rango de un programa adicional.
 - La asignación de aula debe respetar capacidad, disponibilidad y ausencia de solapes.
 
@@ -162,7 +159,7 @@ Restricciones:
 
 #### `attendance` y `certificates`
 
-`attendance` contiene `id`, `registered_at`, `method?`, `used_code?`, `checked_in_at?`, `activity_id` y `user_id`, con `UNIQUE (activity_id, user_id)`. La fila nace al registrarse y se completa al hacer check-in.
+`attendance` contiene `id`, `code (UQ)`, `registered_at`, `method?`, `checked_in_at?`, `activity_id` y `user_id`, con `UNIQUE (activity_id, user_id)`. La fila nace al registrarse con su propio código de validación y se completa al hacer check-in; el código es único global y se genera en la inscripción. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 
 `certificates` contiene `id`, `code (UQ)`, `pdf_url?`, `issued_at` y `attendance_id (FK, UQ)`. La relación 1:0..1 impide más de un certificado por asistencia.
 
@@ -402,9 +399,9 @@ CHECK (max_capacity IS NULL OR max_capacity > 0)
 CHECK (capacity > 0)
 
 CHECK (
-  (checked_in_at IS NULL AND method IS NULL AND used_code IS NULL)
+  (checked_in_at IS NULL AND method IS NULL)
   OR
-  (checked_in_at IS NOT NULL AND method IS NOT NULL AND used_code IS NOT NULL
+  (checked_in_at IS NOT NULL AND method IS NOT NULL
     AND checked_in_at >= registered_at)
 )
 ```

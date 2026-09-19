@@ -8,7 +8,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const seedId = (...parts: string[]): string => [SEED_PREFIX, ...parts].join('_');
 
-export const seedQr = (key: string): string => `seed-qr-${key}`;
+export const seedCode = (...parts: string[]): string => seedId('code', ...parts);
 
 export const institutionalToday = (now: Date = new Date()): Date => startOfInstitutionalDay(now);
 

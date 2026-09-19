@@ -1,6 +1,6 @@
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
 import type { AttendanceMethod } from '../../src/generated/prisma/enums.js';
-import { logStep, requireEntry, seedId } from './helpers.js';
+import { logStep, requireEntry, seedCode, seedId } from './helpers.js';
 import type { SeedActivity } from './activities.seed.js';
 import type { SeedUser } from './users.seed.js';
 
@@ -109,22 +109,14 @@ export const seedAttendance = async (
         update: {
           registeredAt,
           method: isCheckedIn ? group.method : null,
-          usedCode: isCheckedIn
-            ? group.method === 'QR'
-              ? activity.qrCode
-              : activity.manualCode
-            : null,
+          code: seedCode(activity.key, attendeeKey),
           checkedInAt: isCheckedIn ? checkedInAt : null,
         },
         create: {
           id: seedId('attendance', activity.key, attendeeKey),
           registeredAt,
           method: isCheckedIn ? group.method : null,
-          usedCode: isCheckedIn
-            ? group.method === 'QR'
-              ? activity.qrCode
-              : activity.manualCode
-            : null,
+          code: seedCode(activity.key, attendeeKey),
           checkedInAt: isCheckedIn ? checkedInAt : null,
           activityId: activity.id,
           userId: attendee.id,
