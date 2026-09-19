@@ -1,0 +1,193 @@
+meta {
+  name: Refresh the access token
+  type: http
+  seq: 3
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/refresh
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "refreshToken": ""
+  }
+}
+
+example {
+  name: 200 Response
+  description: New access/refresh token pair.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/refresh
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "accessToken": "",
+            "accessTokenExpiresAt": "",
+            "refreshToken": "",
+            "refreshTokenExpiresAt": "",
+            "tokenType": ""
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/refresh
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/refresh
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 429 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/refresh
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 429
+      text: Too Many Requests
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}

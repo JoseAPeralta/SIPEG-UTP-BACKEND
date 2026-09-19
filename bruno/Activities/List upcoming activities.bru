@@ -1,0 +1,132 @@
+meta {
+  name: List upcoming activities
+  type: http
+  seq: 1
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities
+  body: none
+  auth: inherit
+}
+
+params:query {
+  page: 1
+  limit: 20
+}
+
+docs {
+  Public. Returns SCHEDULED and ONGOING activities of ACTIVE programs with date greater than or equal to today in the institutional time zone America/Panama.
+}
+
+example {
+  name: 200 Response
+  description: Paginated list of upcoming activities.
+
+  request: {
+    url: {{baseUrl}}/api/v1/activities
+    method: GET
+    mode: none
+    params:query: {
+      page: 1
+      limit: 20
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "items": [
+              {
+                "id": "",
+                "name": "",
+                "description": "",
+                "type": "WORKSHOP",
+                "date": "",
+                "startTime": "",
+                "endTime": "",
+                "capacity": "",
+                "bannerUrl": "",
+                "speaker": "",
+                "classroom": "",
+                "eventProgram": {
+                  "id": "",
+                  "name": "",
+                  "label": ""
+                },
+                "organizationalUnit": {
+                  "type": "FACULTY",
+                  "id": "",
+                  "name": ""
+                }
+              }
+            ],
+            "page": 0,
+            "limit": 0,
+            "total": 0,
+            "totalPages": 0
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/activities
+    method: GET
+    mode: none
+    params:query: {
+      page: 1
+      limit: 20
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
