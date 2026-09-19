@@ -12,7 +12,7 @@ interface ActivityRecord {
   endTime: Date;
   maxCapacity: number | null;
   bannerUrl: string | null;
-  speaker: { id: string; firstName: string; lastName: string } | null;
+  speakers: { speaker: { id: string; firstName: string; lastName: string } }[];
   classroom: { id: string; name: string; building: string | null } | null;
   eventProgram: {
     id: string;
@@ -59,7 +59,10 @@ const buildRecord = (overrides: Partial<ActivityRecord> = {}): ActivityRecord =>
   endTime: new Date('1970-01-01T17:00:00.000Z'),
   maxCapacity: 35,
   bannerUrl: null,
-  speaker: { id: 'user-001', firstName: 'Carlos', lastName: 'Rivera' },
+  speakers: [
+    { speaker: { id: 'speaker-001', firstName: 'Carlos', lastName: 'Rivera' } },
+    { speaker: { id: 'speaker-002', firstName: 'Ana', lastName: 'Zapata' } },
+  ],
   classroom: { id: 'classroom-001', name: 'Laboratorio 3', building: 'Edificio B' },
   eventProgram: {
     id: 'program-001',
@@ -141,7 +144,10 @@ describe('activities service', () => {
         endTime: '17:00',
         capacity: 35,
         bannerUrl: null,
-        speaker: { id: 'user-001', firstName: 'Carlos', lastName: 'Rivera' },
+        speakers: [
+          { id: 'speaker-001', firstName: 'Carlos', lastName: 'Rivera' },
+          { id: 'speaker-002', firstName: 'Ana', lastName: 'Zapata' },
+        ],
         classroom: { id: 'classroom-001', name: 'Laboratorio 3', building: 'Edificio B' },
         eventProgram: { id: 'program-001', name: 'Programa de Ingenieria', label: null },
         organizationalUnit: {
@@ -159,7 +165,7 @@ describe('activities service', () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([
       buildRecord({
-        speaker: null,
+        speakers: [],
         classroom: null,
         eventProgram: {
           id: 'program-002',
@@ -183,7 +189,7 @@ describe('activities service', () => {
       id: 'sub-001',
       name: 'Subdireccion de Extension',
     });
-    expect(result.items[0]?.speaker).toBeNull();
+    expect(result.items[0]?.speakers).toEqual([]);
     expect(result.items[0]?.classroom).toBeNull();
   });
 
@@ -202,14 +208,14 @@ describe('activities service', () => {
 interface CreatePrismaMock {
   eventProgram: { findUnique: ReturnType<typeof vi.fn> };
   classroom: { findUnique: ReturnType<typeof vi.fn> };
-  user: { findUnique: ReturnType<typeof vi.fn> };
+  user: { findMany: ReturnType<typeof vi.fn> };
   activity: { create: ReturnType<typeof vi.fn> };
 }
 
 const createCreatePrismaMock = (): CreatePrismaMock => ({
   eventProgram: { findUnique: vi.fn() },
   classroom: { findUnique: vi.fn() },
-  user: { findUnique: vi.fn() },
+  user: { findMany: vi.fn() },
   activity: { create: vi.fn() },
 });
 
@@ -251,7 +257,7 @@ const createdRecord = {
   bannerUrl: null,
   status: 'DRAFT' as const,
   equipment: [{ name: 'Proyector' }],
-  speaker: null,
+  speakers: [],
   classroom: null,
   eventProgram: {
     id: 'program-001',
@@ -321,24 +327,89 @@ describe('createActivity', () => {
     ).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it('rejects a missing or inactive speaker', async () => {
-    const missing = createCreatePrismaMock();
-    missing.eventProgram.findUnique.mockResolvedValue(activeProgram);
-    missing.user.findUnique.mockResolvedValue(null);
-    const { createActivity: createWithMissing } = await loadCreateService(missing);
+  it('reuses speakers by email and links the matching platform user', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    prisma.user.findMany.mockResolvedValue([{ id: 'user-001', email: 'ana@example.com' }]);
+    prisma.activity.create.mockResolvedValue(createdRecord);
+    const { createActivity } = await loadCreateService(prisma);
 
-    await expect(createWithMissing({ ...createBody, speakerId: 'user-001' })).rejects.toMatchObject(
-      { statusCode: 404 },
+    await createActivity({
+      ...createBody,
+      speakers: [
+        {
+          firstName: 'Ana',
+          lastName: 'Gomez',
+          email: 'ana@example.com',
+          organization: 'UTP',
+        },
+      ],
+    });
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { email: { in: ['ana@example.com'] } },
+      }),
     );
+    expect(prisma.activity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          speakers: {
+            create: [
+              {
+                speaker: {
+                  connectOrCreate: {
+                    where: { email: 'ana@example.com' },
+                    create: {
+                      firstName: 'Ana',
+                      lastName: 'Gomez',
+                      email: 'ana@example.com',
+                      organization: 'UTP',
+                      userId: 'user-001',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        }),
+      }),
+    );
+  });
 
-    const inactive = createCreatePrismaMock();
-    inactive.eventProgram.findUnique.mockResolvedValue(activeProgram);
-    inactive.user.findUnique.mockResolvedValue({ id: 'user-001', isActive: false });
-    const { createActivity: createWithInactive } = await loadCreateService(inactive);
+  it('creates speakers without email without querying users', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    prisma.activity.create.mockResolvedValue(createdRecord);
+    const { createActivity } = await loadCreateService(prisma);
 
-    await expect(
-      createWithInactive({ ...createBody, speakerId: 'user-001' }),
-    ).rejects.toMatchObject({ statusCode: 400 });
+    await createActivity({
+      ...createBody,
+      speakers: [{ firstName: 'Marco', lastName: 'Santos', organization: 'Colegio' }],
+    });
+
+    expect(prisma.user.findMany).not.toHaveBeenCalled();
+    expect(prisma.activity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          speakers: {
+            create: [
+              {
+                speaker: {
+                  create: {
+                    firstName: 'Marco',
+                    lastName: 'Santos',
+                    email: null,
+                    organization: 'Colegio',
+                    userId: null,
+                  },
+                },
+              },
+            ],
+          },
+        }),
+      }),
+    );
   });
 
   it('creates a DRAFT activity with parsed date, time and equipment', async () => {
@@ -374,7 +445,7 @@ describe('createActivity', () => {
       bannerUrl: null,
       status: 'DRAFT',
       equipment: ['Proyector'],
-      speaker: null,
+      speakers: [],
       classroom: null,
       eventProgram: { id: 'program-001', name: 'Programa de Ingenieria', label: null },
       organizationalUnit: {

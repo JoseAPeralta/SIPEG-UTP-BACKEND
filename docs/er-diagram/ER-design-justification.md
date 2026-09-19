@@ -3,6 +3,13 @@
 > Estado: propuesta de diseño conceptual y lógico.
 > Diagrama editable: [`er-diagram.drawio`](./er-diagram.drawio).
 > Fuentes funcionales: [`AGENTS.md`](../../AGENTS.md) y [`CONTEXT.md`](../../CONTEXT.md).
+>
+> Actualización (2026-09-19): los ponentes viven en el catálogo `speakers`
+> (con `user_id` opcional) y se relacionan con actividades mediante
+> `activity_speakers`; `speaker_proposals.speaker_id` referencia `speakers`.
+> Las referencias a `activities.speaker_id` y a `users` como ponente en este
+> documento describen el diseño anterior. El `.drawio` está pendiente de
+> regeneración.
 
 ---
 
