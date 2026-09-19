@@ -1,6 +1,6 @@
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
 import type { ActivityStatus, ActivityType } from '../../src/generated/prisma/enums.js';
-import { dateOffset, logStep, requireEntry, seedId, seedQr, timeOfDay } from './helpers.js';
+import { dateOffset, logStep, requireEntry, seedId, timeOfDay } from './helpers.js';
 import type { OrganizationCatalog } from './organizations.seed.js';
 import type { SeedProgram } from './programs.seed.js';
 import type { SeedUser } from './users.seed.js';
@@ -20,7 +20,6 @@ interface ActivityCatalogEntry {
   classroomKey: string | null;
   speakerKey: string | null;
   status: ActivityStatus;
-  manualCode: string;
   equipment: readonly string[];
 }
 
@@ -38,7 +37,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-101',
     speakerKey: 'speaker-carlos',
     status: 'COMPLETED',
-    manualCode: 'FIC-01',
     equipment: ['Proyector', 'Pizarra'],
   },
   {
@@ -54,7 +52,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'lab-electronica',
     speakerKey: 'org-fic',
     status: 'SCHEDULED',
-    manualCode: 'FIC-02',
     equipment: ['Dron', 'Proyector', 'Estación total'],
   },
   {
@@ -70,7 +67,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-101',
     speakerKey: 'speaker-carlos',
     status: 'CANCELLED',
-    manualCode: 'FIC-03',
     equipment: ['Proyector'],
   },
   {
@@ -86,7 +82,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'auditorio',
     speakerKey: 'speaker-carlos',
     status: 'SCHEDULED',
-    manualCode: 'FIE-01',
     equipment: ['Proyector', 'Micrófono'],
   },
   {
@@ -102,7 +97,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-201',
     speakerKey: 'speaker-diana',
     status: 'COMPLETED',
-    manualCode: 'FII-01',
     equipment: ['Proyector', 'Computadoras'],
   },
   {
@@ -118,7 +112,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-102',
     speakerKey: 'org-fii',
     status: 'SCHEDULED',
-    manualCode: 'FII-02',
     equipment: ['Proyector'],
   },
   {
@@ -134,7 +127,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-201',
     speakerKey: 'org-fim',
     status: 'SCHEDULED',
-    manualCode: 'FIM-01',
     equipment: ['Proyector', 'Sensores'],
   },
   {
@@ -150,7 +142,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'lab-redes',
     speakerKey: 'speaker-ana',
     status: 'COMPLETED',
-    manualCode: 'FISC-01',
     equipment: ['Computadoras', 'Proyector'],
   },
   {
@@ -166,7 +157,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: null,
     speakerKey: 'speaker-ana',
     status: 'ONGOING',
-    manualCode: 'FISC-02',
     equipment: ['Proyector', 'Micrófono'],
   },
   {
@@ -182,7 +172,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'lab-quimica',
     speakerKey: 'speaker-ivan',
     status: 'SCHEDULED',
-    manualCode: 'FCT-01',
     equipment: ['Proyector', 'Mesas'],
   },
   {
@@ -198,7 +187,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'sala-conferencias',
     speakerKey: 'org-sub-acad',
     status: 'SCHEDULED',
-    manualCode: 'SAC-01',
     equipment: ['Proyector', 'Pizarra'],
   },
   {
@@ -214,7 +202,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-102',
     speakerKey: 'org-sub-admin',
     status: 'COMPLETED',
-    manualCode: 'SAD-01',
     equipment: ['Proyector'],
   },
   {
@@ -230,7 +217,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'auditorio',
     speakerKey: 'org-sub-vida',
     status: 'SCHEDULED',
-    manualCode: 'SVI-01',
     equipment: ['Proyector', 'Micrófono'],
   },
   {
@@ -246,7 +232,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'sala-conferencias',
     speakerKey: 'org-sub-ipe',
     status: 'SCHEDULED',
-    manualCode: 'SIP-01',
     equipment: ['Proyector'],
   },
   {
@@ -262,7 +247,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'lab-mecanica',
     speakerKey: 'org-fic',
     status: 'COMPLETED',
-    manualCode: 'SING-01',
     equipment: ['Computadoras', 'Mesa de ensayos'],
   },
   {
@@ -278,7 +262,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-101',
     speakerKey: 'speaker-carlos',
     status: 'COMPLETED',
-    manualCode: 'SING-02',
     equipment: ['Proyector'],
   },
   {
@@ -294,7 +277,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'lab-electronica',
     speakerKey: 'org-fic',
     status: 'COMPLETED',
-    manualCode: 'SING-03',
     equipment: ['GNSS', 'Proyector'],
   },
   {
@@ -310,7 +292,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'auditorio',
     speakerKey: 'speaker-ana',
     status: 'SCHEDULED',
-    manualCode: 'CIT-01',
     equipment: ['Proyector', 'Micrófono', 'Streaming'],
   },
   {
@@ -326,7 +307,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'lab-redes',
     speakerKey: 'speaker-ana',
     status: 'SCHEDULED',
-    manualCode: 'CIT-02',
     equipment: ['Computadoras', 'Proyector'],
   },
   {
@@ -342,7 +322,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'sala-conferencias',
     speakerKey: 'speaker-diana',
     status: 'SCHEDULED',
-    manualCode: 'CIT-03',
     equipment: ['Proyector', 'Micrófono'],
   },
   {
@@ -358,7 +337,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'auditorio',
     speakerKey: 'org-sub-vida',
     status: 'SCHEDULED',
-    manualCode: 'JBU-01',
     equipment: ['Proyector', 'Micrófono'],
   },
   {
@@ -374,7 +352,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-201',
     speakerKey: 'org-sub-vida',
     status: 'SCHEDULED',
-    manualCode: 'JBU-02',
     equipment: ['Proyector', 'Muestras'],
   },
   {
@@ -390,7 +367,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'sala-conferencias',
     speakerKey: 'org-sub-ipe',
     status: 'COMPLETED',
-    manualCode: 'FI-01',
     equipment: ['Proyector'],
   },
   {
@@ -406,7 +382,6 @@ export const ACTIVITIES: readonly ActivityCatalogEntry[] = [
     classroomKey: 'aula-102',
     speakerKey: 'org-sub-ipe',
     status: 'COMPLETED',
-    manualCode: 'FI-02',
     equipment: ['Proyector', 'Pizarra'],
   },
 ];
@@ -415,8 +390,6 @@ export interface SeedActivity {
   id: string;
   key: string;
   programId: string;
-  qrCode: string;
-  manualCode: string;
   date: Date;
   startHour: number;
   endHour: number;
@@ -458,12 +431,7 @@ export const seedActivities = async (
     const speakerId = activity.speakerKey
       ? requireEntry(input.users, activity.speakerKey, 'usuario').id
       : null;
-    const qrCode = seedQr(activity.key);
-
-    const existing = await prisma.activity.findUnique({
-      where: { qrCode },
-      select: { id: true },
-    });
+    const activityId = seedId('activity', activity.key);
 
     const data = {
       name: activity.name,
@@ -477,18 +445,22 @@ export const seedActivities = async (
       eventProgramId: programId,
       classroomId,
       speakerId,
-      manualCode: activity.manualCode,
     };
+
+    const existing = await prisma.activity.findUnique({
+      where: { id: activityId },
+      select: { id: true },
+    });
 
     const record = existing
       ? await prisma.activity.update({
           where: { id: existing.id },
           data,
-          select: { id: true, qrCode: true, manualCode: true },
+          select: { id: true },
         })
       : await prisma.activity.create({
-          data: { id: seedId('activity', activity.key), qrCode, ...data },
-          select: { id: true, qrCode: true, manualCode: true },
+          data: { id: activityId, ...data },
+          select: { id: true },
         });
 
     await prisma.activityEquipment.deleteMany({ where: { activityId: record.id } });
@@ -501,8 +473,6 @@ export const seedActivities = async (
       id: record.id,
       key: activity.key,
       programId,
-      qrCode: record.qrCode,
-      manualCode: record.manualCode ?? activity.manualCode,
       date,
       startHour: activity.startHour,
       endHour: activity.endHour,

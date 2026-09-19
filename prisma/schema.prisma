@@ -209,8 +209,6 @@ model Activity {
   endTime     DateTime       @map("end_time") @db.Time(3)
   maxCapacity Int?           @map("max_capacity")
   bannerUrl   String?        @map("banner_url") @db.VarChar(500)
-  qrCode      String         @unique @map("qr_code") @db.VarChar(50)
-  manualCode  String?        @map("manual_code") @db.VarChar(20)
   status      ActivityStatus @default(DRAFT)
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -229,7 +227,6 @@ model Activity {
   attendance     Attendance[]
   alerts         Alert[]
 
-  @@unique([eventProgramId, manualCode])
   @@index([eventProgramId, date, status])
   @@index([status, date, startTime])
   @@index([classroomId, date, startTime])
@@ -291,9 +288,9 @@ model CollaborationPermission {
 
 model Attendance {
   id           String            @id @default(cuid())
+  code         String            @unique @db.VarChar(64)
   registeredAt DateTime          @default(now()) @map("registered_at") @db.Timestamptz(3)
   method       AttendanceMethod?
-  usedCode     String?           @map("used_code") @db.VarChar(50)
   checkedInAt  DateTime?         @map("checked_in_at") @db.Timestamptz(3)
 
   activityId String   @map("activity_id")
