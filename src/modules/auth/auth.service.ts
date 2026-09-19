@@ -53,7 +53,7 @@ interface SignAccessTokenInput {
   userId: string;
   email: string;
   globalRole: string;
-  facultyId: string | null;
+  unitId: string | null;
   careerId: string | null;
   isActive: boolean;
 }
@@ -78,7 +78,7 @@ const signAccessJwt = async (input: SignAccessTokenInput): Promise<string> => {
   return new SignJWT({
     email: input.email,
     role: input.globalRole,
-    facultyId: input.facultyId,
+    unitId: input.unitId,
     careerId: input.careerId,
     isActive: input.isActive,
   })
@@ -117,7 +117,7 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
         id: true,
         email: true,
         globalRole: true,
-        facultyId: true,
+        unitId: true,
         careerId: true,
         isActive: true,
       },
@@ -129,7 +129,7 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       userId: user.id,
       email: user.email,
       globalRole: user.globalRole,
-      facultyId: user.facultyId,
+      unitId: user.unitId,
       careerId: user.careerId,
       isActive: user.isActive,
     });
@@ -156,7 +156,7 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
         firstName: body.firstName,
         lastName: body.lastName,
         identificationNumber: body.identificationNumber,
-        facultyId: body.facultyId,
+        unitId: body.unitId,
         careerId: body.careerId,
       },
       headers: betterAuthHeaders(),
@@ -182,7 +182,7 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
             id: true,
             email: true,
             globalRole: true,
-            facultyId: true,
+            unitId: true,
             careerId: true,
             isActive: true,
           },
@@ -196,7 +196,7 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
       userId: session.user.id,
       email: session.user.email,
       globalRole: session.user.globalRole,
-      facultyId: session.user.facultyId,
+      unitId: session.user.unitId,
       careerId: session.user.careerId,
       isActive: session.user.isActive,
     });

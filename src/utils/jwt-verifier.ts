@@ -13,7 +13,7 @@ export interface AuthenticatedTokenPayload extends JWTPayload {
   sub: string;
   email: string;
   role: string;
-  facultyId: string | null;
+  unitId: string | null;
   careerId: string | null;
   isActive: boolean;
 }

@@ -16,7 +16,7 @@ export const registerSchema = z.object({
     firstName: trimmedString.min(2).max(100),
     lastName: trimmedString.min(2).max(100),
     identificationNumber: trimmedString.min(5).max(30),
-    facultyId: z.string().min(1).optional(),
+    unitId: z.string().min(1).optional(),
     careerId: z.string().min(1).optional(),
   }),
 });

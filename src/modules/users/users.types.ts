@@ -13,13 +13,13 @@ export interface UserProfileResponse {
   identificationNumber: string;
   email: string;
   globalRole: GlobalRole;
-  faculty: UserProfileOrganization | null;
+  unit: UserProfileOrganization | null;
   career: UserProfileOrganization | null;
 }
 
 export interface UpdateProfileInput {
   firstName?: string | undefined;
   lastName?: string | undefined;
-  facultyId?: string | undefined;
+  unitId?: string | undefined;
   careerId?: string | undefined;
 }

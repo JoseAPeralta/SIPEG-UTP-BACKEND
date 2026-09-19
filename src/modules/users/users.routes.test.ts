@@ -11,13 +11,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 interface PrismaMock {
   user: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
-  faculty: { findUnique: ReturnType<typeof vi.fn> };
+  organizationalUnit: { findUnique: ReturnType<typeof vi.fn> };
   career: { findUnique: ReturnType<typeof vi.fn> };
 }
 
 const createPrismaMock = (): PrismaMock => ({
   user: { findUnique: vi.fn(), update: vi.fn() },
-  faculty: { findUnique: vi.fn() },
+  organizationalUnit: { findUnique: vi.fn() },
   career: { findUnique: vi.fn() },
 });
 
@@ -31,7 +31,7 @@ const profileRecord = {
   identificationNumber: '8-123-4567',
   email: 'juan.perez@example.com',
   globalRole: 'USER',
-  faculty: { id: 'fac-001', name: 'Ingenieria', code: 'FIS' },
+  unit: { id: 'unit-001', name: 'Ingenieria', code: 'FIS' },
   career: { id: 'car-001', name: 'Sistemas', code: 'SIS' },
 };
 
@@ -39,7 +39,7 @@ const authUserRecord = {
   id: 'user-001',
   email: 'juan.perez@example.com',
   globalRole: 'USER',
-  facultyId: null,
+  unitId: null,
   careerId: null,
   isActive: true,
 };
@@ -100,7 +100,7 @@ describe('users routes', () => {
     accessToken = await new SignJWT({
       email: 'juan.perez@example.com',
       role: 'USER',
-      facultyId: null,
+      unitId: null,
       careerId: null,
       isActive: true,
     })
@@ -128,7 +128,7 @@ describe('users routes', () => {
   it('returns the authenticated user profile', async () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockImplementation((args: { select?: Record<string, unknown> }) => {
-      if (args.select && 'faculty' in args.select) return Promise.resolve(profileRecord);
+      if (args.select && 'unit' in args.select) return Promise.resolve(profileRecord);
       return Promise.resolve(authUserRecord);
     });
     const app = await loadApp(prisma);
@@ -148,9 +148,9 @@ describe('users routes', () => {
       }
       return Promise.resolve({
         id: 'user-001',
-        facultyId: 'fac-001',
+        unitId: 'unit-001',
         careerId: 'car-001',
-        career: { facultyId: 'fac-001' },
+        career: { unitId: 'unit-001' },
       });
     });
     prisma.user.update.mockResolvedValue({ ...profileRecord, firstName: 'Juana' });

@@ -16,7 +16,7 @@ describe('jwt verifier', () => {
       issuer,
       audience,
       subject: 'user-1',
-      payload: { email: 'a@b.com', role: 'USER', facultyId: null, careerId: null, isActive: true },
+      payload: { email: 'a@b.com', role: 'USER', unitId: null, careerId: null, isActive: true },
     });
     const payload = await verifier.verify(token);
     expect(payload.sub).toBe('user-1');

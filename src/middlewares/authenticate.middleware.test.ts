@@ -64,7 +64,7 @@ describe('authenticate middleware', () => {
     return new SignJWT({
       email: 'a@b.com',
       role: 'USER',
-      facultyId: null,
+      unitId: null,
       careerId: null,
       isActive: true,
     })
@@ -105,7 +105,7 @@ describe('authenticate middleware', () => {
       id: 'user-1',
       email: 'a@b.com',
       globalRole: 'USER',
-      facultyId: null,
+      unitId: null,
       careerId: null,
       isActive: false,
     });
@@ -127,7 +127,7 @@ describe('authenticate middleware', () => {
       id: 'user-1',
       email: 'a@b.com',
       globalRole: 'USER',
-      facultyId: null,
+      unitId: null,
       careerId: null,
       isActive: true,
     };

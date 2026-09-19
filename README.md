@@ -105,6 +105,7 @@ Luego restaura `backup.sql` en el nuevo volumen antes de levantar la API. El nom
 - `pnpm run prisma:migrate:dev`: crea y aplica migraciones de desarrollo; requiere una `DATABASE_URL` valida.
 - `pnpm run prisma:migrate:deploy`: aplica migraciones pendientes; usado por el servicio `migrate` en Docker.
 - `pnpm run prisma:migrate:status`: reporta el estado de las migraciones.
+- `pnpm run prisma:seed`: siembra el catalogo de permisos y los datos de prueba completos (idempotente).
 
 ## API Inicial
 
@@ -147,6 +148,43 @@ Respuesta esperada:
   - `AUTH_REFRESH_TTL` (default `7d`)
   - Opcionales: `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_ARGON2_*`
 
+### Usuarios
+
+- `POST /auth/register` acepta `unitId` (unidad organizativa) y `careerId` (carrera) opcionales.
+- `GET /api/v1/users/me` devuelve `unit` y `career` (objetos `{ id, name, code }`).
+- `PATCH /api/v1/users/me` acepta `firstName`, `lastName`, `unitId` y `careerId`.
+- El claim `unitId` viaja en el access token JWT; la coherencia carrera-unidad se valida en el servicio.
+- Las unidades organizativas se modelan en `organizational_units` con `type` (`FACULTY` o `SUBDIRECTORATE`) y un `head` (encargado) opcional. Ver `docs/adr/adr-0003-unified-organizational-units.md`.
+
+## Datos De Prueba (Seed)
+
+`pnpm run prisma:seed` carga un conjunto completo e idempotente de datos de prueba
+(re-ejecutable sin duplicar ni borrar nada):
+
+- 6 facultades y 4 subdirecciones, cada una con su programa predeterminado y encargado.
+- 24 carreras oficiales distribuidas por facultad.
+- 29 usuarios demo + 10 aulas con amenidades y disponibilidad.
+- 5 programas adicionales (activo, completado, archivado y borrador), 24 actividades,
+  colaboraciones con permisos materializados y ventanas de vigencia, asistencias,
+  certificados, propuestas con versiones/feedback y alertas.
+
+Credenciales demo (password unica `Sipeg2026*UTP`, configurable con `SEED_DEMO_PASSWORD`):
+
+| Rol                           | Email                                                                                                                               |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Administrador                 | `admin@utp.ac.pa`                                                                                                                   |
+| Organizadores de facultad     | `organizador.fic@utp.ac.pa` ... `organizador.fct@utp.ac.pa`                                                                         |
+| Organizadores de subdireccion | `organizador.sub-acad@utp.ac.pa` ... `organizador.sub-ipe@utp.ac.pa`                                                                |
+| Editor / visor                | `editor.eventos@utp.ac.pa`, `visor.eventos@utp.ac.pa`                                                                               |
+| Ponentes                      | `ponente.ana.perez@utp.ac.pa`, `ponente.carlos.rivera@utp.ac.pa`, `ponente.diana.gomez@utp.ac.pa`, `ponente.ivan.morales@utp.ac.pa` |
+| Estudiantes                   | `estudiante01@utp.ac.pa` ... `estudiante12@utp.ac.pa`                                                                               |
+
+Notas:
+
+- Los correos y numeros de identificacion son sinteticos (`SEED-*`); no corresponden a personas reales.
+- El seed aborta si `NODE_ENV=production` salvo que definas `SEED_ALLOW_PRODUCTION=true`.
+- Re-ejecutarlo es seguro: usa upserts con IDs determinados `seed_*` y respeta los triggers de la base de datos.
+
 ## Estructura Base
 
 ```txt
@@ -159,24 +197,36 @@ src/
 |-- controllers/
 |   |-- events.controller.ts
 |   `-- health.controller.ts
-|-- models/
-|   |-- event.model.ts
-|   `-- health.model.ts
-|-- routes/
-|   |-- index.ts
-|   |-- events.routes.ts
-|   |-- events.routes.test.ts
-|   |-- health.routes.ts
-|   `-- health.routes.test.ts
+|-- lib/
+|   |-- auth.ts
+|   `-- password.ts
 |-- middlewares/
+|   |-- authenticate.middleware.ts
+|   |-- authorize.middleware.ts
 |   |-- error.middleware.ts
 |   |-- notFound.middleware.ts
+|   |-- rateLimit.middleware.ts
 |   `-- validate.middleware.ts
+|-- modules/
+|   |-- auth/
+|   |-- authorization/
+|   |-- events/
+|   `-- users/
+|-- routes/
+|   |-- events.routes.ts
+|   |-- health.routes.ts
+|   `-- index.ts
+|-- types/
 `-- utils/
-    |-- ApiError.ts
-    |-- asyncHandler.ts
-    `-- response.ts
+
+prisma/
+|-- schema.prisma
+|-- migrations/
+|-- seed.ts
+`-- seed/
 ```
+
+La estructura objetivo completa (incluyendo modulos futuros) esta documentada en `AGENTS.md`.
 
 ## Tests
 

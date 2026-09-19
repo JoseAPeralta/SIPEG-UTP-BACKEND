@@ -10,7 +10,7 @@
 
 El modelo organiza el dominio alrededor de dos conceptos distintos:
 
-- **Programa de eventos**: agrupador administrativo perteneciente a una facultad o subdirección.
+- **Programa de eventos**: agrupador administrativo perteneciente a una unidad organizativa.
 - **Actividad**: evento individual que siempre pertenece a un programa de eventos.
 
 El diseño cubre identidad académica, unidades organizativas, programas, actividades, colaboradores, permisos, asistencia, certificados, aulas, propuestas de ponentes, feedback, alertas y datos base para reportes.
@@ -18,11 +18,11 @@ El diseño cubre identidad académica, unidades organizativas, programas, activi
 ### Decisiones de producto confirmadas
 
 1. Toda actividad pertenece obligatoriamente a un programa de eventos.
-2. Cada facultad y cada subdirección tiene exactamente un programa predeterminado permanente.
+2. Cada unidad organizativa tiene exactamente un programa predeterminado permanente.
 3. El programa predeterminado se crea automáticamente en la misma operación que da de alta la unidad.
 4. La condición predeterminada y la unidad propietaria de ese programa son inmutables.
 5. Solo un administrador del sitio puede crear programas adicionales.
-6. Cada programa pertenece exactamente a una facultad o a una subdirección, nunca a ambas.
+6. Cada programa pertenece exactamente a una unidad organizativa.
 7. Los programas predeterminados no requieren fechas; los adicionales sí tienen inicio y fin.
 8. Los programas se archivan en lugar de eliminarse físicamente.
 9. Un programa adicional no puede archivarse mientras tenga actividades programadas o en curso.
@@ -36,16 +36,15 @@ El diseño cubre identidad académica, unidades organizativas, programas, activi
 
 ## 2. Resumen del modelo
 
-El ER contiene **19 entidades** y **9 enums**.
+El ER contiene **18 entidades** y **10 enums**.
 
 ### 2.1 Entidades
 
 | Entidad                     | Propósito                                                          | Categoría     |
 | --------------------------- | ------------------------------------------------------------------ | ------------- |
 | `users`                     | Identidad de asistentes, colaboradores, administradores y ponentes | Identidad     |
-| `faculties`                 | Facultades propietarias de programas y carreras                    | Catálogo      |
-| `subdirectorates`           | Subdirecciones propietarias de programas                           | Catálogo      |
-| `careers`                   | Carreras asociadas a facultades y usuarios                         | Catálogo      |
+| `organizational_units`      | Facultades y subdirecciones propietarias de programas y carreras   | Catálogo      |
+| `careers`                   | Carreras asociadas a unidades organizativas y usuarios             | Catálogo      |
 | `permissions`               | Catálogo de permisos granulares                                    | Catálogo      |
 | `event_programs`            | Agrupadores permanentes o temporales de actividades                | Operacional   |
 | `activities`                | Eventos individuales pertenecientes a un programa                  | Operacional   |
@@ -67,6 +66,7 @@ El ER contiene **19 entidades** y **9 enums**.
 | Enum                | Valores                                                                                                                                                              | Uso                              |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
 | `GlobalRole`        | `USER`, `ADMIN`                                                                                                                                                      | Rol global de usuario            |
+| `UnitType`          | `FACULTY`, `SUBDIRECTORATE`                                                                                                                                          | Tipo de unidad organizativa      |
 | `CollaborationRole` | `ORGANIZER`, `EDITOR`, `VIEWER`                                                                                                                                      | Rol en un programa o actividad   |
 | `ProgramStatus`     | `DRAFT`, `ACTIVE`, `COMPLETED`, `CANCELLED`, `ARCHIVED`                                                                                                              | Ciclo de vida de programas       |
 | `ActivityStatus`    | `DRAFT`, `SCHEDULED`, `ONGOING`, `COMPLETED`, `CANCELLED`                                                                                                            | Ciclo de vida de actividades     |
@@ -85,17 +85,18 @@ El ER contiene **19 entidades** y **9 enums**.
 - `last_name`
 - `identification_number (UQ)`
 - `email (UQ)`
-- `password_hash`
 - `global_role`
 - `is_active`
-- `faculty_id (FK?)`
+- `unit_id (FK?)`
 - `career_id (FK?)`
 - `created_at`
 - `updated_at`
 
-#### `faculties`, `subdirectorates` y `careers`
+La contraseña no vive en `users`: Better Auth la almacena en `accounts.password` (ver `docs/adr/adr-0001-time-aware-collaboration-authorization.md`).
 
-Los tres catálogos contienen `id`, `name`, `code (UQ)`, `description?`, `is_active`, `created_at` y `updated_at`. `careers` agrega `faculty_id (FK)`.
+#### `organizational_units` y `careers`
+
+Ambos catálogos contienen `id`, `name`, `code (UQ)`, `description?`, `is_active`, `created_at` y `updated_at`. `organizational_units` agrega `type (UnitType)` y `head_id (FK?)` opcional hacia `users` para registrar al encargado. `careers` agrega `unit_id (FK)`.
 
 #### `event_programs`
 
@@ -108,8 +109,7 @@ Los tres catálogos contienen `id`, `name`, `code (UQ)`, `description?`, `is_act
 - `start_date?`
 - `end_date?`
 - `status`
-- `faculty_id (FK?)`
-- `subdirectorate_id (FK?)`
+- `organizational_unit_id (FK, NOT NULL)`
 - `created_by_id (FK?)`
 - `archived_at?`
 - `created_at`
@@ -117,9 +117,9 @@ Los tres catálogos contienen `id`, `name`, `code (UQ)`, `description?`, `is_act
 
 Restricciones:
 
-- Exactamente uno de `faculty_id` o `subdirectorate_id` debe estar presente.
+- `organizational_unit_id` es obligatorio y usa `ON DELETE RESTRICT`.
 - Un programa predeterminado no tiene fechas; uno adicional requiere fechas, etiqueta, banner y `start_date <= end_date`.
-- Solo puede existir un programa predeterminado por facultad y uno por subdirección.
+- Solo puede existir un programa predeterminado por unidad organizativa.
 - `is_default` y la unidad propietaria son inmutables en programas predeterminados.
 - Un programa predeterminado solo puede estar `ACTIVE` o `ARCHIVED`, y el último estado solo se permite cuando su unidad está inactiva.
 - Reactivar una unidad exige cambiar su programa predeterminado existente a `ACTIVE` en la misma transacción.
@@ -272,11 +272,11 @@ Cada decisión se presenta como decisión, justificación y validación.
 
 **Validación:** la exclusión por aula, fecha e intervalo protege incluso ante solicitudes concurrentes y solo considera estados que reservan aula (`SCHEDULED`, `ONGOING`). La pertenencia a un horario disponible sigue siendo una regla entre tablas.
 
-### D12. Facultad y carrera de usuario
+### D12. Unidad organizativa y carrera de usuario
 
 **Decisión:** conservar ambas referencias opcionales.
 
-**Justificación:** existen usuarios vinculados a una facultad sin carrera. Cuando ambas existen, la carrera debe pertenecer a la facultad indicada.
+**Justificación:** existen usuarios vinculados a una unidad organizativa sin carrera. Cuando ambas existen, la carrera debe pertenecer a la unidad indicada.
 
 **Validación:** el riesgo de inconsistencia requiere una validación transaccional o una solución relacional adicional.
 
@@ -290,7 +290,7 @@ Cada decisión se presenta como decisión, justificación y validación.
 
 ### D14. Desactivación de catálogos
 
-**Decisión:** usuarios, facultades, subdirecciones, carreras y aulas usan `is_active`.
+**Decisión:** usuarios, unidades organizativas, carreras y aulas usan `is_active`.
 
 **Justificación:** son entidades referenciadas por información histórica y no deben desaparecer por una operación administrativa ordinaria.
 
@@ -302,7 +302,7 @@ Cada decisión se presenta como decisión, justificación y validación.
 
 **Justificación:** los programas predeterminados son permanentes y mantienen fechas nulas; las actividades sí necesitan programación concreta.
 
-**Validación:** deben definirse zona horaria institucional y política para actividades que crucen medianoche.
+**Validación:** la zona horaria institucional quedó definida como `America/Panama` (UTC-5, sin DST) en el [ADR-0002](../adr/adr-0002-institutional-timezone-panama.md); la política para actividades que crucen medianoche sigue pendiente.
 
 ### D16. Herencia de permisos calculada
 
@@ -338,19 +338,19 @@ Cada decisión se presenta como decisión, justificación y validación.
 
 ### D20. Propiedad organizativa exclusiva
 
-**Decisión:** un programa referencia una facultad o una subdirección, exactamente una.
+**Decisión:** un programa referencia exactamente una unidad organizativa mediante `organizational_unit_id`.
 
-**Justificación:** ambas son unidades independientes y la propiedad única permite filtrar, autorizar y reportar sin ambigüedad.
+**Justificación:** facultades y subdirecciones comparten los mismos atributos y se modelan en una única tabla `organizational_units` diferenciada por `type`. Una sola FK obligatoria permite filtrar, autorizar y reportar sin ambigüedad y admite nuevos tipos de unidad sin migrar la relación.
 
-**Validación:** un CHECK XOR impide programas sin unidad o asociados simultáneamente a dos clases de unidad.
+**Validación:** `organizational_unit_id` es `NOT NULL` con `ON DELETE RESTRICT`; el tipo de unidad se conserva en `UnitType` (ver `docs/adr/adr-0003-unified-organizational-units.md`).
 
 ### D21. Programa predeterminado automático y único
 
-**Decisión:** crear el programa predeterminado en la misma transacción que la facultad o subdirección y proteger su unicidad mediante índices parciales.
+**Decisión:** crear el programa predeterminado en la misma transacción que la unidad organizativa y proteger su unicidad mediante un índice parcial.
 
 **Justificación:** una actividad siempre necesita programa y no debe depender de una configuración manual posterior.
 
-**Validación:** los índices garantizan como máximo uno; la transacción de alta, la inmutabilidad de `is_default`/propietario y una reconciliación operativa garantizan el mínimo de uno. La cardinalidad de negocio es unidad 1 a 1..N programas, aunque el mínimo no surge de una FK aislada.
+**Validación:** el índice garantiza como máximo uno; la transacción de alta, la inmutabilidad de `is_default`/propietario y una reconciliación operativa garantizan el mínimo de uno. La cardinalidad de negocio es unidad 1 a 1..N programas, aunque el mínimo no surge de una FK aislada.
 
 ### D22. Creación administrativa y trazabilidad
 
@@ -375,8 +375,6 @@ Cada decisión se presenta como decisión, justificación y validación.
 ### 4.1 CHECKs
 
 ```sql
-CHECK ((faculty_id IS NOT NULL) <> (subdirectorate_id IS NOT NULL))
-
 CHECK (
   (is_default AND start_date IS NULL AND end_date IS NULL)
   OR
@@ -416,13 +414,9 @@ El CHECK de `alerts` debe exigir exactamente una referencia entre `proposal_id`,
 ### 4.2 Unicidad parcial
 
 ```sql
-CREATE UNIQUE INDEX event_programs_default_faculty_key
-  ON event_programs (faculty_id)
-  WHERE is_default AND faculty_id IS NOT NULL;
-
-CREATE UNIQUE INDEX event_programs_default_subdirectorate_key
-  ON event_programs (subdirectorate_id)
-  WHERE is_default AND subdirectorate_id IS NOT NULL;
+CREATE UNIQUE INDEX event_programs_default_unit_key
+  ON event_programs (organizational_unit_id)
+  WHERE is_default;
 
 CREATE UNIQUE INDEX collaborations_program_user_key
   ON collaborations (event_program_id, user_id)
@@ -475,9 +469,9 @@ No contienen atributos dependientes de una parte de la clave.
 - Los certificados no duplican usuario ni actividad; ambos se derivan de la asistencia.
 - Las versiones dependen de `(proposal_id, version_number)`.
 - Los permisos dependen de la colaboración completa.
-- Los programas guardan dos FKs organizativas opcionales, pero el CHECK XOR convierte su combinación válida en una única propiedad de negocio.
+- Los programas guardan una única FK organizativa obligatoria, por lo que cada programa tiene exactamente una unidad propietaria.
 
-La redundancia controlada más relevante sigue siendo `users.faculty_id` junto con `users.career_id`. Su coherencia debe validarse expresamente.
+La redundancia controlada más relevante sigue siendo `users.unit_id` junto con `users.career_id`. Su coherencia debe validarse expresamente.
 
 ---
 
@@ -485,7 +479,7 @@ La redundancia controlada más relevante sigue siendo `users.faculty_id` junto c
 
 ### 6.1 Alta de unidad y programa predeterminado
 
-1. Un administrador crea una facultad o subdirección.
+1. Un administrador crea una unidad organizativa (`FACULTY` o `SUBDIRECTORATE`) y opcionalmente registra su `head_id`.
 2. En la misma transacción se crea su programa predeterminado con `is_default = true`, `status = ACTIVE` y fechas nulas.
 3. La operación completa se confirma solo si ambos registros fueron creados.
 4. El índice parcial evita un segundo programa predeterminado para la misma unidad.
@@ -495,7 +489,7 @@ La redundancia controlada más relevante sigue siendo `users.faculty_id` junto c
 ### 6.2 Creación de programa adicional
 
 1. Se verifica que el usuario sea administrador global.
-2. Se elige exactamente una facultad o subdirección.
+2. Se elige exactamente una unidad organizativa.
 3. Se validan nombre, fechas y metadatos.
 4. Se registra el administrador en `created_by_id`.
 5. El programa inicia en `DRAFT` y puede pasar a `ACTIVE` cuando cumpla las reglas de publicación.
@@ -539,7 +533,7 @@ La redundancia controlada más relevante sigue siendo `users.faculty_id` junto c
 3. Ponente y aula pueden ser nulos en borrador; su obligatoriedad al programar depende del tipo o modalidad de actividad.
 4. La modalidad presencial, virtual o híbrida todavía no está modelada.
 5. No existe una tabla de auditoría administrativa general.
-6. La zona horaria institucional y las actividades que cruzan medianoche requieren una política explícita.
+6. La zona horaria institucional quedó resuelta como `America/Panama` (UTC-5, sin DST) en el [ADR-0002](../adr/adr-0002-institutional-timezone-panama.md); la política para actividades que cruzan medianoche sigue pendiente.
 7. `cv_url`, `banner_url` y `pdf_url` representan referencias a almacenamiento externo; el modelo no contiene metadata completa del archivo.
 8. El ER garantiza como máximo un programa predeterminado por unidad; la creación automática, inmutabilidad y reconciliación garantizan el mínimo operativo de uno.
 9. Desactivar una unidad permite archivar su programa predeterminado; el efecto sobre actividades activas sigue pendiente de la política de retención.
@@ -551,7 +545,7 @@ La redundancia controlada más relevante sigue siendo `users.faculty_id` junto c
 
 1. Crear primero enums y catálogos; después unidades, usuarios, programas y actividades; finalmente tablas transaccionales.
 2. Instalar y autorizar `btree_gist` antes de activar la exclusión de aulas.
-3. Crear los programas predeterminados de forma idempotente para facultades y subdirecciones existentes.
+3. Crear los programas predeterminados de forma idempotente para unidades organizativas existentes.
 4. Validar duplicados antes de activar índices únicos parciales.
 5. Verificar solapes de aula antes de crear la restricción de exclusión.
 6. Aplicar constraints después de limpiar fechas, horas, capacidades y scopes inválidos.
@@ -562,8 +556,7 @@ La redundancia controlada más relevante sigue siendo `users.faculty_id` junto c
 
 Índices de consulta recomendados:
 
-- `event_programs(faculty_id, status)`
-- `event_programs(subdirectorate_id, status)`
+- `event_programs(organizational_unit_id, status)`
 - `activities(event_program_id, date, status)`
 - `activities(classroom_id, date, start_time)`
 - `collaborations(user_id)`
@@ -577,10 +570,10 @@ La redundancia controlada más relevante sigue siendo `users.faculty_id` junto c
 
 ```mermaid
 erDiagram
-    faculties ||--o{ careers : "clasifica"
-    faculties |o--o{ users : "afilia"
-    faculties |o--|{ event_programs : "posee"
-    subdirectorates |o--|{ event_programs : "posee"
+    organizational_units ||--o{ careers : "clasifica"
+    organizational_units |o--o{ users : "afilia"
+    organizational_units |o--|{ event_programs : "posee"
+    users |o--o{ organizational_units : "encargado"
     careers |o--o{ users : "afilia"
     users |o--o{ event_programs : "crea"
     event_programs ||--o{ activities : "agrupa"
@@ -609,7 +602,7 @@ erDiagram
     certificates |o--o{ alerts : "referencia"
 ```
 
-Las relaciones opcionales de `event_programs` hacia facultad y subdirección se complementan con un CHECK XOR: cada programa tiene exactamente una unidad propietaria. El mínimo de un programa por unidad es una cardinalidad de negocio sostenida por la creación automática y reconciliación, no por una FK aislada.
+La FK obligatoria de `event_programs` hacia `organizational_units` garantiza que cada programa tiene exactamente una unidad propietaria. El mínimo de un programa por unidad es una cardinalidad de negocio sostenida por la creación automática y reconciliación, no por una FK aislada.
 
 ---
 
@@ -617,11 +610,10 @@ Las relaciones opcionales de `event_programs` hacia facultad y subdirección se 
 
 | Requisito                                                    | Soporte en el ER                                         | Estado                                 |
 | ------------------------------------------------------------ | -------------------------------------------------------- | -------------------------------------- |
-| Programa predeterminado por facultad                         | Índice parcial + creación/reconciliación transaccional   | Parcial en BD; cubierto operativamente |
-| Programa predeterminado por subdirección                     | Índice parcial + creación/reconciliación transaccional   | Parcial en BD; cubierto operativamente |
+| Programa predeterminado por unidad organizativa              | Índice parcial + creación/reconciliación transaccional   | Parcial en BD; cubierto operativamente |
 | Creación automática del predeterminado                       | Transacción unidad + programa                            | Regla de servicio                      |
 | Solo administrador crea programas adicionales                | `created_by_id` + `GlobalRole.ADMIN`                     | Regla de autorización                  |
-| Programa pertenece a una sola unidad                         | CHECK XOR de FKs                                         | Cubierto                               |
+| Programa pertenece a una sola unidad                         | `organizational_unit_id NOT NULL` + FK RESTRICT          | Cubierto                               |
 | Programa predeterminado permanente                           | Fechas nulas, estados restringidos y guarda de archivado | BD + regla transaccional               |
 | Reactivación de unidad y programa predeterminado             | Cambio atómico de ambos estados                          | Regla transaccional                    |
 | Programas adicionales con fechas, etiqueta y banner          | CHECK condicional                                        | Cubierto                               |
