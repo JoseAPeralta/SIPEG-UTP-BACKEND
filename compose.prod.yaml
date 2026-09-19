@@ -28,6 +28,8 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
       CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      AUTH_URL: ${AUTH_URL:?AUTH_URL is required}
     ports:
       - '${PORT:-3000}:3000'
     depends_on:

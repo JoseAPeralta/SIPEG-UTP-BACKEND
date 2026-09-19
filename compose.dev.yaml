@@ -28,6 +28,8 @@ services:
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-sipeg}:${POSTGRES_PASSWORD:-sipeg_password}@db:5432/${POSTGRES_DB:-sipeg_utp}?schema=public
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
     ports:
       - '${PORT:-3000}:3000'
     volumes:
