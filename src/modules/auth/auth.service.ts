@@ -1,7 +1,9 @@
 import { APIError } from 'better-auth/api';
+import { SignJWT, importJWK } from 'jose';
 
 import { env } from '../../config/env.js';
 import { auth } from '../../lib/auth.js';
+import { getPrismaClient } from '../../config/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type {
   ForgotPasswordBody,
@@ -47,26 +49,61 @@ const throwBetterAuthError = (error: unknown): never => {
   throw new ApiError(500, 'Authentication error.');
 };
 
-const issueAccessToken = async (bearerToken: string): Promise<{ token: string; expiresAt: Date }> => {
-  const tokenResponse = await auth.api.getToken({
-    headers: betterAuthHeaders({ authorization: `Bearer ${bearerToken}` }),
-    asResponse: false,
-  });
-  return {
-    token: tokenResponse.token,
-    expiresAt: new Date(Date.now() + parseTtlToMs(env.AUTH_TOKEN_TTL)),
-  };
+interface SignAccessTokenInput {
+  userId: string;
+  email: string;
+  globalRole: string;
+  facultyId: string | null;
+  careerId: string | null;
+  isActive: boolean;
+}
+
+const loadSigningKey = async () => {
+  const prisma = getPrismaClient();
+  const rows = await prisma.jwks.findMany();
+  if (rows.length === 0) {
+    throw new ApiError(500, 'No JWKS available for signing.');
+  }
+  const latest = rows[rows.length - 1];
+  if (!latest) {
+    throw new ApiError(500, 'No JWKS available for signing.');
+  }
+  const privateJwk = JSON.parse(latest.privateKey) as Record<string, unknown>;
+  return importJWK(
+    { ...privateJwk, alg: 'EdDSA' } as Parameters<typeof importJWK>[0],
+    'EdDSA',
+  );
+};
+
+const signAccessJwt = async (input: SignAccessTokenInput): Promise<string> => {
+  const key = await loadSigningKey();
+  const expiresIn = parseTtlToMs(env.AUTH_TOKEN_TTL);
+  return new SignJWT({
+    email: input.email,
+    role: input.globalRole,
+    facultyId: input.facultyId,
+    careerId: input.careerId,
+    isActive: input.isActive,
+  })
+    .setProtectedHeader({ alg: 'EdDSA', typ: 'JWT' })
+    .setIssuer(env.AUTH_ISSUER ?? env.AUTH_URL)
+    .setAudience(env.AUTH_AUDIENCE ?? env.AUTH_URL)
+    .setSubject(input.userId)
+    .setIssuedAt()
+    .setExpirationTime(Math.floor(Date.now() / 1000) + Math.floor(expiresIn / 1000))
+    .sign(key);
 };
 
 const fetchSessionExpiry = async (bearerToken: string): Promise<Date> => {
-  const session = await auth.api.getSession({
-    headers: betterAuthHeaders({ authorization: `Bearer ${bearerToken}` }),
-    asResponse: false,
+  const prisma = getPrismaClient();
+  const session = await prisma.session.findFirst({
+    where: { token: bearerToken },
+    select: { expiresAt: true },
   });
   if (!session) {
     throw new ApiError(401, 'Session not found.');
   }
-  return new Date(session.session.expiresAt);
+  return session.expiresAt;
 };
 
 export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> => {
@@ -76,11 +113,33 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       headers: betterAuthHeaders(),
       asResponse: false,
     });
-    const access = await issueAccessToken(result.token);
+    const prisma = getPrismaClient();
+    const user = await prisma.user.findUnique({
+      where: { id: result.user.id },
+      select: {
+        id: true,
+        email: true,
+        globalRole: true,
+        facultyId: true,
+        careerId: true,
+        isActive: true,
+      },
+    });
+    if (!user) {
+      throw new ApiError(401, 'User not found.');
+    }
+    const accessToken = await signAccessJwt({
+      userId: user.id,
+      email: user.email,
+      globalRole: user.globalRole,
+      facultyId: user.facultyId,
+      careerId: user.careerId,
+      isActive: user.isActive,
+    });
     const refreshExpiresAt = await fetchSessionExpiry(result.token);
     return {
-      accessToken: access.token,
-      accessTokenExpiresAt: access.expiresAt,
+      accessToken,
+      accessTokenExpiresAt: new Date(Date.now() + parseTtlToMs(env.AUTH_TOKEN_TTL)),
       refreshToken: result.token,
       refreshTokenExpiresAt: refreshExpiresAt,
     };
@@ -115,13 +174,40 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
 
 export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess> => {
   try {
-    const access = await issueAccessToken(body.refreshToken);
-    const refreshExpiresAt = await fetchSessionExpiry(body.refreshToken);
+    const prisma = getPrismaClient();
+    const session = await prisma.session.findFirst({
+      where: { token: body.refreshToken },
+      select: {
+        expiresAt: true,
+        userId: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            globalRole: true,
+            facultyId: true,
+            careerId: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+    if (!session) {
+      throw new ApiError(401, 'Refresh token is invalid.');
+    }
+    const accessToken = await signAccessJwt({
+      userId: session.user.id,
+      email: session.user.email,
+      globalRole: session.user.globalRole,
+      facultyId: session.user.facultyId,
+      careerId: session.user.careerId,
+      isActive: session.user.isActive,
+    });
     return {
-      accessToken: access.token,
-      accessTokenExpiresAt: access.expiresAt,
+      accessToken,
+      accessTokenExpiresAt: new Date(Date.now() + parseTtlToMs(env.AUTH_TOKEN_TTL)),
       refreshToken: body.refreshToken,
-      refreshTokenExpiresAt: refreshExpiresAt,
+      refreshTokenExpiresAt: session.expiresAt,
     };
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -132,9 +218,9 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
 
 export const logoutUser = async (_body: LogoutBody): Promise<void> => {
   try {
-    await auth.api.signOut({
-      headers: betterAuthHeaders({ authorization: `Bearer ${_body.refreshToken}` }),
-      asResponse: false,
+    const prisma = getPrismaClient();
+    await prisma.session.deleteMany({
+      where: { token: _body.refreshToken },
     });
   } catch (error) {
     throwBetterAuthError(error);
