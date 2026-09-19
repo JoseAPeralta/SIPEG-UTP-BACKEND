@@ -1,283 +1,440 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
   provider = "postgresql"
 }
 
-enum RolGlobal {
-  usuario
-  admin
+enum GlobalRole {
+  USER
+  ADMIN
 }
 
-enum RolEvento {
-  organizador
-  editor
-  visor
+enum CollaborationRole {
+  ORGANIZER
+  EDITOR
+  VIEWER
 }
 
-enum TipoAula {
-  laboratorio
-  aula
+enum ProgramStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  ARCHIVED
 }
 
-enum EstadoPropuesta {
-  pendiente
-  aprobado
-  rechazado
+enum ActivityStatus {
+  DRAFT
+  SCHEDULED
+  ONGOING
+  COMPLETED
+  CANCELLED
 }
 
-enum MetodoAsistencia {
-  qr
-  manual
+enum ClassroomType {
+  LABORATORY
+  CLASSROOM
+}
+
+enum ActivityType {
+  WORKSHOP
+  SEMINAR
+  TALK
+  OTHER
+}
+
+enum AttendanceMethod {
+  QR
+  MANUAL
+}
+
+enum ProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AlertType {
+  PROPOSAL_RECEIVED
+  PROPOSAL_UPDATED
+  PROPOSAL_RESPONDED
+  PROGRAM_UPDATED
+  PROGRAM_ARCHIVED
+  ACTIVITY_UPDATED
+  ACTIVITY_CANCELLED
+  CERTIFICATE_ISSUED
 }
 
 model User {
-  id           String    @id @default(cuid())
-  nombre       String    @db.VarChar(100)
-  apellido     String    @db.VarChar(100)
-  cedula       String    @unique @db.VarChar(30)
-  correo       String    @unique @db.VarChar(254)
-  passwordHash String    @map("password_hash") @db.VarChar(255)
-  rolGlobal    RolGlobal @default(usuario)
-  activo       Boolean   @default(true)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                   String     @id @default(cuid())
+  firstName            String     @map("first_name") @db.VarChar(100)
+  lastName             String     @map("last_name") @db.VarChar(100)
+  identificationNumber String     @unique @map("identification_number") @db.VarChar(30)
+  email                String     @unique @db.VarChar(254)
+  passwordHash         String     @map("password_hash") @db.VarChar(255)
+  globalRole           GlobalRole @default(USER) @map("global_role")
+  isActive             Boolean    @default(true) @map("is_active")
+  createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  facultyId    String?   @map("faculty_id")
-  faculty      Faculty?  @relation(fields: [facultyId], references: [id])
+  facultyId String?  @map("faculty_id")
+  faculty   Faculty? @relation(fields: [facultyId], references: [id], onDelete: SetNull)
 
-  careerId     String?   @map("career_id")
-  career       Career?   @relation(fields: [careerId], references: [id])
+  careerId String? @map("career_id")
+  career   Career? @relation(fields: [careerId], references: [id], onDelete: SetNull)
 
-  collaborators    EventCollaborator[]
-  attendance       Attendance[]
-  certificates     Certificate[]
-  speakerProposals SpeakerProposal[]
+  createdPrograms     EventProgram[]
+  presentedActivities Activity[]
+  collaborations      Collaboration[]
+  attendance          Attendance[]
+  speakerProposals    SpeakerProposal[]
+  proposalFeedback    ProposalFeedback[]
+  alerts              Alert[]
 
+  @@index([facultyId])
+  @@index([careerId])
   @@map("users")
 }
 
 model Faculty {
-  id          String    @id @default(cuid())
-  nombre      String    @db.VarChar(150)
-  codigo      String    @unique @db.VarChar(20)
-  descripcion String?   @db.Text
-  activo      Boolean   @default(true)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(150)
+  code        String   @unique @db.VarChar(20)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  careers  Career[]
-  events   Event[]
-  users    User[]
+  careers       Career[]
+  users         User[]
+  eventPrograms EventProgram[]
 
   @@map("faculties")
 }
 
-model Career {
-  id          String    @id @default(cuid())
-  nombre      String    @db.VarChar(150)
-  codigo      String    @unique @db.VarChar(20)
-  descripcion String?   @db.Text
-  activo      Boolean   @default(true)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+model Subdirectorate {
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(150)
+  code        String   @unique @db.VarChar(20)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  facultyId String @map("faculty_id")
-  faculty   Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  eventPrograms EventProgram[]
+
+  @@map("subdirectorates")
+}
+
+model Career {
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(150)
+  code        String   @unique @db.VarChar(20)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  facultyId String  @map("faculty_id")
+  faculty   Faculty @relation(fields: [facultyId], references: [id], onDelete: Restrict)
 
   users User[]
 
+  @@index([facultyId])
   @@map("careers")
 }
 
-model Event {
-  id            String    @id @default(cuid())
-  nombre        String    @db.VarChar(200)
-  descripcion   String?   @db.Text
-  label         String?   @db.VarChar(100)
-  bannerUrl     String?   @map("banner_url") @db.VarChar(500)
-  fechaInicio   DateTime  @map("fecha_inicio") @db.Date
-  fechaFin      DateTime  @map("fecha_fin") @db.Date
-  esSerie       Boolean   @default(false) @map("es_serie")
-  estado        String    @default("borrador") @db.VarChar(20)
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-
-  facultyId String? @map("faculty_id")
-  faculty   Faculty? @relation(fields: [facultyId], references: [id])
-
-  smallEvents       SmallEvent[]
-  collaborators     EventCollaborator[]
-  speakerProposals  SpeakerProposal[]
-
-  @@map("events")
-}
-
-model SmallEvent {
-  id             String    @id @default(cuid())
-  nombre         String    @db.VarChar(200)
-  descripcion   String?   @db.Text
-  tipo           String    @db.VarChar(50)
-  fecha          DateTime  @db.Date
-  horaInicio     DateTime  @map("hora_inicio") @db.Time
-  horaFin        DateTime  @map("hora_fin") @db.Time
-  capacidadMax   Int?      @map("capacidad_maxima")
-  bannerUrl      String?   @map("banner_url") @db.VarChar(500)
-  codigoQr       String?   @unique @map("codigo_qr") @db.VarChar(50)
-  codigoManual   String?   @map("codigo_manual") @db.VarChar(20)
-  equipment      String[]  @db.VarChar(255)
-  estado         String    @default("borrador") @db.VarChar(20)
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
-
-  eventId String @map("event_id")
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  classroomId String? @map("classroom_id")
-  classroom   Classroom? @relation(fields: [classroomId], references: [id])
-
-  attendance   Attendance[]
-  certificates Certificate[]
-
-  @@map("small_events")
-}
-
 model Permission {
-  id          String    @id @default(cuid())
-  nombre      String    @unique @db.VarChar(50)
-  descripcion String?   @db.VarChar(200)
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(50)
+  description String?  @db.VarChar(200)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  collaboratorPermissions EventPermission[]
+  collaborationPermissions CollaborationPermission[]
 
   @@map("permissions")
 }
 
-model EventCollaborator {
-  id        String    @id @default(cuid())
-  rol       RolEvento @default(visor)
-  createdAt DateTime  @default(now()) @map("created_at")
+model EventProgram {
+  id          String        @id @default(cuid())
+  name        String        @db.VarChar(200)
+  description String?       @db.Text
+  label       String?       @db.VarChar(100)
+  bannerUrl   String?       @map("banner_url") @db.VarChar(500)
+  isDefault   Boolean       @default(false) @map("is_default")
+  startDate   DateTime?     @map("start_date") @db.Date
+  endDate     DateTime?     @map("end_date") @db.Date
+  status      ProgramStatus @default(DRAFT)
+  archivedAt  DateTime?     @map("archived_at") @db.Timestamptz(3)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  eventId String @map("event_id")
-  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  facultyId String?  @map("faculty_id")
+  faculty   Faculty? @relation(fields: [facultyId], references: [id], onDelete: Restrict)
 
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subdirectorateId String?         @map("subdirectorate_id")
+  subdirectorate   Subdirectorate? @relation(fields: [subdirectorateId], references: [id], onDelete: Restrict)
 
-  permissions EventPermission[]
+  createdById String? @map("created_by_id")
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: Restrict)
 
-  @@unique([eventId, userId])
-  @@map("event_collaborators")
+  activities       Activity[]
+  collaborations   Collaboration[]
+  speakerProposals SpeakerProposal[]
+  alerts           Alert[]
+
+  @@unique([facultyId], map: "event_programs_default_faculty_key", where: { isDefault: true })
+  @@unique([subdirectorateId], map: "event_programs_default_subdirectorate_key", where: { isDefault: true })
+  @@index([facultyId, status])
+  @@index([subdirectorateId, status])
+  @@index([createdById])
+  @@map("event_programs")
 }
 
-model EventPermission {
-  id String @id @default(cuid())
+model Activity {
+  id          String         @id @default(cuid())
+  name        String         @db.VarChar(200)
+  description String?        @db.Text
+  type        ActivityType
+  date        DateTime       @db.Date
+  startTime   DateTime       @map("start_time") @db.Time(3)
+  endTime     DateTime       @map("end_time") @db.Time(3)
+  maxCapacity Int?           @map("max_capacity")
+  bannerUrl   String?        @map("banner_url") @db.VarChar(500)
+  qrCode      String         @unique @map("qr_code") @db.VarChar(50)
+  manualCode  String?        @map("manual_code") @db.VarChar(20)
+  status      ActivityStatus @default(DRAFT)
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  collaboratorId String @map("collaborator_id")
-  collaborator   EventCollaborator @relation(fields: [collaboratorId], references: [id], onDelete: Cascade)
+  eventProgramId String       @map("event_program_id")
+  eventProgram   EventProgram @relation(fields: [eventProgramId], references: [id], onDelete: Restrict)
 
-  permissionId String @map("permission_id")
+  classroomId String?    @map("classroom_id")
+  classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
+
+  speakerId String? @map("speaker_id")
+  speaker   User?   @relation(fields: [speakerId], references: [id], onDelete: SetNull)
+
+  equipment      ActivityEquipment[]
+  collaborations Collaboration[]
+  attendance     Attendance[]
+  alerts         Alert[]
+
+  @@unique([eventProgramId, manualCode])
+  @@index([eventProgramId, date, status])
+  @@index([classroomId, date, startTime])
+  @@index([speakerId])
+  @@map("activities")
+}
+
+model ActivityEquipment {
+  activityId String   @map("activity_id")
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  name       String   @db.VarChar(255)
+
+  @@id([activityId, name])
+  @@map("activity_equipment")
+}
+
+model Collaboration {
+  id        String            @id @default(cuid())
+  role      CollaborationRole @default(VIEWER)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  eventProgramId String?       @map("event_program_id")
+  eventProgram   EventProgram? @relation(fields: [eventProgramId], references: [id], onDelete: Cascade)
+
+  activityId String?   @map("activity_id")
+  activity   Activity? @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  permissions CollaborationPermission[]
+
+  @@unique([eventProgramId, userId], map: "collaborations_program_user_key", where: { eventProgramId: { not: null } })
+  @@unique([activityId, userId], map: "collaborations_activity_user_key", where: { activityId: { not: null } })
+  @@index([userId])
+  @@map("collaborations")
+}
+
+model CollaborationPermission {
+  collaborationId String        @map("collaboration_id")
+  collaboration   Collaboration @relation(fields: [collaborationId], references: [id], onDelete: Cascade)
+
+  permissionId String     @map("permission_id")
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
-  @@unique([collaboratorId, permissionId])
-  @@map("event_permissions")
+  @@id([collaborationId, permissionId])
+  @@index([permissionId])
+  @@map("collaboration_permissions")
 }
 
 model Attendance {
-  id          String        @id @default(cuid())
-  metodo      MetodoAsistencia
-  codigoUsado String?       @map("codigo_usado") @db.VarChar(20)
-  checkedInAt DateTime      @default(now()) @map("checked_in_at")
+  id           String            @id @default(cuid())
+  registeredAt DateTime          @default(now()) @map("registered_at") @db.Timestamptz(3)
+  method       AttendanceMethod?
+  usedCode     String?           @map("used_code") @db.VarChar(50)
+  checkedInAt  DateTime?         @map("checked_in_at") @db.Timestamptz(3)
 
-  smallEventId String @map("small_event_id")
-  smallEvent   SmallEvent @relation(fields: [smallEventId], references: [id], onDelete: Cascade)
+  activityId String   @map("activity_id")
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Restrict)
 
   userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   certificate Certificate?
 
-  @@unique([smallEventId, userId])
+  @@unique([activityId, userId])
+  @@index([userId, checkedInAt])
   @@map("attendance")
 }
 
 model Certificate {
-  id         String   @id @default(cuid())
-  codigo     String   @unique @db.VarChar(50)
-  urlPdf     String?  @map("url_pdf") @db.VarChar(500)
-  emitidoEn  DateTime @default(now()) @map("emitido_en")
+  id       String   @id @default(cuid())
+  code     String   @unique @db.VarChar(50)
+  pdfUrl   String?  @map("pdf_url") @db.VarChar(500)
+  issuedAt DateTime @default(now()) @map("issued_at") @db.Timestamptz(3)
 
-  attendanceId String @unique @map("attendance_id")
-  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  attendanceId String     @unique @map("attendance_id")
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Restrict)
 
-  userId String @map("user_id")
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  smallEventId String @map("small_event_id")
-  smallEvent   SmallEvent @relation(fields: [smallEventId], references: [id], onDelete: Cascade)
+  alerts Alert[]
 
   @@map("certificates")
 }
 
 model Classroom {
-  id        String    @id @default(cuid())
-  nombre    String    @db.VarChar(50)
-  tipo      TipoAula
-  capacidad Int
-  edificio  String?   @db.VarChar(50)
-  piso      Int?
-  activo    Boolean   @default(true)
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id        String        @id @default(cuid())
+  name      String        @db.VarChar(50)
+  type      ClassroomType
+  capacity  Int
+  building  String?       @db.VarChar(50)
+  floor     Int?
+  isActive  Boolean       @default(true) @map("is_active")
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   amenities    ClassroomAmenity[]
   availability ClassroomAvailability[]
-  smallEvents  SmallEvent[]
+  activities   Activity[]
 
   @@map("classrooms")
 }
 
 model ClassroomAmenity {
-  amenity String @db.VarChar(50)
-
-  classroomId String @map("classroom_id")
+  classroomId String    @map("classroom_id")
   classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  amenity     String    @db.VarChar(50)
 
   @@id([classroomId, amenity])
   @@map("classroom_amenities")
 }
 
 model ClassroomAvailability {
-  id          String  @id @default(cuid())
-  diaSemana   Int     @map("dia_semana")
-  horaInicio  DateTime @map("hora_inicio") @db.Time
-  horaFin     DateTime @map("hora_fin") @db.Time
-  periodo     String? @db.VarChar(30)
+  id        String   @id @default(cuid())
+  dayOfWeek Int      @map("day_of_week")
+  startTime DateTime @map("start_time") @db.Time(3)
+  endTime   DateTime @map("end_time") @db.Time(3)
+  period    String?  @db.VarChar(30)
 
-  classroomId String @map("classroom_id")
+  classroomId String    @map("classroom_id")
   classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
 
+  @@unique([classroomId, dayOfWeek, startTime, endTime])
   @@map("classroom_availability")
 }
 
 model SpeakerProposal {
-  id                String          @id @default(cuid())
-  titulo            String          @db.VarChar(200)
-  contenido         String          @db.Text
-  tipoPropuesta     String          @map("tipo_propuesta") @db.VarChar(30)
-  duracionEstimada  Int?            @map("duracion_estimada")
-  estado            EstadoPropuesta @default(pendiente)
-  enviadoEn         DateTime        @default(now()) @map("enviado_en")
-  actualizadoEn     DateTime        @updatedAt @map("actualizado_en")
+  id                String         @id @default(cuid())
+  title             String         @db.VarChar(200)
+  content           String         @db.Text
+  proposalType      ActivityType   @map("proposal_type")
+  estimatedDuration Int?           @map("estimated_duration")
+  cvUrl             String?        @map("cv_url") @db.VarChar(500)
+  status            ProposalStatus @default(PENDING)
+  submittedAt       DateTime       @default(now()) @map("submitted_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   speakerId String @map("speaker_id")
-  speaker   User   @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+  speaker   User   @relation(fields: [speakerId], references: [id], onDelete: Restrict)
 
-  eventId String? @map("event_id")
-  event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  eventProgramId String       @map("event_program_id")
+  eventProgram   EventProgram @relation(fields: [eventProgramId], references: [id], onDelete: Restrict)
 
+  versions ProposalVersion[]
+  feedback ProposalFeedback[]
+  alerts   Alert[]
+
+  @@index([eventProgramId, status, submittedAt])
+  @@index([speakerId])
   @@map("speaker_proposals")
+}
+
+model ProposalVersion {
+  id                String       @id @default(cuid())
+  versionNumber     Int          @map("version_number")
+  title             String       @db.VarChar(200)
+  content           String       @db.Text
+  proposalType      ActivityType @map("proposal_type")
+  estimatedDuration Int?         @map("estimated_duration")
+  cvUrl             String?      @map("cv_url") @db.VarChar(500)
+  submittedAt       DateTime     @default(now()) @map("submitted_at") @db.Timestamptz(3)
+
+  proposalId String          @map("proposal_id")
+  proposal   SpeakerProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+
+  @@unique([proposalId, versionNumber])
+  @@map("proposal_versions")
+}
+
+model ProposalFeedback {
+  id        String   @id @default(cuid())
+  content   String?  @db.Text
+  imageUrl  String?  @map("image_url") @db.VarChar(500)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  proposalId String          @map("proposal_id")
+  proposal   SpeakerProposal @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+
+  authorId String @map("author_id")
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([proposalId])
+  @@index([authorId])
+  @@map("proposal_feedback")
+}
+
+model Alert {
+  id        String    @id @default(cuid())
+  type      AlertType
+  isRead    Boolean   @default(false) @map("is_read")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  recipientId String @map("recipient_id")
+  recipient   User   @relation(fields: [recipientId], references: [id], onDelete: Restrict)
+
+  proposalId String?          @map("proposal_id")
+  proposal   SpeakerProposal? @relation(fields: [proposalId], references: [id], onDelete: Restrict)
+
+  eventProgramId String?       @map("event_program_id")
+  eventProgram   EventProgram? @relation(fields: [eventProgramId], references: [id], onDelete: Restrict)
+
+  activityId String?   @map("activity_id")
+  activity   Activity? @relation(fields: [activityId], references: [id], onDelete: Restrict)
+
+  certificateId String?      @map("certificate_id")
+  certificate   Certificate? @relation(fields: [certificateId], references: [id], onDelete: Restrict)
+
+  @@index([recipientId, isRead, createdAt])
+  @@index([proposalId])
+  @@index([eventProgramId])
+  @@index([activityId])
+  @@index([certificateId])
+  @@map("alerts")
 }
