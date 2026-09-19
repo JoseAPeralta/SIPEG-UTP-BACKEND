@@ -11,7 +11,7 @@
 - **Type**: Backend REST API.
 - **Scope of this repository**: Node.js backend only.
 - **Frontend**: A separate React frontend will consume this API over HTTP.
-- **Product goal**: Event management platform for users, events, attendance, certificates, classrooms, speaker registration, reports, and statistics.
+- **Product goal**: Event management platform for users, event programs, activities, attendance, certificates, classrooms, speaker registration, reports, and statistics.
 - **Runtime target**: Node.js 24.x LTS, or the latest active LTS available in the project environment.
 - **Backend framework**: Express.
 - **ORM**: Prisma.
@@ -106,9 +106,11 @@ src/
 |   |   `-- auth.types.ts
 |   |-- users/
 |   |-- faculties/
+|   |-- subdirectorates/
 |   |-- careers/
 |   |-- permissions/
-|   |-- events/
+|   |-- event-programs/
+|   |-- activities/
 |   |-- attendance/
 |   |-- certificates/
 |   |-- classrooms/
@@ -171,7 +173,7 @@ Rules:
 - Use Express for HTTP routing.
 - Keep `server.ts` responsible for starting the HTTP server and handling graceful shutdown.
 - Keep `app.ts` responsible for configuring Express, global middleware, routes, not-found handling, and error handling.
-- Use modular domain folders for users, faculties, careers, permissions, events, attendance, certificates, classrooms, speakers, and reports.
+- Use modular domain folders for users, faculties, subdirectorates, careers, permissions, event programs, activities, attendance, certificates, classrooms, speakers, and reports.
 - Route files should only wire paths, validation, middleware, and controller handlers.
 - Controllers should not call Prisma directly.
 - Services should enforce business rules and authorization-sensitive decisions.
@@ -182,7 +184,7 @@ Rules:
 ## API Design Rules
 
 - Prefer REST endpoints under a versioned prefix such as `/api/v1`.
-- Use plural resource names: `/users`, `/events`, `/attendance`, `/classrooms`, `/speakers`, `/reports`.
+- Use plural resource names: `/users`, `/event-programs`, `/activities`, `/attendance`, `/classrooms`, `/speakers`, `/reports`.
 - Use HTTP methods consistently:
   - `GET` for reading.
   - `POST` for creation and operations that change server state.
@@ -212,7 +214,7 @@ For errors:
 
 - Use pagination for list endpoints that can grow.
 - Prefer cursor pagination for large or frequently changing lists; offset pagination is acceptable for simple administrative lists.
-- Use filters for event lists, reports, attendance records, faculties, careers, and classroom availability.
+- Use filters for event-program and activity lists, reports, attendance records, faculties, subdirectorates, careers, and classroom availability.
 - Do not return password hashes, refresh tokens, JWT internals, raw database errors, internal-only IDs, or sensitive audit information.
 - Keep frontend URLs out of controllers except for explicitly configured redirects or CORS rules.
 
@@ -251,7 +253,7 @@ For errors:
 - Use generic invalid-credential errors. Do not reveal whether an email or user exists.
 - Protect private routes with authentication middleware.
 - Enforce permissions with authorization middleware or service-level checks.
-- Validate horizontal and vertical authorization, especially for event ownership, collaborators, attendance operations, certificate generation, classroom administration, speaker review, and report export.
+- Validate horizontal and vertical authorization, especially for event-program and activity ownership, collaborators, attendance operations, certificate generation, classroom administration, speaker review, and report export.
 - Do not trust role or permission values sent directly by the client.
 - Always derive authenticated user identity from a verified token.
 - Explicitly allowlist JWT algorithms, and configure issuer/audience when the token design includes them.
@@ -271,7 +273,7 @@ For errors:
 - Use centralized error handling.
 - Avoid exposing implementation details in error messages.
 - Use HTTPS in production.
-- Consider audit logs for sensitive administrative actions such as deleting events, modifying permissions, exporting reports, and generating certificates.
+- Consider audit logs for sensitive administrative actions such as archiving event programs, deleting activities, modifying permissions, exporting reports, and generating certificates.
 - Log security-relevant events such as failed authentication, blocked authorization, suspicious upload attempts, and rate-limit triggers without logging secrets or sensitive payloads.
 
 ## Validation Rules
@@ -280,7 +282,7 @@ For errors:
 - Prefer schema-based validation if a validation library is already installed.
 - Keep validation schemas close to each module, for example `*.schemas.ts`.
 - Return clear validation errors without leaking internal details or echoing unsafe raw input.
-- Validate dates, times, event capacity, classroom capacity, email format, role values, permission values, enum values, pagination bounds, file metadata, and report filters.
+- Validate dates, times, activity capacity, classroom capacity, email format, role values, permission values, enum values, pagination bounds, file metadata, and report filters.
 - Do not rely only on frontend validation.
 
 ## Error Handling Rules
@@ -362,44 +364,49 @@ For errors:
 - Select faculty.
 - Select career.
 - Modify user data.
-- Assign permissions in events.
+- Assign permissions in event programs and activities.
 - Manage roles and permissions securely.
 
-### Events
+### Event Programs And Activities
 
-- Create large events or event series.
-- Large events include name, dates, custom label, and banner.
-- Add collaborators and permissions to large events.
-- Large event collaborators and permissions should be inherited by child events by default.
-- Create small events.
-- Small events include name, type, speaker, classroom, date, time, required equipment, and banner.
-- Small events can belong to a larger event series.
-- Add collaborators and permissions to small events.
-- If a small event belongs to a large event, expose inherited permissions through the API.
-- Delete large events.
-- Deleting a large event deletes all associated small events only when the business rule explicitly allows it.
-- Before deleting large events, support a backend option to notify registered attendees.
-- Delete small events.
-- Before deleting small events, support a backend option to notify registered attendees.
-- Modify events.
-- Before modifying events, support a backend option to notify registered attendees.
-- Provide event list endpoints.
-- Provide available and past event endpoints or filters.
-- Allow filtering by faculty.
-- Prioritize or filter events related to the selected faculty when requested by the API client.
+- Treat an event program as the mandatory organizational parent of activities.
+- Create one permanent default event program automatically for every faculty and subdirectorate.
+- Keep the default flag and owning organizational unit immutable for default event programs.
+- Allow only site administrators to create additional event programs.
+- Associate each event program with exactly one faculty or one subdirectorate.
+- Default event programs do not require start or end dates; additional programs include name, dates, custom label, and banner.
+- Add collaborators and permissions to event programs.
+- Event-program collaborators and permissions are inherited by their activities by default.
+- Create activities only inside an existing event program.
+- Allow new activities only in active event programs.
+- Activities include name, type, speaker, classroom, date, time, required equipment, and banner.
+- Add collaborators and permissions directly to activities when local access is required.
+- Expose inherited and local permissions through the API with an explicit precedence rule.
+- Archive event programs instead of deleting them physically.
+- Prohibit physical deletion of event programs, including empty programs.
+- Do not archive an additional event program while it has scheduled or ongoing activities.
+- Do not archive a default event program while its faculty or subdirectorate remains active.
+- Reactivate an organizational unit and its existing default event program atomically.
+- Delete or cancel activities according to the applicable retention rule.
+- Before modifying, cancelling, or deleting an activity, support an option to notify registered attendees.
+- Provide event-program and activity list endpoints.
+- Provide available and past activity endpoints or filters.
+- Allow filtering by faculty and subdirectorate.
+- Prioritize or filter activities through the organizational unit of their event program.
 
 ### Attendance
 
-- Register attendance for a specific event.
+- Allow an attendance record to represent registration before check-in and presence after check-in.
+- Register attendance for a specific activity.
 - Support QR code attendance.
 - Support manual attendance codes.
-- Prevent duplicate attendance records when the business rule requires unique attendance per user and event.
-- Validate event availability before accepting attendance.
+- Prevent duplicate attendance records when the business rule requires unique attendance per user and activity.
+- Validate activity availability before accepting attendance.
 - Keep attendance operations auditable when possible.
 
 ### Certificates
 
-- Generate attendance certificates automatically when the event rules are met.
+- Generate attendance certificates automatically when the activity rules are met.
 - Generate certificates from the attendance list.
 - Store certificate metadata.
 - Avoid regenerating duplicate certificates unless explicitly requested.
@@ -413,11 +420,12 @@ For errors:
 - Store available days.
 - Store maximum capacity.
 - Store amenities such as projector, desks, tables, smart board, and whiteboard.
-- Validate classroom availability before assigning it to an event.
+- Validate classroom availability before assigning it to an activity.
 
 ### Speaker Registration
 
 - Provide a speaker registration endpoint.
+- Require the speaker to have or create a user account before submitting a proposal.
 - Capture first name and last name.
 - Capture email.
 - Capture CV.
@@ -425,14 +433,17 @@ For errors:
 - Capture talk type such as workshop, seminar, or similar.
 - Capture proposal title and content.
 - Capture submission date.
+- Preserve an immutable version history when the speaker updates a proposal.
+- Allow authorized program collaborators to provide proposal feedback as text or an image.
+- Notify the speaker and responsible collaborators when proposals are submitted, updated, or answered.
 - Optionally forward the form to a specific email if email service is configured.
-- Specify the event the speaker is applying to.
+- Specify the event program the speaker is applying to.
 - Validate and restrict uploaded CV files.
 
 ### Reports And Statistics
 
 - Provide attendance numbers.
-- Provide event participation statistics.
+- Provide event-program and activity participation statistics.
 - Export reports to Excel if export support is implemented.
 - Export reports to PDF if export support is implemented.
 - Protect report export endpoints with authorization rules.

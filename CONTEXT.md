@@ -4,7 +4,7 @@
 
 SIPEG UTP es una plataforma de gestion de eventos academicos. Este repositorio contiene solo el backend REST API; el frontend React vivira en un repositorio o carpeta separada y consumira este backend mediante HTTP.
 
-El backend debe soportar usuarios, autenticacion, permisos, eventos, asistencia, certificados, aulas, registro de ponentes, reportes y estadisticas.
+El backend debe soportar usuarios, autenticacion, permisos, programas de eventos, actividades, asistencia, certificados, aulas, registro de ponentes, reportes y estadisticas.
 
 ## Alcance Del Backend
 
@@ -38,35 +38,39 @@ El backend debe soportar usuarios, autenticacion, permisos, eventos, asistencia,
 
 ### Usuario
 
-Persona que usa la plataforma. Puede ser asistente, colaborador, organizador, administrador o ponente segun sus permisos en cada evento.
+Persona que usa la plataforma. Puede ser asistente, colaborador, organizador, administrador o ponente segun sus permisos en cada programa de eventos o actividad.
 
 ### Facultad
 
-Unidad academica usada para clasificar usuarios, carreras y eventos. Las listas de eventos pueden priorizar contenido relacionado con la facultad seleccionada.
+Unidad academica usada para clasificar usuarios, carreras y programas de eventos. Cada facultad tiene un programa de eventos predeterminado permanente, que debe estar activo mientras la facultad lo este.
+
+### Subdireccion
+
+Unidad administrativa independiente de las facultades. Cada subdireccion tiene un programa de eventos predeterminado permanente, que debe estar activo mientras la subdireccion lo este.
 
 ### Carrera
 
 Programa academico asociado a un usuario. Se usa para segmentacion, reportes y comunicaciones.
 
-### Permiso De Evento
+### Permiso De Colaboracion
 
-Capacidad asignada a un usuario para colaborar en un evento. Puede aplicar a un evento grande o a un evento pequeno. Los permisos de un evento grande se heredan por defecto en sus eventos pequenos.
+Capacidad asignada a un usuario para colaborar en un programa de eventos o en una actividad. Los permisos del programa se heredan por defecto en todas sus actividades y pueden complementarse con permisos locales.
 
-### Evento Grande
+### Programa De Eventos
 
-Evento principal o serie de eventos. Tiene nombre, fechas, etiqueta personalizada, banner, colaboradores y permisos. Puede agrupar multiples eventos pequenos.
+Unidad organizadora que agrupa actividades. Pertenece exactamente a una facultad o a una subdireccion. Cada unidad tiene un programa predeterminado permanente creado automaticamente; su condicion predeterminada y unidad propietaria son inmutables. Un administrador del sitio puede crear programas adicionales con fechas, etiqueta y banner. Los programas se archivan y no se eliminan fisicamente, aunque esten vacios.
 
-### Evento Pequeno
+### Actividad
 
-Actividad individual que puede pertenecer a un evento grande. Tiene nombre, tipo, ponente, aula, fecha, hora, equipamiento requerido, banner, colaboradores y permisos.
+Evento individual que pertenece obligatoriamente a un programa de eventos. Tiene nombre, tipo, ponente, aula, fecha, hora, equipamiento requerido, banner, colaboradores y permisos.
 
 ### Asistente Registrado
 
-Usuario inscrito o esperado en un evento. Puede recibir notificaciones cuando el evento se modifica o elimina.
+Usuario inscrito o esperado en una actividad. Puede recibir notificaciones cuando la actividad se modifica, cancela o elimina.
 
 ### Registro De Asistencia
 
-Evidencia de presencia en un evento. Puede capturarse mediante QR o codigo manual.
+Evidencia de presencia en una actividad. Puede capturarse mediante QR o codigo manual.
 
 ### Certificado
 
@@ -74,7 +78,7 @@ Documento generado a partir de la asistencia. Puede generarse automaticamente o 
 
 ### Aula
 
-Espacio disponible para eventos. Tiene tipo, horarios disponibles, dias disponibles, capacidad maxima y amenidades.
+Espacio disponible para actividades. Tiene tipo, horarios disponibles, dias disponibles, capacidad maxima y amenidades.
 
 ### Amenidad De Aula
 
@@ -82,15 +86,15 @@ Recurso disponible en un aula, como proyector, escritorios, mesas, smart board o
 
 ### Ponente
 
-Persona que propone o imparte una actividad. El registro de ponentes captura nombre, email, CV, duracion aproximada, tipo de charla, titulo, contenido, fecha de envio y evento al que aplica.
+Persona que propone o imparte una actividad. El registro de ponentes captura nombre, email, CV, duracion aproximada, tipo de charla, titulo, contenido, fecha de envio y programa de eventos al que aplica.
 
 ### Reporte
 
-Vista o exportacion con metricas de eventos, asistencia y certificados. Puede exportarse a Excel o PDF si el backend implementa exportacion.
+Vista o exportacion con metricas de programas, actividades, asistencia y certificados. Puede exportarse a Excel o PDF si el backend implementa exportacion.
 
 ### Estadistica
 
-Indicador resumido para seguimiento operativo: asistencia total, ocupacion de aulas, certificados generados, eventos activos y eventos pasados.
+Indicador resumido para seguimiento operativo: asistencia total, ocupacion de aulas, certificados generados, programas activos y actividades disponibles o pasadas.
 
 ## Modulos Esperados Del Backend
 
@@ -103,20 +107,28 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Administrar facultad, carrera, roles y permisos.
 - Nunca devolver hashes de contrasena ni tokens internos.
 
-### Eventos
+### Programas De Eventos Y Actividades
 
-- Crear, modificar, listar y eliminar eventos grandes y pequenos.
-- Asociar colaboradores y permisos.
-- Exponer permisos heredados de eventos grandes a eventos pequenos.
-- Filtrar por disponibilidad, historial, facultad y otros criterios necesarios.
-- Soportar opcion de notificacion antes de modificar o eliminar eventos cuando exista servicio de email.
+- Crear automaticamente un programa predeterminado permanente al crear una facultad o subdireccion.
+- Permitir que solo el administrador del sitio cree programas adicionales.
+- Asociar cada programa exactamente a una facultad o subdireccion.
+- Crear actividades unicamente dentro de un programa activo.
+- Asociar colaboradores y permisos a programas y actividades.
+- Exponer permisos heredados del programa junto con los permisos locales de la actividad.
+- Archivar programas en lugar de eliminarlos fisicamente.
+- Bloquear el archivado de programas adicionales con actividades programadas o en curso.
+- Mantener activo el programa predeterminado mientras su facultad o subdireccion siga activa.
+- Reactivar una unidad y su programa predeterminado existente dentro de la misma transaccion.
+- Filtrar actividades por disponibilidad, historial, facultad, subdireccion y programa.
+- Soportar notificaciones antes de modificar, cancelar o eliminar actividades cuando exista servicio de email.
 
 ### Asistencia
 
-- Registrar asistencia por evento.
+- Permitir que un mismo registro represente la inscripcion antes del check-in y la presencia despues del check-in.
+- Registrar asistencia por actividad.
 - Soportar QR y codigos manuales.
-- Prevenir duplicados cuando la regla de negocio exija una asistencia unica por usuario y evento.
-- Validar disponibilidad del evento antes de aceptar asistencia.
+- Prevenir duplicados cuando la regla de negocio exija una asistencia unica por usuario y actividad.
+- Validar disponibilidad de la actividad antes de aceptar asistencia.
 - Mantener auditoria cuando sea necesario.
 
 ### Certificados
@@ -129,13 +141,17 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 ### Inventario De Aulas
 
 - Administrar aulas, tipos, horarios, dias disponibles, capacidad y amenidades.
-- Validar disponibilidad antes de asignar aula a un evento.
+- Validar disponibilidad antes de asignar aula a una actividad.
 - Exponer filtros para disponibilidad y capacidad.
 
 ### Registro De Ponentes
 
-- Recibir propuestas de ponentes asociadas a eventos.
+- Exigir que el ponente tenga o cree una cuenta de usuario antes de enviar una propuesta.
+- Recibir propuestas de ponentes asociadas a programas de eventos.
 - Capturar datos personales necesarios, CV, duracion aproximada, tipo de charla, titulo y contenido.
+- Conservar versiones inmutables cuando el ponente actualice su propuesta.
+- Permitir feedback en texto o imagen por colaboradores autorizados del programa.
+- Alertar al ponente y a los responsables cuando la propuesta se envia, actualiza o responde.
 - Validar y restringir archivos CV por tipo, tamano y destino.
 - Reenviar propuestas por email solo si existe servicio configurado.
 
