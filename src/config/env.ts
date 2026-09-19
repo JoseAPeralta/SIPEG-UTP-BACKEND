@@ -7,16 +7,22 @@ const optionalNonEmptyString = z.preprocess(
   z.string().min(1).optional(),
 );
 
+const ttlSchema = z.string().regex(/^\d+[smhd]$/, 'Must match /\\d+[smhd]/.');
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().positive().default(3000),
     DATABASE_URL: optionalNonEmptyString,
-    JWT_ACCESS_SECRET: optionalNonEmptyString,
-    JWT_REFRESH_SECRET: optionalNonEmptyString,
-    JWT_ACCESS_EXPIRES_IN: z.string().min(1).default('15m'),
-    JWT_REFRESH_EXPIRES_IN: z.string().min(1).default('7d'),
     CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
+    AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 chars.'),
+    AUTH_URL: z.string().url().default('http://localhost:3000'),
+    AUTH_ISSUER: z.string().min(1).optional(),
+    AUTH_AUDIENCE: z.string().min(1).optional(),
+    AUTH_TOKEN_TTL: ttlSchema.default('15m'),
+    AUTH_REFRESH_TTL: ttlSchema.default('7d'),
+    TRUSTED_ORIGINS: z.string().min(1).optional(),
+    LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((value, context) => {
     const corsOrigins = value.CORS_ORIGIN.split(',').map((origin) => origin.trim());
@@ -29,11 +35,11 @@ const envSchema = z
       });
     }
 
-    if (value.NODE_ENV === 'production' && !value.JWT_ACCESS_SECRET) {
+    if (value.NODE_ENV !== 'test' && !value.DATABASE_URL) {
       context.addIssue({
         code: 'custom',
-        path: ['JWT_ACCESS_SECRET'],
-        message: 'JWT_ACCESS_SECRET is required in production.',
+        path: ['DATABASE_URL'],
+        message: 'DATABASE_URL is required outside the test environment.',
       });
     }
   });
