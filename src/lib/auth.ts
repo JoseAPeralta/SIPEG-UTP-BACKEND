@@ -87,6 +87,42 @@ export const auth = betterAuth({
       jwks: {
         keyPairConfig: { alg: 'EdDSA', crv: 'Ed25519' },
       },
+      adapter: {
+        getJwks: async () => {
+          const prisma = getPrismaClient();
+          const rows = await prisma.jwks.findMany();
+          return rows.map((row) => {
+            const publicJwk = JSON.parse(row.publicKey) as Record<string, unknown>;
+            return {
+              id: row.id,
+              publicKey: row.publicKey,
+              privateKey: row.privateKey,
+              alg: publicJwk['alg'] ?? null,
+              crv: publicJwk['crv'] ?? null,
+              createdAt: row.createdAt,
+            };
+          }) as never;
+        },
+        createJwk: async (jwk, _ctx) => {
+          const prisma = getPrismaClient();
+          const data = jwk as unknown as {
+            id?: string;
+            publicKey: string;
+            privateKey: string;
+            alg?: string;
+            crv?: string;
+            createdAt?: Date;
+          };
+          await prisma.jwks.create({
+            data: {
+              id: data.id ?? crypto.randomUUID(),
+              publicKey: data.publicKey,
+              privateKey: data.privateKey,
+            },
+          });
+          return data as never;
+        },
+      },
     }),
   ],
 });
