@@ -4,9 +4,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../utils/ApiError.js';
 
 const buildReq = (overrides: Partial<Request> = {}): Request =>
-  ({ ip: '127.0.0.1', ...overrides } as unknown as Request);
+  ({ ip: '127.0.0.1', ...overrides }) as unknown as Request;
 const buildRes = (): Response =>
-  ({ status: vi.fn().mockReturnThis(), json: vi.fn(), setHeader: vi.fn() } as unknown as Response);
+  ({ status: vi.fn().mockReturnThis(), json: vi.fn(), setHeader: vi.fn() }) as unknown as Response;
 
 describe('rate limit middleware', () => {
   it('returns 429 with ApiError when limit is exceeded', async () => {

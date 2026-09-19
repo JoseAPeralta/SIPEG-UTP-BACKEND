@@ -1,8 +1,4 @@
-import {
-  calculateJwkThumbprint,
-  exportJWK,
-  generateKeyPair,
-} from 'jose';
+import { calculateJwkThumbprint, exportJWK, generateKeyPair } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 interface AuthMock {
@@ -98,7 +94,12 @@ describe('auth service', () => {
       user: { id: 'u-1', email: 'a@b.com' },
     });
     prismaMock.user.findUnique.mockResolvedValue({
-      id: 'u-1', email: 'a@b.com', globalRole: 'USER', facultyId: null, careerId: null, isActive: true,
+      id: 'u-1',
+      email: 'a@b.com',
+      globalRole: 'USER',
+      facultyId: null,
+      careerId: null,
+      isActive: true,
     });
     prismaMock.session.findFirst.mockResolvedValue({
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -112,17 +113,21 @@ describe('auth service', () => {
 
   it('login maps errors to 401', async () => {
     const { APIError } = await import('better-auth/api');
-    authMock.api.signInEmail.mockRejectedValue(new APIError(401, { message: 'Invalid email or password' }));
+    authMock.api.signInEmail.mockRejectedValue(
+      new APIError(401, { message: 'Invalid email or password' }),
+    );
     const { loginWithPassword } = await loadService(authMock, prismaMock);
-    await expect(loginWithPassword({ email: 'a@b.com', password: 'wrong' }))
-      .rejects.toMatchObject({ statusCode: 401 });
+    await expect(loginWithPassword({ email: 'a@b.com', password: 'wrong' })).rejects.toMatchObject({
+      statusCode: 401,
+    });
   });
 
   it('refresh rejects when session lookup fails', async () => {
     prismaMock.session.findFirst.mockResolvedValue(null);
     const { refreshAccessToken } = await loadService(authMock, prismaMock);
-    await expect(refreshAccessToken({ refreshToken: 'expired' }))
-      .rejects.toMatchObject({ statusCode: 401 });
+    await expect(refreshAccessToken({ refreshToken: 'expired' })).rejects.toMatchObject({
+      statusCode: 401,
+    });
   });
 
   it('refresh issues new access token on valid session', async () => {
@@ -130,7 +135,12 @@ describe('auth service', () => {
       expiresAt: new Date(Date.now() + 86400000),
       userId: 'u-1',
       user: {
-        id: 'u-1', email: 'a@b.com', globalRole: 'USER', facultyId: null, careerId: null, isActive: true,
+        id: 'u-1',
+        email: 'a@b.com',
+        globalRole: 'USER',
+        facultyId: null,
+        careerId: null,
+        isActive: true,
       },
     });
 
@@ -144,8 +154,11 @@ describe('auth service', () => {
     authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-1' } });
     const { registerUser } = await loadService(authMock, prismaMock);
     await registerUser({
-      email: 'a@b.com', password: 'strongpass1234',
-      firstName: 'Ana', lastName: 'Perez', identificationNumber: '8-123-4567',
+      email: 'a@b.com',
+      password: 'strongpass1234',
+      firstName: 'Ana',
+      lastName: 'Perez',
+      identificationNumber: '8-123-4567',
     });
     expect(authMock.api.signUpEmail).toHaveBeenCalledWith(
       expect.objectContaining({

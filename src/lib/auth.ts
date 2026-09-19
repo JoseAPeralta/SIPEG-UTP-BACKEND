@@ -8,7 +8,9 @@ import { hashPassword, verifyPassword } from './password.js';
 
 const trustedOrigins = [
   env.CORS_ORIGIN,
-  ...(env.TRUSTED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean) ?? []),
+  ...(env.TRUSTED_ORIGINS?.split(',')
+    .map((o) => o.trim())
+    .filter(Boolean) ?? []),
 ];
 
 export const auth = betterAuth({
@@ -134,12 +136,14 @@ export const ensureJwks = async (): Promise<void> => {
   const prisma = getPrismaClient();
   const existing = await prisma.jwks.count();
   if (existing > 0) return;
-  await auth.api.getToken({
-    headers: { origin: env.AUTH_URL },
-    asResponse: false,
-  }).catch(() => {
-    // The first call may fail if there is no session; we only need it to trigger JWKS creation.
-  });
+  await auth.api
+    .getToken({
+      headers: { origin: env.AUTH_URL },
+      asResponse: false,
+    })
+    .catch(() => {
+      // The first call may fail if there is no session; we only need it to trigger JWKS creation.
+    });
   const after = await prisma.jwks.count();
   if (after === 0) {
     const response = await auth.handler(

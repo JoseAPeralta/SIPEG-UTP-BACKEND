@@ -4,7 +4,6 @@ import { PrismaClient } from '../generated/prisma/client.js';
 import { env } from './env.js';
 
 declare global {
-  // eslint-disable-next-line no-var
   var __sipegPrisma: PrismaClient | undefined;
 }
 

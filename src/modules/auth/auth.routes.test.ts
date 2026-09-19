@@ -1,8 +1,4 @@
-import {
-  calculateJwkThumbprint,
-  exportJWK,
-  generateKeyPair,
-} from 'jose';
+import { calculateJwkThumbprint, exportJWK, generateKeyPair } from 'jose';
 import request from 'supertest';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -41,32 +37,42 @@ const loadApp = async (authMock: AuthMock) => {
   process.env['AUTH_URL'] = 'http://localhost:3000';
   vi.resetModules();
   vi.doMock('../../lib/auth.js', () => ({ auth: authMock }));
-    vi.doMock('../../config/prisma.js', () => ({
-      getPrismaClient: () => ({
-        user: {
-          findUnique: vi.fn().mockResolvedValue({
-            id: 'u-1', email: 'a@b.com', globalRole: 'USER', facultyId: null, careerId: null, isActive: true,
-          }),
-        },
-        session: {
-          findFirst: vi.fn().mockImplementation(({ where }: { where?: { token?: string } }) => {
-            if (where?.token === 'invalid') return Promise.resolve(null);
-            return Promise.resolve({
-              expiresAt: new Date(Date.now() + 86400000),
-              userId: 'u-1',
-              user: {
-                id: 'u-1', email: 'a@b.com', globalRole: 'USER', facultyId: null, careerId: null, isActive: true,
-              },
-            });
-          }),
-          deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
-        },
-        jwks: {
-          findMany: vi.fn().mockImplementation(() => Promise.resolve(jwksRows)),
-          count: vi.fn().mockImplementation(() => Promise.resolve(jwksRows.length)),
-        },
-      }),
-    }));
+  vi.doMock('../../config/prisma.js', () => ({
+    getPrismaClient: () => ({
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'u-1',
+          email: 'a@b.com',
+          globalRole: 'USER',
+          facultyId: null,
+          careerId: null,
+          isActive: true,
+        }),
+      },
+      session: {
+        findFirst: vi.fn().mockImplementation(({ where }: { where?: { token?: string } }) => {
+          if (where?.token === 'invalid') return Promise.resolve(null);
+          return Promise.resolve({
+            expiresAt: new Date(Date.now() + 86400000),
+            userId: 'u-1',
+            user: {
+              id: 'u-1',
+              email: 'a@b.com',
+              globalRole: 'USER',
+              facultyId: null,
+              careerId: null,
+              isActive: true,
+            },
+          });
+        }),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      jwks: {
+        findMany: vi.fn().mockImplementation(() => Promise.resolve(jwksRows)),
+        count: vi.fn().mockImplementation(() => Promise.resolve(jwksRows.length)),
+      },
+    }),
+  }));
   const { app } = await import('../../app.js');
   return app;
 };
@@ -101,7 +107,9 @@ describe('auth routes', () => {
 
   it('POST /login returns tokens on valid credentials', async () => {
     authMock.api.signInEmail.mockResolvedValue({
-      token: 'refresh-token', redirect: false, user: { id: 'u-1' },
+      token: 'refresh-token',
+      redirect: false,
+      user: { id: 'u-1' },
     });
     const app = await loadApp(authMock);
     const response = await request(app)
@@ -151,8 +159,11 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/register')
       .send({
-        email: 'new@b.com', password: 'strongpass1234',
-        firstName: 'Nuevo', lastName: 'Usuario', identificationNumber: '8-999-9999',
+        email: 'new@b.com',
+        password: 'strongpass1234',
+        firstName: 'Nuevo',
+        lastName: 'Usuario',
+        identificationNumber: '8-999-9999',
       })
       .expect(201);
     expect(response.body.data.userId).toBe('u-new');

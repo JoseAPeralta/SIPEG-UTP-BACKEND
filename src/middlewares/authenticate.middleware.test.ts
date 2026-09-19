@@ -1,5 +1,12 @@
 import type { Request, Response } from 'express';
-import { createLocalJWKSet, generateKeyPair, exportJWK, calculateJwkThumbprint, SignJWT, type KeyLike } from 'jose';
+import {
+  createLocalJWKSet,
+  generateKeyPair,
+  exportJWK,
+  calculateJwkThumbprint,
+  SignJWT,
+  type KeyLike,
+} from 'jose';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../utils/ApiError.js';
@@ -83,7 +90,11 @@ describe('authenticate middleware', () => {
     const prisma = createPrismaMock();
     const { authenticate } = await loadAuthMiddleware(prisma);
     const next = vi.fn();
-    await authenticate({ headers: { authorization: 'Basic xyz' } } as Request, {} as Response, next);
+    await authenticate(
+      { headers: { authorization: 'Basic xyz' } } as Request,
+      {} as Response,
+      next,
+    );
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(401);
   });
@@ -91,13 +102,21 @@ describe('authenticate middleware', () => {
   it('rejects inactive users', async () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockResolvedValue({
-      id: 'user-1', email: 'a@b.com', globalRole: 'USER',
-      facultyId: null, careerId: null, isActive: false,
+      id: 'user-1',
+      email: 'a@b.com',
+      globalRole: 'USER',
+      facultyId: null,
+      careerId: null,
+      isActive: false,
     });
     const { authenticate } = await loadAuthMiddleware(prisma);
     const token = await signToken();
     const next = vi.fn();
-    await authenticate({ headers: { authorization: `Bearer ${token}` } } as Request, {} as Response, next);
+    await authenticate(
+      { headers: { authorization: `Bearer ${token}` } } as Request,
+      {} as Response,
+      next,
+    );
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
   });
@@ -105,8 +124,12 @@ describe('authenticate middleware', () => {
   it('attaches the authenticated user on success', async () => {
     const prisma = createPrismaMock();
     const user = {
-      id: 'user-1', email: 'a@b.com', globalRole: 'USER',
-      facultyId: null, careerId: null, isActive: true,
+      id: 'user-1',
+      email: 'a@b.com',
+      globalRole: 'USER',
+      facultyId: null,
+      careerId: null,
+      isActive: true,
     };
     prisma.user.findUnique.mockResolvedValue(user);
     const { authenticate, requireAuthenticatedUser } = await loadAuthMiddleware(prisma);

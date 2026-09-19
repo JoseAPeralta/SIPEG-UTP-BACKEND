@@ -4,7 +4,7 @@
 
 **Goal:** Replace the legacy event/small-event Prisma model with the approved 19-entity event-program/activity model on Prisma 7.10 and PostgreSQL 18.
 
-**Architecture:** Prisma Schema Language defines models, relations, enums, indexes, and referential actions. A clean baseline migration adds PostgreSQL constraints unsupported by Prisma, while authorization is updated to query unified collaborations. The existing refresh-token authentication module is intentionally left for a later rewrite and `RefreshToken` is not part of the new schema.
+**Architecture:** Prisma Schema Language defines models, relations, enums, indexes, and referential actions. A clean baseline migration adds PostgreSQL constraints unsupported by Prisma, while authorization is updated to query unified collaborations. The refresh-token authentication module was later removed entirely and is being rewritten from 0; `RefreshToken` is not part of the new schema.
 
 **Tech Stack:** Node.js 24, TypeScript 6, Prisma ORM 7.10, PostgreSQL 18, Vitest, pnpm.
 
@@ -21,6 +21,8 @@
 - [ ] Rename event-program authorization expectations to `resolveProgramAccess` and `requireProgramRole`.
 - [ ] Expect activity access to combine local `activity.collaborations` with inherited `eventProgram.collaborations`.
 - [ ] Run `pnpm exec vitest run src/services/authorization.service.test.ts src/middlewares/authorize.middleware.test.ts` and verify failure against the legacy implementation.
+
+> Nota: este paso quedo obsoleto porque los archivos `authorization.service.test.ts` y `authorize.middleware.test.ts` fueron eliminados junto con su implementacion durante el purge de auth. Si se reimplementa la autorizacion basada en colaboraciones, deberan recrearse como parte del rewrite.
 
 ### Task 2: Prisma 7.10 Schema
 
@@ -79,3 +81,5 @@
 - [ ] Run `pnpm run prisma:migrate:status` and verify the database is current.
 - [ ] Run targeted authorization tests, `pnpm run prisma:validate`, `pnpm run prisma:generate`, `pnpm run typecheck`, `pnpm run lint`, `pnpm test`, and `pnpm run build`.
 - [ ] Record failures caused only by the intentionally deferred auth rewrite; do not add a temporary `RefreshToken` compatibility model.
+
+> Nota: tras el purge de auth, los tests del modulo `users/` fallaran por imports rotos hacia `auth.middleware`. Esto es intencional y se resuelve reimplementando auth o eliminando/reescribiendo `users/`.

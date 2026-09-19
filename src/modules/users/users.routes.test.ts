@@ -57,7 +57,8 @@ const loadApp = async (prisma: PrismaMock) => {
         const resolver = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
         const { payload } = await import('jose').then((j) =>
           j.jwtVerify(token, resolver, {
-            issuer: 'http://localhost:3000', audience: 'http://localhost:3000',
+            issuer: 'http://localhost:3000',
+            audience: 'http://localhost:3000',
             algorithms: ['EdDSA'],
           }),
         );
@@ -97,8 +98,11 @@ describe('users routes', () => {
     jwks = { keys: [publicJwk] };
 
     accessToken = await new SignJWT({
-      email: 'juan.perez@example.com', role: 'USER',
-      facultyId: null, careerId: null, isActive: true,
+      email: 'juan.perez@example.com',
+      role: 'USER',
+      facultyId: null,
+      careerId: null,
+      isActive: true,
     })
       .setProtectedHeader({ alg: 'EdDSA', kid, typ: 'JWT' })
       .setIssuer('http://localhost:3000')
@@ -143,7 +147,9 @@ describe('users routes', () => {
         return Promise.resolve(authUserRecord);
       }
       return Promise.resolve({
-        id: 'user-001', facultyId: 'fac-001', careerId: 'car-001',
+        id: 'user-001',
+        facultyId: 'fac-001',
+        careerId: 'car-001',
         career: { facultyId: 'fac-001' },
       });
     });
