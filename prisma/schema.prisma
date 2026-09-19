@@ -13,6 +13,11 @@ enum GlobalRole {
   ADMIN
 }
 
+enum UnitType {
+  FACULTY
+  SUBDIRECTORATE
+}
+
 enum CollaborationRole {
   ORGANIZER
   EDITOR
@@ -69,6 +74,11 @@ enum AlertType {
   CERTIFICATE_ISSUED
 }
 
+enum PermissionGrantSource {
+  ROLE_DEFAULT
+  OVERRIDE
+}
+
 model User {
   id                   String     @id @default(cuid())
   name                 String     @db.VarChar(200)
@@ -83,55 +93,50 @@ model User {
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  facultyId String?  @map("faculty_id")
-  faculty   Faculty? @relation(fields: [facultyId], references: [id], onDelete: SetNull)
+  unitId String?             @map("unit_id")
+  unit   OrganizationalUnit? @relation("OrganizationalUnitMembers", fields: [unitId], references: [id], onDelete: SetNull)
 
   careerId String? @map("career_id")
   career   Career? @relation(fields: [careerId], references: [id], onDelete: SetNull)
+
+  headedUnits OrganizationalUnit[] @relation("OrganizationalUnitHead")
 
   sessions            Session[]
   accounts            Account[]
   createdPrograms     EventProgram[]
   presentedActivities Activity[]
   collaborations      Collaboration[]
+  grantedPermissions  CollaborationPermission[] @relation("GrantedCollaborationPermissions")
   attendance          Attendance[]
   speakerProposals    SpeakerProposal[]
   proposalFeedback    ProposalFeedback[]
   alerts              Alert[]
 
-  @@index([facultyId])
+  @@index([unitId])
   @@index([careerId])
   @@map("users")
 }
 
-model Faculty {
+model OrganizationalUnit {
   id          String   @id @default(cuid())
   name        String   @db.VarChar(150)
   code        String   @unique @db.VarChar(20)
   description String?  @db.Text
+  type        UnitType
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  headId String? @map("head_id")
+  head   User?   @relation("OrganizationalUnitHead", fields: [headId], references: [id], onDelete: SetNull)
+
+  members       User[]         @relation("OrganizationalUnitMembers")
   careers       Career[]
-  users         User[]
   eventPrograms EventProgram[]
 
-  @@map("faculties")
-}
-
-model Subdirectorate {
-  id          String   @id @default(cuid())
-  name        String   @db.VarChar(150)
-  code        String   @unique @db.VarChar(20)
-  description String?  @db.Text
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  eventPrograms EventProgram[]
-
-  @@map("subdirectorates")
+  @@index([type, isActive])
+  @@index([headId])
+  @@map("organizational_units")
 }
 
 model Career {
@@ -143,12 +148,12 @@ model Career {
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  facultyId String  @map("faculty_id")
-  faculty   Faculty @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+  unitId String             @map("unit_id")
+  unit   OrganizationalUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
   users User[]
 
-  @@index([facultyId])
+  @@index([unitId])
   @@map("careers")
 }
 
@@ -177,11 +182,8 @@ model EventProgram {
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  facultyId String?  @map("faculty_id")
-  faculty   Faculty? @relation(fields: [facultyId], references: [id], onDelete: Restrict)
-
-  subdirectorateId String?         @map("subdirectorate_id")
-  subdirectorate   Subdirectorate? @relation(fields: [subdirectorateId], references: [id], onDelete: Restrict)
+  organizationalUnitId String             @map("organizational_unit_id")
+  organizationalUnit   OrganizationalUnit @relation(fields: [organizationalUnitId], references: [id], onDelete: Restrict)
 
   createdById String? @map("created_by_id")
   createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: Restrict)
@@ -191,10 +193,8 @@ model EventProgram {
   speakerProposals SpeakerProposal[]
   alerts           Alert[]
 
-  @@unique([facultyId], map: "event_programs_default_faculty_key", where: { isDefault: true })
-  @@unique([subdirectorateId], map: "event_programs_default_subdirectorate_key", where: { isDefault: true })
-  @@index([facultyId, status])
-  @@index([subdirectorateId, status])
+  @@unique([organizationalUnitId], map: "event_programs_default_unit_key", where: { isDefault: true })
+  @@index([organizationalUnitId, status])
   @@index([createdById])
   @@map("event_programs")
 }
@@ -231,6 +231,7 @@ model Activity {
 
   @@unique([eventProgramId, manualCode])
   @@index([eventProgramId, date, status])
+  @@index([status, date, startTime])
   @@index([classroomId, date, startTime])
   @@index([speakerId])
   @@map("activities")
@@ -274,8 +275,17 @@ model CollaborationPermission {
   permissionId String     @map("permission_id")
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
+  source      PermissionGrantSource @default(OVERRIDE)
+  validFrom   DateTime?             @map("valid_from") @db.Timestamptz(3)
+  validUntil  DateTime?             @map("valid_until") @db.Timestamptz(3)
+  grantedById String?               @map("granted_by_id")
+  grantedBy   User?                 @relation("GrantedCollaborationPermissions", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt   DateTime              @default(now()) @map("granted_at") @db.Timestamptz(3)
+
   @@id([collaborationId, permissionId])
   @@index([permissionId])
+  @@index([validUntil])
+  @@index([grantedById])
   @@map("collaboration_permissions")
 }
 

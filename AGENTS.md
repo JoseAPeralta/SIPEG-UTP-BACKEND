@@ -15,7 +15,7 @@
 - **Runtime target**: Node.js 24.x LTS, or the latest active LTS available in the project environment.
 - **Backend framework**: Express.
 - **ORM**: Prisma.
-- **Authentication**: Pendiente de reimplementar desde 0. El backend actualmente no incluye modulo `auth`, middlewares `authenticate`/`authorize` ni utilitarios de tokens.
+- **Authentication**: Better Auth 1.7.x + plugin JWT. Modulos `auth`, `authorization` y `users` activos, con middlewares `authenticate`/`authorize`, rate limiting y utilitarios de tokens. Ver `docs/adr/adr-0001-time-aware-collaboration-authorization.md`.
 - **Language**: TypeScript.
 - **Package manager**: pnpm.
 
@@ -98,8 +98,7 @@ src/
 |   |-- env.ts
 |   `-- prisma.ts
 |-- modules/
-|   |-- faculties/
-|   |-- subdirectorates/
+|   |-- organizational-units/
 |   |-- careers/
 |   |-- permissions/
 |   |-- event-programs/
@@ -126,7 +125,7 @@ prisma/
 `-- seed.ts
 ```
 
-> Estado actual: el modulo `auth/`, los archivos de `users/` (que dependenian del middleware `authenticate` eliminado), los middlewares `auth.middleware.ts`/`authorize.middleware.ts`/`rateLimit.middleware.ts`, y los utilitarios `jwt.ts`/`token.ts`/`panamanianId.ts` fueron removidos. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
+> Estado actual: modulos `auth`, `authorization`, `users` y `events` implementados. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
 
 Rules:
 
@@ -162,11 +161,12 @@ Rules:
 - Use Express for HTTP routing.
 - Keep `server.ts` responsible for starting the HTTP server and handling graceful shutdown.
 - Keep `app.ts` responsible for configuring Express, global middleware, routes, not-found handling, and error handling.
-- Use modular domain folders for users, faculties, subdirectorates, careers, permissions, event programs, activities, attendance, certificates, classrooms, speakers, and reports.
+- Use modular domain folders for users, organizational units, careers, permissions, event programs, activities, attendance, certificates, classrooms, speakers, and reports.
 - Route files should only wire paths, validation, middleware, and controller handlers.
 - Controllers should not call Prisma directly.
 - Services should enforce business rules and authorization-sensitive decisions.
 - Shared utilities should stay small and generic.
+- Calculate business calendar dates in the institutional time zone `America/Panama` (UTC-5, no DST) via `src/utils/date.ts`; keep audit instants in UTC. See `docs/adr/adr-0002-institutional-timezone-panama.md`.
 - Implement health checks when deployment or container work needs them.
 - Use structured logging when logging is added, and never log passwords, tokens, authorization headers, database URLs, CV contents, or private environment variables.
 
@@ -203,7 +203,7 @@ For errors:
 
 - Use pagination for list endpoints that can grow.
 - Prefer cursor pagination for large or frequently changing lists; offset pagination is acceptable for simple administrative lists.
-- Use filters for event-program and activity lists, reports, attendance records, faculties, subdirectorates, careers, and classroom availability.
+- Use filters for event-program and activity lists, reports, attendance records, organizational units, careers, and classroom availability.
 - Do not return password hashes, refresh tokens, JWT internals, raw database errors, internal-only IDs, or sensitive audit information.
 - Keep frontend URLs out of controllers except for explicitly configured redirects or CORS rules.
 
@@ -250,9 +250,25 @@ For errors:
 - `src/lib/password.ts` centraliza hashing Argon2id (usado por el proveedor via `password.hash`/`password.verify`).
 - `src/utils/jwt-verifier.ts` es el unico verificador de access tokens.
 - `src/middlewares/authenticate.middleware.ts` carga `req.user` desde DB usando solo el `sub` del JWT.
-- `src/middlewares/authorize.middleware.ts` provee `requireRole`, `requireAdmin`, `requireOwnership`.
+- `src/middlewares/authorize.middleware.ts` provee `requireRole`, `requireAdmin`, `requireOwnership` y `requirePermission`.
 - Orden recomendado de middlewares en rutas privadas:
-  `authenticate -> requireRole/requireOwnership -> validate(schema) -> controller`.
+  `authenticate -> requirePermission/requireRole/requireOwnership -> validate(schema) -> controller`.
+
+### Modelo de Autorizacion Por Colaboracion
+
+- Fuente de verdad: `GlobalRole` (`USER`/`ADMIN`), `Collaboration` (scope programa o actividad), `CollaborationRole` (`ORGANIZER`/`EDITOR`/`VIEWER`), catalogo `Permission` y `CollaborationPermission`.
+- Catalogo canonico y defaults en `src/modules/authorization/permissions.ts`. Formato de clave `recurso:accion`. `permission:grant` no esta en ningun default de rol: se concede manualmente.
+- Permisos efectivos en un scope = union aditiva de las colaboraciones de la actividad y de su programa padre, filtrada por ventana vigente. No hay `DENY` local; un permiso heredado no se puede revocar en la actividad.
+- Resolutor: `getEffectivePermissions` / `getPermissionEnvelopes` en `src/modules/authorization/authorization.service.ts`. `ADMIN` hace bypass total.
+- Ventana temporal por permiso: `validFrom`/`validUntil` en `collaboration_permissions`. `NULL` = sin limite de ese lado. Los grants vencidos se ignoran y no se borran (historico). CHECK `valid_until > valid_from`.
+- `source` distingue `ROLE_DEFAULT` (materializado al asignar rol) de `OVERRIDE` (ajuste fino). Cambiar de rol reemplaza los `ROLE_DEFAULT` y preserva los `OVERRIDE`.
+- Delegacion en `src/modules/authorization/delegation.service.ts`: `addCollaborator`, `updateCollaboratorRole`, `removeCollaborator`, `grantPermission`, `revokePermission`.
+- Invariante de subconjunto simetrico: otorgar, revocar y asignar rol exigen que el conjunto actuado este contenido en los permisos efectivos del actor en el mismo scope. `permission:grant` se puede delegar si el actor lo posee.
+- Atenuacion temporal: la ventana otorgada debe quedar dentro del envelope del actor para ese permiso; un envelope acotado prohibe grants sin limite.
+- No ampliacion de scope: un permiso de actividad no permite gestionar el programa padre.
+- Todo grant registra `grantedById` y `grantedAt`. No exponer estos campos internos innecesariamente.
+- El catalogo se puebla con `pnpm prisma:seed` (idempotente).
+
 - Passwords: 12-128 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
 - **No devolver** password hashes, hashes Argon2, tokens internos, ni `name` (campo interno de Better Auth).
 - **No loguear** tokens, headers `Authorization`, passwords ni env vars con secretos.
@@ -361,7 +377,7 @@ For errors:
 - Authenticate users.
 - Manage user sessions or token refresh when required.
 - Send email notifications if an email service is configured.
-- Select faculty.
+- Select organizational unit.
 - Select career.
 - Modify user data.
 - Assign permissions in event programs and activities.
@@ -370,10 +386,10 @@ For errors:
 ### Event Programs And Activities
 
 - Treat an event program as the mandatory organizational parent of activities.
-- Create one permanent default event program automatically for every faculty and subdirectorate.
+- Create one permanent default event program automatically for every organizational unit (faculty or subdirectorate).
 - Keep the default flag and owning organizational unit immutable for default event programs.
 - Allow only site administrators to create additional event programs.
-- Associate each event program with exactly one faculty or one subdirectorate.
+- Associate each event program with exactly one organizational unit.
 - Default event programs do not require start or end dates; additional programs include name, dates, custom label, and banner.
 - Add collaborators and permissions to event programs.
 - Event-program collaborators and permissions are inherited by their activities by default.
@@ -385,13 +401,13 @@ For errors:
 - Archive event programs instead of deleting them physically.
 - Prohibit physical deletion of event programs, including empty programs.
 - Do not archive an additional event program while it has scheduled or ongoing activities.
-- Do not archive a default event program while its faculty or subdirectorate remains active.
+- Do not archive a default event program while its organizational unit remains active.
 - Reactivate an organizational unit and its existing default event program atomically.
 - Delete or cancel activities according to the applicable retention rule.
 - Before modifying, cancelling, or deleting an activity, support an option to notify registered attendees.
 - Provide event-program and activity list endpoints.
 - Provide available and past activity endpoints or filters.
-- Allow filtering by faculty and subdirectorate.
+- Allow filtering by organizational unit and unit type.
 - Prioritize or filter activities through the organizational unit of their event program.
 
 ### Attendance

@@ -9,14 +9,14 @@ const profileSelect = {
   identificationNumber: true,
   email: true,
   globalRole: true,
-  faculty: { select: { id: true, name: true, code: true } },
+  unit: { select: { id: true, name: true, code: true } },
   career: { select: { id: true, name: true, code: true } },
 } as const;
 
 interface ProfileUpdateData {
   firstName?: string;
   lastName?: string;
-  facultyId?: string;
+  unitId?: string;
   careerId?: string | null;
 }
 
@@ -45,9 +45,9 @@ export const updateProfile = async (
     where: { id: userId },
     select: {
       id: true,
-      facultyId: true,
+      unitId: true,
       careerId: true,
-      career: { select: { facultyId: true } },
+      career: { select: { unitId: true } },
     },
   });
 
@@ -65,41 +65,41 @@ export const updateProfile = async (
     data.lastName = input.lastName;
   }
 
-  if (input.facultyId !== undefined) {
-    const faculty = await prisma.faculty.findUnique({
-      where: { id: input.facultyId },
+  if (input.unitId !== undefined) {
+    const unit = await prisma.organizationalUnit.findUnique({
+      where: { id: input.unitId },
       select: { id: true, isActive: true },
     });
 
-    if (!faculty?.isActive) {
-      throw new ApiError(400, 'Faculty is not available.');
+    if (!unit?.isActive) {
+      throw new ApiError(400, 'Organizational unit is not available.');
     }
 
-    data.facultyId = faculty.id;
+    data.unitId = unit.id;
   }
 
   if (input.careerId !== undefined) {
     const career = await prisma.career.findUnique({
       where: { id: input.careerId },
-      select: { id: true, facultyId: true, isActive: true },
+      select: { id: true, unitId: true, isActive: true },
     });
 
     if (!career?.isActive) {
       throw new ApiError(400, 'Career is not available.');
     }
 
-    const effectiveFacultyId = data.facultyId ?? currentUser.facultyId;
+    const effectiveUnitId = data.unitId ?? currentUser.unitId;
 
-    if (effectiveFacultyId && career.facultyId !== effectiveFacultyId) {
-      throw new ApiError(400, 'Career does not belong to the selected faculty.');
+    if (effectiveUnitId && career.unitId !== effectiveUnitId) {
+      throw new ApiError(400, 'Career does not belong to the selected unit.');
     }
 
-    if (!effectiveFacultyId) {
-      data.facultyId = career.facultyId;
+    if (!effectiveUnitId) {
+      data.unitId = career.unitId;
     }
 
     data.careerId = career.id;
-  } else if (data.facultyId !== undefined && currentUser.career?.facultyId !== data.facultyId) {
+  } else if (data.unitId !== undefined && currentUser.career?.unitId !== data.unitId) {
     data.careerId = null;
   }
 

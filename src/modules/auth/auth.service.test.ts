@@ -97,7 +97,7 @@ describe('auth service', () => {
       id: 'u-1',
       email: 'a@b.com',
       globalRole: 'USER',
-      facultyId: null,
+      unitId: null,
       careerId: null,
       isActive: true,
     });
@@ -138,7 +138,7 @@ describe('auth service', () => {
         id: 'u-1',
         email: 'a@b.com',
         globalRole: 'USER',
-        facultyId: null,
+        unitId: null,
         careerId: null,
         isActive: true,
       },
