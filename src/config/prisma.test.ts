@@ -6,7 +6,7 @@ describe('prisma config', () => {
   afterEach(() => {
     process.env['DATABASE_URL'] = originalDatabaseUrl;
     vi.resetModules();
-    delete globalThis.__sipegPrisma;
+    globalThis.__sipegPrisma = undefined;
   });
 
   it('does not require DATABASE_URL until Prisma is used', async () => {
