@@ -22,6 +22,10 @@ const envSchema = z
     AUTH_TOKEN_TTL: ttlSchema.default('15m'),
     AUTH_REFRESH_TTL: ttlSchema.default('7d'),
     TRUSTED_ORIGINS: z.string().min(1).optional(),
+    DOCS_ENABLED: z
+      .enum(['true', 'false'])
+      .transform((value) => value === 'true')
+      .optional(),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   })
   .superRefine((value, context) => {
