@@ -19,6 +19,12 @@
       "skillPath": "skills/create-architectural-decision-record/SKILL.md",
       "computedHash": "5c99e32293271aef0270c279c2af8b62301e29257bf85f2ebf7e810c740b4404"
     },
+    "drawio": {
+      "source": "jgraph/drawio-mcp",
+      "sourceType": "github",
+      "skillPath": "plugins/claude-code/skills/drawio/SKILL.md",
+      "computedHash": "013953b81f420dc3444604d03608f3c02672b94b8e753ec2027e3615a678591b"
+    },
     "executing-plans": {
       "source": "obra/superpowers",
       "sourceType": "github",
