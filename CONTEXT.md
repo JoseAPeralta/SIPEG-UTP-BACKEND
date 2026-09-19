@@ -9,7 +9,7 @@ El backend debe soportar usuarios, autenticacion, permisos, programas de eventos
 ## Alcance Del Backend
 
 - Exponer endpoints REST versionados, preferiblemente bajo `/api/v1`.
-- Implementar autenticacion y autorizacion con JWT.
+- Reimplementar autenticacion y autorizacion desde 0 (estado actual: sin auth).
 - Persistir datos con Prisma.
 - Validar entradas del cliente antes de llegar a reglas de negocio.
 - Centralizar errores y respuestas JSON.
@@ -31,7 +31,7 @@ El backend debe soportar usuarios, autenticacion, permisos, programas de eventos
 - TypeScript.
 - Express.
 - Prisma ORM.
-- JWT para autenticacion y autorizacion.
+- Autenticacion y autorizacion: pendiente de reimplementar desde 0 (sin modulo `auth` ni middlewares de auth/authorize en el estado actual).
 - pnpm como package manager.
 
 ## Lenguaje De Dominio
@@ -100,12 +100,17 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 
 ### Autenticacion Y Usuarios
 
-- Registrar y autenticar usuarios.
-- Hashear contrasenas con bcrypt o argon2.
-- Emitir access tokens de corta duracion.
-- Implementar refresh tokens solo si se requiere sesion persistente.
-- Administrar facultad, carrera, roles y permisos.
-- Nunca devolver hashes de contrasena ni tokens internos.
+- Proveedor de auth modular con env vars **library-agnostic** (`AUTH_*`). Internamente usa Better Auth 1.7.x + plugin JWT.
+- Password hashing: **Argon2id** con parametros OWASP (`t=2, m=19 MiB, p=1`).
+- API privada 100% stateless: access tokens JWT EdDSA Ed25519 validados contra JWKS cacheado (vida 15 min).
+- Refresh tokens = sesiones nativas del proveedor (vida 7 dias, revocacion server-side inmediata).
+- Flujos en `/api/v1/auth/*`: login, register, refresh, logout, verify-email, forgot-password, reset-password.
+- Handler del proveedor montado en `/api/auth/*splat` para flujos raw si el frontend los necesita.
+- Middlewares: `authenticate` (carga `req.user`), `authorize` (`requireRole`, `requireAdmin`, `requireOwnership`).
+- Rate limit por endpoint sensible (login 5/min, register 3/min, password reset 3/min).
+- Email verification habilitada; SMTP opcional (en dev, Better Auth loguea el email).
+- Variables sensibles: `AUTH_SECRET` (requerido), `AUTH_URL`, opcionales `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_TOKEN_TTL`, `AUTH_REFRESH_TTL`.
+- Documentacion detallada: `AGENTS.md`.
 
 ### Programas De Eventos Y Actividades
 
@@ -185,7 +190,7 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Agregar rate limiting para login, registro, asistencia QR, codigos manuales, formularios publicos y reportes costosos.
 - Usar headers de seguridad cuando corresponda.
 - No registrar secretos, contrasenas, tokens, headers `Authorization`, URLs de base de datos ni CVs.
-- No exponer stack traces, errores crudos de Prisma, detalles de JWT ni secretos en respuestas.
+- No exponer stack traces, errores crudos de Prisma, detalles de tokens ni secretos en respuestas.
 - Auditar acciones administrativas sensibles cuando el modulo lo requiera.
 
 ## Prisma

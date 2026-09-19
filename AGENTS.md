@@ -15,7 +15,7 @@
 - **Runtime target**: Node.js 24.x LTS, or the latest active LTS available in the project environment.
 - **Backend framework**: Express.
 - **ORM**: Prisma.
-- **Authentication**: JWT-based authentication and authorization.
+- **Authentication**: Pendiente de reimplementar desde 0. El backend actualmente no incluye modulo `auth`, middlewares `authenticate`/`authorize` ni utilitarios de tokens.
 - **Language**: TypeScript.
 - **Package manager**: pnpm.
 
@@ -34,7 +34,7 @@ Use these skills as the source of project-specific operating knowledge:
 - `executing-plans`: Use when a written plan exists. Review it critically first, track progress with todos, follow steps exactly, run verifications, and stop on unclear instructions or repeated verification failures.
 - `test-driven-development`: Use for new features, bug fixes, refactors, and behavior changes. Write a failing test first, verify the failure, implement the minimum code to pass, then refactor while tests stay green. Documentation-only and simple configuration-only updates do not require TDD unless behavior is affected.
 - `nodejs-backend-patterns`: Use for Express backend structure, middleware, controllers, services, repositories, error handling, logging, health checks, graceful shutdown, database access, and API response patterns.
-- `secure-code-guardian`: Use for authentication, authorization, JWTs, password hashing, CORS/CSP/security headers, input validation, OWASP prevention, encryption, and secure session management.
+- `secure-code-guardian`: Use for authentication, authorization, JWTs, password hashing, CORS/CSP/security headers, input validation, OWASP prevention, encryption, and secure session management. Aplicar cuando se reimplementen los modulos de auth y autorizacion que hoy estan eliminados.
 - `api-security-best-practices`: Use for new or modified API endpoints, API security reviews, rate limiting, throttling, data protection, and common API attack prevention.
 - `prisma-cli`: Use before running Prisma CLI commands such as `prisma init`, `generate`, `migrate`, `db`, `studio`, `validate`, `format`, or `debug`.
 - `prisma-client-api`: Use when writing Prisma Client CRUD operations, filters, relation queries, `select`/`include`/`omit`, pagination, raw queries, or transactions.
@@ -98,13 +98,6 @@ src/
 |   |-- env.ts
 |   `-- prisma.ts
 |-- modules/
-|   |-- auth/
-|   |   |-- auth.controller.ts
-|   |   |-- auth.routes.ts
-|   |   |-- auth.service.ts
-|   |   |-- auth.schemas.ts
-|   |   `-- auth.types.ts
-|   |-- users/
 |   |-- faculties/
 |   |-- subdirectorates/
 |   |-- careers/
@@ -117,10 +110,8 @@ src/
 |   |-- speakers/
 |   `-- reports/
 |-- middlewares/
-|   |-- auth.middleware.ts
 |   |-- error.middleware.ts
 |   |-- notFound.middleware.ts
-|   |-- rateLimit.middleware.ts
 |   `-- validate.middleware.ts
 |-- utils/
 |   |-- ApiError.ts
@@ -134,6 +125,8 @@ prisma/
 |-- migrations/
 `-- seed.ts
 ```
+
+> Estado actual: el modulo `auth/`, los archivos de `users/` (que dependenian del middleware `authenticate` eliminado), los middlewares `auth.middleware.ts`/`authorize.middleware.ts`/`rateLimit.middleware.ts`, y los utilitarios `jwt.ts`/`token.ts`/`panamanianId.ts` fueron removidos. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
 
 Rules:
 
@@ -153,10 +146,6 @@ Required variables should be documented in `.env.example` when the backend is co
 NODE_ENV=development
 PORT=3000
 DATABASE_URL=""
-JWT_ACCESS_SECRET=""
-JWT_REFRESH_SECRET=""
-JWT_ACCESS_EXPIRES_IN="15m"
-JWT_REFRESH_EXPIRES_IN="7d"
 CORS_ORIGIN="http://localhost:5173"
 ```
 
@@ -241,22 +230,33 @@ For errors:
 
 ## Authentication And Authorization Rules
 
-- Use JWT for authentication.
-- Store JWT secrets in environment variables.
-- Never hardcode JWT secrets.
-- Prefer short-lived access tokens.
-- Use refresh tokens only if the authentication flow requires persistent sessions.
-- If refresh tokens are implemented, store them so they can be revoked or invalidated.
-- Do not store plain text passwords.
-- Hash passwords with bcrypt or argon2 using secure parameters before storage.
-- Do not return password hashes in API responses.
-- Use generic invalid-credential errors. Do not reveal whether an email or user exists.
-- Protect private routes with authentication middleware.
-- Enforce permissions with authorization middleware or service-level checks.
-- Validate horizontal and vertical authorization, especially for event-program and activity ownership, collaborators, attendance operations, certificate generation, classroom administration, speaker review, and report export.
-- Do not trust role or permission values sent directly by the client.
-- Always derive authenticated user identity from a verified token.
-- Explicitly allowlist JWT algorithms, and configure issuer/audience when the token design includes them.
+- Stack: proveedor de auth modular con env vars **library-agnostic** (`AUTH_*`). Internamente usa Better Auth 1.7.x + plugin JWT. Si se reemplaza el proveedor, las env vars no cambian.
+- Password hashing: **Argon2id** (OWASP Password Storage Cheat Sheet, parametros `t=2, m=19 MiB, p=1`). Configurable opcionalmente via `AUTH_ARGON2_MEMORY_COST`, `AUTH_ARGON2_TIME_COST`, `AUTH_ARGON2_PARALLELISM`.
+- Sesiones del proveedor = refresh tokens (vida 7 dias por defecto). Rotacion automatica, revocacion server-side inmediata via delete en `sessions`.
+- Access tokens: JWT EdDSA Ed25519 (vida 15 min por defecto), firmados con la clave privada del JWKS almacenado en la tabla `jwks`. Validados contra `/api/auth/jwks` cacheado con jose (`createRemoteJWKSet`). La API privada es stateless.
+- Algoritmos JWT permitidos en el verifier: solo `['EdDSA']`. Issuer/Audience validados contra `AUTH_ISSUER`/`AUTH_AUDIENCE` (default = `AUTH_URL`).
+- Variables de entorno relevantes:
+  - `AUTH_SECRET` (requerido, >=32 chars) — secreto de Better Auth para cookies y cifrado simetrico
+  - `AUTH_URL` (default `http://localhost:3000`)
+  - `AUTH_ISSUER`, `AUTH_AUDIENCE` (default = `AUTH_URL`)
+  - `AUTH_TOKEN_TTL` (default `15m`), `AUTH_REFRESH_TTL` (default `7d`)
+  - `TRUSTED_ORIGINS` (CSV adicional a `CORS_ORIGIN`)
+- Rate limiting (via express-rate-limit):
+  - Login: 5/min por usuario/IP
+  - Register: 3/min por usuario/IP
+  - Password reset: 3/min por usuario/IP
+  - Better Auth rate limit global: 100/min (configurable)
+- `src/lib/auth.ts` es la unica instancia del proveedor.
+- `src/lib/password.ts` centraliza hashing Argon2id (usado por el proveedor via `password.hash`/`password.verify`).
+- `src/utils/jwt-verifier.ts` es el unico verificador de access tokens.
+- `src/middlewares/authenticate.middleware.ts` carga `req.user` desde DB usando solo el `sub` del JWT.
+- `src/middlewares/authorize.middleware.ts` provee `requireRole`, `requireAdmin`, `requireOwnership`.
+- Orden recomendado de middlewares en rutas privadas:
+  `authenticate -> requireRole/requireOwnership -> validate(schema) -> controller`.
+- Passwords: 12-128 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
+- **No devolver** password hashes, hashes Argon2, tokens internos, ni `name` (campo interno de Better Auth).
+- **No loguear** tokens, headers `Authorization`, passwords ni env vars con secretos.
+- En startup, `ensureJwks()` se asegura de que la tabla `jwks` tenga al menos una fila para firmar access tokens.
 
 ## Security Rules
 
