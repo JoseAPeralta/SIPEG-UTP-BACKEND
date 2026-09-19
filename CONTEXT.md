@@ -60,6 +60,8 @@ Unidad organizadora que agrupa actividades. Pertenece exactamente a una unidad o
 
 Evento individual que pertenece obligatoriamente a un programa de eventos. Tiene nombre, tipo, ponente, aula, fecha, hora, equipamiento requerido, banner, colaboradores y permisos.
 
+El termino "evento" puede usarse de forma coloquial, pero el nombre oficial del recurso, del modelo y del endpoint es **actividad** (`activities`). No existe un recurso `/events`.
+
 ### Asistente Registrado
 
 Usuario inscrito o esperado en una actividad. Puede recibir notificaciones cuando la actividad se modifica, cancela o elimina.
@@ -120,7 +122,7 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 
 ### Programas De Eventos Y Actividades
 
-- `GET /api/v1/events` es publico y devuelve proximos eventos: actividades `SCHEDULED`/`ONGOING` de programas `ACTIVE`, con `date >= hoy` en la zona institucional.
+- `GET /api/v1/activities` es publico y devuelve proximas actividades: actividades `SCHEDULED`/`ONGOING` de programas `ACTIVE`, con `date >= hoy` en la zona institucional.
 - Paginacion offset: `?page` (default 1) y `?limit` (default 20, maximo 50). Respuesta `data = { items, page, limit, total, totalPages }`; no expone `qrCode` ni `manualCode`.
 - Crear automaticamente un programa predeterminado permanente al crear una unidad organizativa.
 - Permitir que solo el administrador del sitio cree programas adicionales.

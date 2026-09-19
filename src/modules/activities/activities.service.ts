@@ -1,12 +1,12 @@
 import { getPrismaClient } from '../../config/prisma.js';
 import type { ActivityType } from '../../generated/prisma/enums.js';
 import { startOfInstitutionalDay } from '../../utils/date.js';
-import type { ListEventsQuery } from './events.schemas.js';
-import type { EventListItem, PaginatedEvents } from './events.types.js';
+import type { ListActivitiesQuery } from './activities.schemas.js';
+import type { ActivityListItem, PaginatedActivities } from './activities.types.js';
 
 const UPCOMING_STATUSES = ['SCHEDULED', 'ONGOING'] as const;
 
-const eventSelect = {
+const activitySelect = {
   id: true,
   name: true,
   description: true,
@@ -28,7 +28,7 @@ const eventSelect = {
   },
 } as const;
 
-interface EventRecord {
+interface ActivityRecord {
   id: string;
   name: string;
   description: string | null;
@@ -52,7 +52,7 @@ const formatDate = (value: Date): string => value.toISOString().slice(0, 10);
 
 const formatTime = (value: Date): string => value.toISOString().slice(11, 16);
 
-const toEventListItem = (record: EventRecord): EventListItem => {
+const toActivityListItem = (record: ActivityRecord): ActivityListItem => {
   const { organizationalUnit } = record.eventProgram;
 
   return {
@@ -92,10 +92,10 @@ const toEventListItem = (record: EventRecord): EventListItem => {
   };
 };
 
-export const listUpcomingEvents = async (
-  query: ListEventsQuery,
+export const listUpcomingActivities = async (
+  query: ListActivitiesQuery,
   now: Date = new Date(),
-): Promise<PaginatedEvents> => {
+): Promise<PaginatedActivities> => {
   const prisma = getPrismaClient();
 
   const where = {
@@ -112,13 +112,13 @@ export const listUpcomingEvents = async (
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
       skip,
       take: query.limit,
-      select: eventSelect,
+      select: activitySelect,
     }),
     prisma.activity.count({ where }),
   ]);
 
   return {
-    items: records.map((record) => toEventListItem(record)),
+    items: records.map((record) => toActivityListItem(record)),
     page: query.page,
     limit: query.limit,
     total,

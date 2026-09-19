@@ -156,6 +156,13 @@ Respuesta esperada:
 - El claim `unitId` viaja en el access token JWT; la coherencia carrera-unidad se valida en el servicio.
 - Las unidades organizativas se modelan en `organizational_units` con `type` (`FACULTY` o `SUBDIRECTORATE`) y un `head` (encargado) opcional. Ver `docs/adr/adr-0003-unified-organizational-units.md`.
 
+### Actividades
+
+- `GET /api/v1/activities` es publico y devuelve las proximas actividades: actividades `SCHEDULED`/`ONGOING` de programas `ACTIVE` con `date >= hoy` (zona institucional `America/Panama`).
+- Paginacion offset: `?page` (default 1) y `?limit` (default 20, maximo 50). Respuesta `data = { items, page, limit, total, totalPages }`.
+- Cada item incluye `eventProgram` (programa de eventos) y `organizationalUnit`; nunca expone `qrCode` ni `manualCode`.
+- Terminologia: "evento" se usa coloquialmente, pero el nombre oficial del recurso es **actividad** (`/activities`). La ruta `/events` fue retirada.
+
 ## Datos De Prueba (Seed)
 
 `pnpm run prisma:seed` carga un conjunto completo e idempotente de datos de prueba
@@ -195,7 +202,7 @@ src/
 |   |-- env.ts
 |   `-- prisma.ts
 |-- controllers/
-|   |-- events.controller.ts
+|   |-- activities.controller.ts
 |   `-- health.controller.ts
 |-- lib/
 |   |-- auth.ts
@@ -208,12 +215,12 @@ src/
 |   |-- rateLimit.middleware.ts
 |   `-- validate.middleware.ts
 |-- modules/
+|   |-- activities/
 |   |-- auth/
 |   |-- authorization/
-|   |-- events/
 |   `-- users/
 |-- routes/
-|   |-- events.routes.ts
+|   |-- activities.routes.ts
 |   |-- health.routes.ts
 |   `-- index.ts
 |-- types/
@@ -236,8 +243,8 @@ Ejemplos:
 
 - `src/routes/health.routes.ts`
 - `src/routes/health.routes.test.ts`
-- `src/routes/events.routes.ts`
-- `src/routes/events.routes.test.ts`
+- `src/routes/activities.routes.ts`
+- `src/routes/activities.routes.test.ts`
 
 ## Configuracion
 

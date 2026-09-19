@@ -1,22 +1,22 @@
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-interface EventsServiceMock {
-  listUpcomingEvents: ReturnType<typeof vi.fn>;
+interface ActivitiesServiceMock {
+  listUpcomingActivities: ReturnType<typeof vi.fn>;
 }
 
-const buildServiceMock = (): EventsServiceMock => ({
-  listUpcomingEvents: vi.fn(),
+const buildServiceMock = (): ActivitiesServiceMock => ({
+  listUpcomingActivities: vi.fn(),
 });
 
-const loadApp = async (service: EventsServiceMock) => {
+const loadApp = async (service: ActivitiesServiceMock) => {
   vi.resetModules();
-  vi.doMock('../modules/events/events.service.js', () => service);
+  vi.doMock('../modules/activities/activities.service.js', () => service);
   const { app } = await import('../app.js');
   return app;
 };
 
-const eventItem = {
+const activityItem = {
   id: 'activity-001',
   name: 'Taller de Inteligencia Artificial',
   description: null,
@@ -36,15 +36,15 @@ const eventItem = {
   },
 };
 
-describe('event routes', () => {
+describe('activity routes', () => {
   afterEach(() => {
-    vi.doUnmock('../modules/events/events.service.js');
+    vi.doUnmock('../modules/activities/activities.service.js');
   });
 
-  it('returns paginated upcoming events', async () => {
+  it('returns paginated upcoming activities', async () => {
     const service = buildServiceMock();
-    service.listUpcomingEvents.mockResolvedValue({
-      items: [eventItem],
+    service.listUpcomingActivities.mockResolvedValue({
+      items: [activityItem],
       page: 1,
       limit: 20,
       total: 1,
@@ -52,13 +52,13 @@ describe('event routes', () => {
     });
     const app = await loadApp(service);
 
-    const response = await request(app).get('/api/v1/events').expect(200);
+    const response = await request(app).get('/api/v1/activities').expect(200);
 
     expect(response.body).toEqual({
       success: true,
-      message: 'Events retrieved successfully.',
+      message: 'Activities retrieved successfully.',
       data: {
-        items: [eventItem],
+        items: [activityItem],
         page: 1,
         limit: 20,
         total: 1,
@@ -69,7 +69,7 @@ describe('event routes', () => {
 
   it('applies default pagination when no query is provided', async () => {
     const service = buildServiceMock();
-    service.listUpcomingEvents.mockResolvedValue({
+    service.listUpcomingActivities.mockResolvedValue({
       items: [],
       page: 1,
       limit: 20,
@@ -78,14 +78,14 @@ describe('event routes', () => {
     });
     const app = await loadApp(service);
 
-    await request(app).get('/api/v1/events').expect(200);
+    await request(app).get('/api/v1/activities').expect(200);
 
-    expect(service.listUpcomingEvents).toHaveBeenCalledWith({ page: 1, limit: 20 });
+    expect(service.listUpcomingActivities).toHaveBeenCalledWith({ page: 1, limit: 20 });
   });
 
   it('forwards parsed pagination parameters', async () => {
     const service = buildServiceMock();
-    service.listUpcomingEvents.mockResolvedValue({
+    service.listUpcomingActivities.mockResolvedValue({
       items: [],
       page: 3,
       limit: 50,
@@ -94,26 +94,26 @@ describe('event routes', () => {
     });
     const app = await loadApp(service);
 
-    await request(app).get('/api/v1/events?page=3&limit=50').expect(200);
+    await request(app).get('/api/v1/activities?page=3&limit=50').expect(200);
 
-    expect(service.listUpcomingEvents).toHaveBeenCalledWith({ page: 3, limit: 50 });
+    expect(service.listUpcomingActivities).toHaveBeenCalledWith({ page: 3, limit: 50 });
   });
 
   it('rejects a limit above the maximum', async () => {
     const service = buildServiceMock();
     const app = await loadApp(service);
 
-    const response = await request(app).get('/api/v1/events?limit=100').expect(400);
+    const response = await request(app).get('/api/v1/activities?limit=100').expect(400);
 
     expect(response.body).toMatchObject({ success: false, message: 'Validation error.' });
-    expect(service.listUpcomingEvents).not.toHaveBeenCalled();
+    expect(service.listUpcomingActivities).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid page', async () => {
     const service = buildServiceMock();
     const app = await loadApp(service);
 
-    await request(app).get('/api/v1/events?page=0').expect(400);
-    expect(service.listUpcomingEvents).not.toHaveBeenCalled();
+    await request(app).get('/api/v1/activities?page=0').expect(400);
+    expect(service.listUpcomingActivities).not.toHaveBeenCalled();
   });
 });
