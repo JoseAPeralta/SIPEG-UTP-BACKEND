@@ -1,118 +1,178 @@
-import bcrypt from 'bcryptjs';
+import { APIError } from 'better-auth/api';
 
-import { getPrismaClient } from '../../config/prisma.js';
+import { env } from '../../config/env.js';
+import { auth } from '../../lib/auth.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { isPanamanianCedula, normalizeCedula } from '../../utils/cedula.js';
-import { signAccessToken } from '../../utils/jwt.js';
-import type { LoginUserInput, LoginUserResponse, RegisterUserInput, RegisterUserResponse } from './auth.types.js';
+import type {
+  ForgotPasswordBody,
+  LoginBody,
+  LogoutBody,
+  RefreshBody,
+  RegisterBody,
+  ResetPasswordBody,
+  VerifyEmailBody,
+} from './auth.schemas.js';
 
-const passwordSaltRounds = 12;
-
-interface UniqueConstraintErrorShape {
-  code?: string;
+export interface AuthSuccess {
+  accessToken: string;
+  accessTokenExpiresAt: Date;
+  refreshToken: string;
+  refreshTokenExpiresAt: Date;
 }
 
-const isUniqueConstraintError = (error: unknown): boolean => {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as UniqueConstraintErrorShape).code === 'P2002'
-  );
+const betterAuthHeaders = (extra?: Record<string, string>): Record<string, string> => ({
+  'content-type': 'application/json',
+  origin: env.AUTH_URL,
+  ...extra,
+});
+
+const parseTtlToMs = (ttl: string): number => {
+  const match = /^(\d+)([smhd])$/.exec(ttl);
+  if (!match) return 15 * 60 * 1000;
+  const value = Number(match[1]);
+  const unit = match[2];
+  if (unit === 's') return value * 1000;
+  if (unit === 'm') return value * 60 * 1000;
+  if (unit === 'h') return value * 60 * 60 * 1000;
+  return value * 24 * 60 * 60 * 1000;
 };
 
-export const registerUser = async (input: RegisterUserInput): Promise<RegisterUserResponse> => {
-  const prisma = getPrismaClient();
-  const existingUser = await prisma.user.findFirst({
-    where: {
-      OR: [{ correo: input.correo }, { cedula: input.cedula }],
-    },
-    select: {
-      correo: true,
-      cedula: true,
-    },
+const throwBetterAuthError = (error: unknown): never => {
+  if (error instanceof APIError) {
+    throw new ApiError(error.statusCode ?? 400, error.message);
+  }
+  if (error instanceof Error) {
+    throw new ApiError(401, 'Invalid credentials.');
+  }
+  throw new ApiError(500, 'Authentication error.');
+};
+
+const issueAccessToken = async (bearerToken: string): Promise<{ token: string; expiresAt: Date }> => {
+  const tokenResponse = await auth.api.getToken({
+    headers: betterAuthHeaders({ authorization: `Bearer ${bearerToken}` }),
+    asResponse: false,
   });
+  return {
+    token: tokenResponse.token,
+    expiresAt: new Date(Date.now() + parseTtlToMs(env.AUTH_TOKEN_TTL)),
+  };
+};
 
-  if (existingUser?.correo === input.correo) {
-    throw new ApiError(409, 'Email is already registered.');
+const fetchSessionExpiry = async (bearerToken: string): Promise<Date> => {
+  const session = await auth.api.getSession({
+    headers: betterAuthHeaders({ authorization: `Bearer ${bearerToken}` }),
+    asResponse: false,
+  });
+  if (!session) {
+    throw new ApiError(401, 'Session not found.');
   }
+  return new Date(session.session.expiresAt);
+};
 
-  if (existingUser?.cedula === input.cedula) {
-    throw new ApiError(409, 'Cedula is already registered.');
-  }
-
-  const passwordHash = await bcrypt.hash(input.contrasenia, passwordSaltRounds);
-
+export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> => {
   try {
-    const user = await prisma.user.create({
-      data: {
-        nombre: input.nombre,
-        apellido: input.apellido,
-        cedula: input.cedula,
-        correo: input.correo,
-        passwordHash,
-      },
+    const result = await auth.api.signInEmail({
+      body: { email: body.email, password: body.password },
+      headers: betterAuthHeaders(),
+      asResponse: false,
     });
-
+    const access = await issueAccessToken(result.token);
+    const refreshExpiresAt = await fetchSessionExpiry(result.token);
     return {
-      user: {
-        id: user.id,
-        nombre: user.nombre,
-        apellido: user.apellido,
-        cedula: user.cedula,
-        correo: user.correo,
-      },
-      accessToken: signAccessToken({ userId: user.id, correo: user.correo }),
+      accessToken: access.token,
+      accessTokenExpiresAt: access.expiresAt,
+      refreshToken: result.token,
+      refreshTokenExpiresAt: refreshExpiresAt,
     };
   } catch (error) {
-    if (isUniqueConstraintError(error)) {
-      throw new ApiError(409, 'User is already registered.');
-    }
-
-    throw error;
+    throwBetterAuthError(error);
+    throw new Error('unreachable');
   }
 };
 
-export const loginUser = async (input: LoginUserInput): Promise<LoginUserResponse> => {
-  const prisma = getPrismaClient();
-  const { identificador, contrasenia } = input;
-
-  const isCedula = isPanamanianCedula(identificador);
-  const normalizedIdentificador = isCedula ? normalizeCedula(identificador) : identificador.toLowerCase();
-
-  const whereClause = isCedula
-    ? { cedula: normalizedIdentificador }
-    : { correo: normalizedIdentificador };
-
-  const user = await prisma.user.findFirst({
-    where: whereClause,
-    select: {
-      id: true,
-      nombre: true,
-      apellido: true,
-      cedula: true,
-      correo: true,
-      passwordHash: true,
-    },
-  });
-
-  if (!user) {
-    throw new ApiError(401, 'Invalid credentials.');
+export const registerUser = async (body: RegisterBody): Promise<{ userId: string }> => {
+  try {
+    const result = await auth.api.signUpEmail({
+      body: {
+        email: body.email,
+        password: body.password,
+        name: `${body.firstName} ${body.lastName}`,
+        firstName: body.firstName,
+        lastName: body.lastName,
+        identificationNumber: body.identificationNumber,
+        facultyId: body.facultyId,
+        careerId: body.careerId,
+      },
+      headers: betterAuthHeaders(),
+      asResponse: false,
+    });
+    return { userId: result.user.id };
+  } catch (error) {
+    throwBetterAuthError(error);
+    throw new Error('unreachable');
   }
+};
 
-  const isValidPassword = await bcrypt.compare(contrasenia, user.passwordHash);
-
-  if (!isValidPassword) {
-    throw new ApiError(401, 'Invalid credentials.');
+export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess> => {
+  try {
+    const access = await issueAccessToken(body.refreshToken);
+    const refreshExpiresAt = await fetchSessionExpiry(body.refreshToken);
+    return {
+      accessToken: access.token,
+      accessTokenExpiresAt: access.expiresAt,
+      refreshToken: body.refreshToken,
+      refreshTokenExpiresAt: refreshExpiresAt,
+    };
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throwBetterAuthError(error);
+    throw new Error('unreachable');
   }
+};
 
-  return {
-    user: {
-      id: user.id,
-      nombre: user.nombre,
-      apellido: user.apellido,
-      cedula: user.cedula,
-      correo: user.correo,
-    },
-    accessToken: signAccessToken({ userId: user.id, correo: user.correo }),
-  };
+export const logoutUser = async (_body: LogoutBody): Promise<void> => {
+  try {
+    await auth.api.signOut({
+      headers: betterAuthHeaders({ authorization: `Bearer ${_body.refreshToken}` }),
+      asResponse: false,
+    });
+  } catch (error) {
+    throwBetterAuthError(error);
+  }
+};
+
+export const verifyEmail = async (body: VerifyEmailBody): Promise<void> => {
+  try {
+    await auth.api.verifyEmail({
+      query: { token: body.token },
+      headers: betterAuthHeaders(),
+      asResponse: false,
+    });
+  } catch (error) {
+    throwBetterAuthError(error);
+  }
+};
+
+export const requestPasswordReset = async (body: ForgotPasswordBody): Promise<void> => {
+  try {
+    await auth.api.requestPasswordReset({
+      body: { email: body.email, redirectTo: `${env.AUTH_URL}/reset-password` },
+      headers: betterAuthHeaders(),
+      asResponse: false,
+    });
+  } catch (error) {
+    throwBetterAuthError(error);
+  }
+};
+
+export const resetPassword = async (body: ResetPasswordBody): Promise<void> => {
+  try {
+    await auth.api.resetPassword({
+      body: { token: body.token, newPassword: body.newPassword },
+      headers: betterAuthHeaders(),
+      asResponse: false,
+    });
+  } catch (error) {
+    throwBetterAuthError(error);
+  }
 };
