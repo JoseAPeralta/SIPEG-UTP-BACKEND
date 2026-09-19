@@ -4,33 +4,33 @@ ARG NODE_VERSION=24.11.1
 
 FROM node:${NODE_VERSION}-slim AS base
 WORKDIR /app
-ENV NPM_CONFIG_LOGLEVEL=warn
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+RUN corepack enable && corepack prepare pnpm@12.4.1 --activate
 
 FROM base AS deps
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
 FROM base AS prod-deps
 ENV NODE_ENV=production
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --prod --frozen-lockfile && pnpm store prune
 
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json package-lock.json tsconfig.json tsconfig.build.json prisma.config.ts ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json tsconfig.build.json prisma.config.ts ./
 COPY prisma ./prisma
 COPY src ./src
-RUN npm run prisma:generate
-RUN npm run build
+RUN pnpm run prisma:generate
+RUN pnpm run build
 
 FROM node:${NODE_VERSION}-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
-    PORT=3000 \
-    NPM_CONFIG_LOGLEVEL=warn
+    PORT=3000
 
 COPY --from=prod-deps --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist

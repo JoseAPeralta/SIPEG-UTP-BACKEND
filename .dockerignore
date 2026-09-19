@@ -3,7 +3,6 @@
 .agents
 .cache
 .eslintcache
-.npm
 .nyc_output
 .parcel-cache
 .stylelintcache
@@ -24,7 +23,6 @@ src/generated
 *.seed
 *.tgz
 *.tsbuildinfo
-npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
