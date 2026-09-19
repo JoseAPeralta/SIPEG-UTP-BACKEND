@@ -68,7 +68,7 @@ Usuario inscrito o esperado en una actividad. Puede recibir notificaciones cuand
 
 ### Registro De Asistencia
 
-Evidencia de presencia en una actividad. Puede capturarse mediante QR o codigo manual.
+Evidencia de presencia en una actividad. Cada inscripcion (`activity` × `user`) tiene un `code` unico de validacion; el `method` (`QR`/`MANUAL`) registra como se valido. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 
 ### Certificado
 
@@ -123,7 +123,9 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 ### Programas De Eventos Y Actividades
 
 - `GET /api/v1/activities` es publico y devuelve proximas actividades: actividades `SCHEDULED`/`ONGOING` de programas `ACTIVE`, con `date >= hoy` en la zona institucional.
-- Paginacion offset: `?page` (default 1) y `?limit` (default 20, maximo 50). Respuesta `data = { items, page, limit, total, totalPages }`; no expone `qrCode` ni `manualCode`.
+- Paginacion offset: `?page` (default 1) y `?limit` (default 20, maximo 50). Respuesta `data = { items, page, limit, total, totalPages }`; la lista no expone codigos de check-in.
+- `POST /api/v1/activities` (privado) crea actividades en estado `DRAFT` dentro de un programa `ACTIVE`, con permiso `activity:create` o rol `ADMIN`.
+- Los codigos de check-in (`code`) viven en `attendance` (uno por inscripcion, unico global), no en la actividad. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 - Crear automaticamente un programa predeterminado permanente al crear una unidad organizativa.
 - Permitir que solo el administrador del sitio cree programas adicionales.
 - Asociar cada programa exactamente a una unidad organizativa (`organizationalUnitId`).
