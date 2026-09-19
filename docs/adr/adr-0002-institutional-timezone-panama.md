@@ -64,7 +64,7 @@ La institucion opera en Panama, cuya zona horaria es `America/Panama` (UTC-5) y 
 ## Implementation Notes
 
 - **IMP-001**: `src/utils/date.ts` expone `INSTITUTIONAL_TIME_ZONE`, `getInstitutionalDateKey` y `startOfInstitutionalDay`.
-- **IMP-002**: `listUpcomingEvents` en `src/modules/events/events.service.ts` usa `startOfInstitutionalDay(now)` para el filtro `date >= hoy`.
+- **IMP-002**: `listUpcomingActivities` en `src/modules/activities/activities.service.ts` usa `startOfInstitutionalDay(now)` para el filtro `date >= hoy`. (La ruta y el modulo se renombraron de `events` a `activities`; el nombre oficial del recurso es actividad.)
 - **IMP-003**: Tests de borde en `src/utils/date.test.ts` cubren el cambio de dia a las 05:00 UTC (medianoche en Panama).
 - **IMP-004**: Criterio de exito: un instante `2026-09-20T03:00:00Z` (19 sep 22:00 en Panama) filtra desde `2026-09-19`.
 

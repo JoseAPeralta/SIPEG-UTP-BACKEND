@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-interface EventRecord {
+interface ActivityRecord {
   id: string;
   name: string;
   description: string | null;
@@ -44,10 +44,10 @@ const loadService = async (prisma: PrismaMock) => {
     getPrismaClient: () => prisma,
   }));
 
-  return import('./events.service.js');
+  return import('./activities.service.js');
 };
 
-const buildRecord = (overrides: Partial<EventRecord> = {}): EventRecord => ({
+const buildRecord = (overrides: Partial<ActivityRecord> = {}): ActivityRecord => ({
   id: 'activity-001',
   name: 'Taller de Inteligencia Artificial',
   description: 'Introduccion a modelos generativos.',
@@ -74,18 +74,18 @@ const buildRecord = (overrides: Partial<EventRecord> = {}): EventRecord => ({
 
 const NOW = new Date('2026-09-19T15:00:00.000Z');
 
-describe('events service', () => {
+describe('activities service', () => {
   afterEach(() => {
     vi.doUnmock('../../config/prisma.js');
   });
 
-  it('queries upcoming active events with pagination', async () => {
+  it('queries upcoming active activities with pagination', async () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([buildRecord()]);
     prisma.activity.count.mockResolvedValue(37);
-    const { listUpcomingEvents } = await loadService(prisma);
+    const { listUpcomingActivities } = await loadService(prisma);
 
-    const result = await listUpcomingEvents({ page: 2, limit: 20 }, NOW);
+    const result = await listUpcomingActivities({ page: 2, limit: 20 }, NOW);
 
     expect(prisma.activity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -107,9 +107,9 @@ describe('events service', () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([]);
     prisma.activity.count.mockResolvedValue(0);
-    const { listUpcomingEvents } = await loadService(prisma);
+    const { listUpcomingActivities } = await loadService(prisma);
 
-    await listUpcomingEvents({ page: 1, limit: 20 }, new Date('2026-09-20T03:00:00.000Z'));
+    await listUpcomingActivities({ page: 1, limit: 20 }, new Date('2026-09-20T03:00:00.000Z'));
 
     expect(prisma.activity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -124,9 +124,9 @@ describe('events service', () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([buildRecord()]);
     prisma.activity.count.mockResolvedValue(1);
-    const { listUpcomingEvents } = await loadService(prisma);
+    const { listUpcomingActivities } = await loadService(prisma);
 
-    const result = await listUpcomingEvents({ page: 1, limit: 20 }, NOW);
+    const result = await listUpcomingActivities({ page: 1, limit: 20 }, NOW);
 
     expect(result.items).toEqual([
       {
@@ -172,9 +172,9 @@ describe('events service', () => {
       }),
     ]);
     prisma.activity.count.mockResolvedValue(1);
-    const { listUpcomingEvents } = await loadService(prisma);
+    const { listUpcomingActivities } = await loadService(prisma);
 
-    const result = await listUpcomingEvents({ page: 1, limit: 20 }, NOW);
+    const result = await listUpcomingActivities({ page: 1, limit: 20 }, NOW);
 
     expect(result.items[0]?.organizationalUnit).toEqual({
       type: 'SUBDIRECTORATE',
@@ -185,13 +185,13 @@ describe('events service', () => {
     expect(result.items[0]?.classroom).toBeNull();
   });
 
-  it('returns zero total pages when there are no events', async () => {
+  it('returns zero total pages when there are no activities', async () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([]);
     prisma.activity.count.mockResolvedValue(0);
-    const { listUpcomingEvents } = await loadService(prisma);
+    const { listUpcomingActivities } = await loadService(prisma);
 
-    const result = await listUpcomingEvents({ page: 1, limit: 20 }, NOW);
+    const result = await listUpcomingActivities({ page: 1, limit: 20 }, NOW);
 
     expect(result).toEqual({ items: [], page: 1, limit: 20, total: 0, totalPages: 0 });
   });

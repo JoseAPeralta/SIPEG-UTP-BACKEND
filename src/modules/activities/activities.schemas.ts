@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const listEventsQuerySchema = z.object({
+export const listActivitiesQuerySchema = z.object({
   query: z
     .object({
       page: z.coerce
@@ -18,4 +18,4 @@ export const listEventsQuerySchema = z.object({
     .strict(),
 });
 
-export type ListEventsQuery = z.infer<typeof listEventsQuerySchema>['query'];
+export type ListActivitiesQuery = z.infer<typeof listActivitiesQuerySchema>['query'];
