@@ -2,6 +2,7 @@ import type { CollaborationRole } from '../../generated/prisma/enums.js';
 
 export const PERMISSIONS = {
   PROGRAM_READ: 'program:read',
+  PROGRAM_CREATE: 'program:create',
   PROGRAM_UPDATE: 'program:update',
   PROGRAM_ARCHIVE: 'program:archive',
   ACTIVITY_READ: 'activity:read',
@@ -27,6 +28,7 @@ export const PERMISSION_NAMES = Object.values(PERMISSIONS) as PermissionName[];
 
 export const PERMISSION_DESCRIPTIONS: Record<PermissionName, string> = {
   [PERMISSIONS.PROGRAM_READ]: 'Ver programas de eventos.',
+  [PERMISSIONS.PROGRAM_CREATE]: 'Crear programas de eventos adicionales.',
   [PERMISSIONS.PROGRAM_UPDATE]: 'Actualizar programas de eventos.',
   [PERMISSIONS.PROGRAM_ARCHIVE]: 'Archivar programas de eventos.',
   [PERMISSIONS.ACTIVITY_READ]: 'Ver actividades.',
