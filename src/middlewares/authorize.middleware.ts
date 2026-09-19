@@ -1,55 +1,39 @@
-import type { Request, RequestHandler } from 'express';
+import type { RequestHandler } from 'express';
 
-import type { CollaborationRole } from '../generated/prisma/enums.js';
-import {
-  hasRequiredRole,
-  resolveActivityAccess,
-  resolveProgramAccess,
-} from '../services/authorization.service.js';
 import { ApiError } from '../utils/ApiError.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
-import { requireAuthenticatedUser } from './auth.middleware.js';
+import { requireAuthenticatedUser } from './authenticate.middleware.js';
 
-const forbiddenError = (): ApiError => {
-  return new ApiError(403, 'You do not have permission to perform this action.');
-};
+export type GlobalRole = 'USER' | 'ADMIN';
 
-const requireRouteParam = (req: Request, name: string, label: string): string => {
-  const value = req.params[name];
-
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new ApiError(400, `${label} is required.`);
-  }
-
-  return value;
-};
-
-export const requireProgramRole = (requiredRole: CollaborationRole): RequestHandler => {
-  return asyncHandler(async (req, _res, next) => {
-    const user = requireAuthenticatedUser(req);
-    const eventProgramId = requireRouteParam(req, 'eventProgramId', 'Event program ID');
-
-    const access = await resolveProgramAccess(user, eventProgramId);
-
-    if (!access || !hasRequiredRole(access.role, requiredRole)) {
-      throw forbiddenError();
+export const requireRole = (...allowed: GlobalRole[]): RequestHandler => {
+  return (req, _res, next) => {
+    try {
+      const user = requireAuthenticatedUser(req);
+      if (!allowed.includes(user.globalRole)) {
+        throw new ApiError(403, 'Insufficient privileges for this resource.');
+      }
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    next();
-  });
+  };
 };
 
-export const requireActivityRole = (requiredRole: CollaborationRole): RequestHandler => {
-  return asyncHandler(async (req, _res, next) => {
-    const user = requireAuthenticatedUser(req);
-    const activityId = requireRouteParam(req, 'activityId', 'Activity ID');
+export const requireAdmin: RequestHandler = requireRole('ADMIN');
 
-    const access = await resolveActivityAccess(user, activityId);
-
-    if (!access || !hasRequiredRole(access.role, requiredRole)) {
-      throw forbiddenError();
+export const requireOwnership = (
+  selector: (req: Express.Request) => string | undefined,
+): RequestHandler => {
+  return (req, _res, next) => {
+    try {
+      const user = requireAuthenticatedUser(req);
+      const ownerId = selector(req);
+      if (!ownerId || ownerId !== user.id) {
+        throw new ApiError(403, 'You do not own this resource.');
+      }
+      next();
+    } catch (error) {
+      next(error);
     }
-
-    next();
-  });
+  };
 };
