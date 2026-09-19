@@ -43,6 +43,9 @@ jspm_packages/
 # OpenCode tooling
 .opencode/
 
+# Bruno private environment overrides
+bruno/environments/*.private.bru
+
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
