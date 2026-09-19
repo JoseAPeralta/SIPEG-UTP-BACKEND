@@ -225,12 +225,21 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
 - El claim `unitId` viaja en el access token JWT; la coherencia carrera-unidad se valida en el servicio.
 - Las unidades organizativas se modelan en `organizational_units` con `type` (`FACULTY` o `SUBDIRECTORATE`) y un `head` (encargado) opcional. Ver `docs/adr/adr-0003-unified-organizational-units.md`.
 
+### Programas De Eventos
+
+- `GET /api/v1/event-programs` es publico y devuelve programas con estado `ACTIVE`, ordenados por nombre.
+- Paginacion offset: `?page` (default 1) y `?limit` (default 20, maximo 50). Respuesta `data = { items, page, limit, total, totalPages }`.
+- Filtros opcionales: `organizationalUnitId`, `unitType` (`FACULTY` o `SUBDIRECTORATE`) y `q`, que busca sin distinguir mayusculas en el nombre y la etiqueta.
+- `PATCH /api/v1/event-programs/:id` (privado) actualiza parcialmente `name`, `description`, `label`, `bannerUrl`, `startDate` y `endDate`. Requiere el permiso `program:update` en el scope del programa (o rol `ADMIN`); los programas `ARCHIVED` responden `409`.
+
 ### Actividades
 
 - `GET /api/v1/activities` es publico y devuelve las proximas actividades: actividades `SCHEDULED`/`ONGOING` de programas `ACTIVE` con `date >= hoy` (zona institucional `America/Panama`).
 - Paginacion offset: `?page` (default 1) y `?limit` (default 20, maximo 50). Respuesta `data = { items, page, limit, total, totalPages }`.
 - `POST /api/v1/activities` (privado) crea una actividad dentro de un programa `ACTIVE`. Requiere el permiso `activity:create` en el programa (o rol `ADMIN`), queda en estado `DRAFT` y devuelve un DTO sin codigos.
-- Cuerpo de creacion: `name`, `type`, `date` (`YYYY-MM-DD`), `startTime`/`endTime` (`HH:mm`) y `eventProgramId` (obligatorio); opcionales `description`, `maxCapacity`, `bannerUrl`, `classroomId`, `speakerId` y `equipment[]`.
+- Cuerpo de creacion: `name`, `type`, `date` (`YYYY-MM-DD`), `startTime`/`endTime` (`HH:mm`) y `eventProgramId` (obligatorio); opcionales `description`, `maxCapacity`, `bannerUrl`, `classroomId`, `speakers[]` y `equipment[]`.
+- Los ponentes viajan inline en `speakers[]` (`firstName`, `lastName`, `email?`, `organization?`, maximo 10). No requieren cuenta: el servicio reutiliza el ponente del catalogo cuando el email coincide y lo vincula a un usuario si existe una cuenta con ese email.
+- Cambio incompatible: las respuestas exponen `speakers` (array) en lugar de `speaker` (objeto o `null`) en `ActivityListItem` y `ActivityDetail`.
 - Cada item incluye `eventProgram` (programa de eventos) y `organizationalUnit`; la lista no expone codigos de check-in.
 - Los codigos de check-in (`code`) viven en `attendance` (uno por inscripcion, unico global) y no en la actividad. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 - Terminologia: "evento" se usa coloquialmente, pero el nombre oficial del recurso es **actividad** (`/activities`). La ruta `/events` fue retirada.

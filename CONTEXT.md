@@ -58,7 +58,7 @@ Unidad organizadora que agrupa actividades. Pertenece exactamente a una unidad o
 
 ### Actividad
 
-Evento individual que pertenece obligatoriamente a un programa de eventos. Tiene nombre, tipo, ponente, aula, fecha, hora, equipamiento requerido, banner, colaboradores y permisos.
+Evento individual que pertenece obligatoriamente a un programa de eventos. Tiene nombre, tipo, ponentes, aula, fecha, hora, equipamiento requerido, banner, colaboradores y permisos. Una actividad puede tener varios ponentes a traves del catalogo `speakers`.
 
 El termino "evento" puede usarse de forma coloquial, pero el nombre oficial del recurso, del modelo y del endpoint es **actividad** (`activities`). No existe un recurso `/events`.
 
@@ -84,7 +84,7 @@ Recurso disponible en un aula, como proyector, escritorios, mesas, smart board o
 
 ### Ponente
 
-Persona que propone o imparte una actividad. El registro de ponentes captura nombre, email, CV, duracion aproximada, tipo de charla, titulo, contenido, fecha de envio y programa de eventos al que aplica.
+Persona que propone o imparte una actividad. Vive en el catalogo `speakers` con nombre, email y organizacion opcionales; puede vincularse a una cuenta de usuario (`userId`) pero no es obligatorio registrarse en la plataforma. El flujo de propuestas captura ademas CV, duracion aproximada, tipo de charla, titulo, contenido, fecha de envio y programa de eventos al que aplica.
 
 ### Reporte
 
@@ -122,9 +122,12 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 
 ### Programas De Eventos Y Actividades
 
+- `GET /api/v1/event-programs` es publico y devuelve programas `ACTIVE` con paginacion y filtros opcionales por unidad organizativa, tipo de unidad y busqueda en nombre o etiqueta.
+- `PATCH /api/v1/event-programs/:id` (privado) actualiza parcialmente `name`, `description`, `label`, `bannerUrl`, `startDate` y `endDate`; requiere `program:update` en el scope del programa (o rol `ADMIN`) y rechaza programas `ARCHIVED` con `409`.
 - `GET /api/v1/activities` es publico y devuelve proximas actividades: actividades `SCHEDULED`/`ONGOING` de programas `ACTIVE`, con `date >= hoy` en la zona institucional.
 - Paginacion offset: `?page` (default 1) y `?limit` (default 20, maximo 50). Respuesta `data = { items, page, limit, total, totalPages }`; la lista no expone codigos de check-in.
-- `POST /api/v1/activities` (privado) crea actividades en estado `DRAFT` dentro de un programa `ACTIVE`, con permiso `activity:create` o rol `ADMIN`.
+- `POST /api/v1/activities` (privado) crea actividades en estado `DRAFT` dentro de un programa `ACTIVE`, con permiso `activity:create` o rol `ADMIN`; acepta `speakers[]` inline sin exigir cuenta.
+- Las respuestas exponen `speakers` (array de `{ id, firstName, lastName }`) en lugar del antiguo `speaker` unico.
 - Los codigos de check-in (`code`) viven en `attendance` (uno por inscripcion, unico global), no en la actividad. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 - Crear automaticamente un programa predeterminado permanente al crear una unidad organizativa.
 - Permitir que solo el administrador del sitio cree programas adicionales.
@@ -163,7 +166,7 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 
 ### Registro De Ponentes
 
-- Exigir que el ponente tenga o cree una cuenta de usuario antes de enviar una propuesta.
+- Permitir que el ponente envie propuestas sin tener una cuenta de usuario; el catalogo `speakers` vincula la cuenta solo cuando existe.
 - Recibir propuestas de ponentes asociadas a programas de eventos.
 - Capturar datos personales necesarios, CV, duracion aproximada, tipo de charla, titulo y contenido.
 - Conservar versiones inmutables cuando el ponente actualice su propuesta.
