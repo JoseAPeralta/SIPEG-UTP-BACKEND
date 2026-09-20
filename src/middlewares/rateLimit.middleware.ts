@@ -39,8 +39,26 @@ export const registerRateLimit = authRateLimit({
   message: 'Too many registration attempts. Try again in one minute.',
 });
 
-export const passwordResetRateLimit = authRateLimit({
+export const forgotPasswordRateLimit = authRateLimit({
   windowMs: 60_000,
   max: 3,
   message: 'Too many password reset attempts. Try again in one minute.',
+});
+
+export const resetPasswordRateLimit = authRateLimit({
+  windowMs: 60_000,
+  max: 3,
+  message: 'Too many password reset attempts. Try again in one minute.',
+});
+
+export const emailVerificationRateLimit = authRateLimit({
+  windowMs: 60_000,
+  max: 5,
+  message: 'Too many email verification attempts. Try again in one minute.',
+});
+
+export const changePasswordRateLimit = authRateLimit({
+  windowMs: 60_000,
+  max: 5,
+  message: 'Too many password change attempts. Try again in one minute.',
 });

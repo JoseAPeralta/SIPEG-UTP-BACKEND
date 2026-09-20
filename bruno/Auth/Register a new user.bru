@@ -15,14 +15,36 @@ post {
 
 body:json {
   {
-    "email": "",
-    "password": "",
-    "firstName": "",
-    "lastName": "",
-    "identificationNumber": "",
-    "unitId": "",
-    "careerId": ""
+    "email": "{{newUserEmail}}",
+    "password": "PruebaSipeg2026*",
+    "firstName": "{{newUserFirstName}}",
+    "lastName": "{{newUserLastName}}",
+    "identificationNumber": "{{newUserIdentification}}",
+    "unitId": "seed_unit_fic",
+    "careerId": "seed_career_fic-civ"
   }
+}
+
+script:pre-request {
+  const suffix = bru.interpolate("{{$randomInt}}");
+  bru.setVar("newUserFirstName", "Prueba");
+  bru.setVar("newUserLastName", "Fase11");
+  bru.setVar("newUserEmail", `prueba.11.${suffix}.${Date.now()}@utp.ac.pa`);
+  bru.setVar("newUserIdentification", `8-${Date.now()}-${suffix}`);
+}
+
+tests {
+  test("register returns 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("register returns only the new user id", function () {
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data).to.have.property("userId");
+    expect(body.data).to.not.have.property("password");
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+  });
 }
 
 example {

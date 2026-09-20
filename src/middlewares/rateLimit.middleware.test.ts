@@ -38,4 +38,21 @@ describe('rate limit middleware', () => {
     authRateLimit({ windowMs: 60_000, max: 1 });
     expect(capturedKey).toBe('user:user-1');
   });
+
+  it('exports independent limiters per password and email verification flow', async () => {
+    vi.resetModules();
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(() => vi.fn()),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { emailVerificationRateLimit, forgotPasswordRateLimit, resetPasswordRateLimit } =
+      await import('./rateLimit.middleware.js');
+
+    expect(forgotPasswordRateLimit).toBeTypeOf('function');
+    expect(resetPasswordRateLimit).toBeTypeOf('function');
+    expect(emailVerificationRateLimit).toBeTypeOf('function');
+    expect(forgotPasswordRateLimit).not.toBe(resetPasswordRateLimit);
+    expect(forgotPasswordRateLimit).not.toBe(emailVerificationRateLimit);
+    expect(resetPasswordRateLimit).not.toBe(emailVerificationRateLimit);
+  });
 });

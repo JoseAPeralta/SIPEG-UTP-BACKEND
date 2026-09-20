@@ -4,6 +4,7 @@ import type { ZodOpenApiPathsObject } from 'zod-openapi';
 import { apiErrorResponseSchema, apiSuccessResponse } from '../../docs/schemas.js';
 import {
   authTokensSchema,
+  changePasswordSchema,
   forgotPasswordSchema,
   loginSchema,
   logoutSchema,
@@ -39,6 +40,7 @@ export const authPaths: ZodOpenApiPathsObject = {
         },
         400: errorResponse,
         401: errorResponse,
+        403: errorResponse,
         429: errorResponse,
       },
     },
@@ -112,6 +114,7 @@ export const authPaths: ZodOpenApiPathsObject = {
           content: { 'application/json': { schema: apiSuccessResponse(emptyDataSchema) } },
         },
         400: errorResponse,
+        429: errorResponse,
       },
     },
   },
@@ -147,6 +150,27 @@ export const authPaths: ZodOpenApiPathsObject = {
           content: { 'application/json': { schema: apiSuccessResponse(emptyDataSchema) } },
         },
         400: errorResponse,
+        429: errorResponse,
+      },
+    },
+  },
+  '/api/v1/auth/change-password': {
+    post: {
+      tags: ['Auth'],
+      summary: 'Change the password of the authenticated user',
+      security: [{ bearerAuth: [] }],
+      requestBody: {
+        required: true,
+        content: { 'application/json': { schema: changePasswordSchema.shape.body } },
+      },
+      responses: {
+        200: {
+          description: 'Password updated. Every other session is revoked.',
+          content: { 'application/json': { schema: apiSuccessResponse(emptyDataSchema) } },
+        },
+        400: errorResponse,
+        401: errorResponse,
+        403: errorResponse,
         429: errorResponse,
       },
     },

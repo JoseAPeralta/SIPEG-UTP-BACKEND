@@ -37,7 +37,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:status": "prisma migrate status",
-    "prisma:seed": "prisma db seed"
+    "prisma:seed": "prisma db seed",
+    "prisma:seed:base": "tsx prisma/seed.base.ts"
   },
   "engines": {
     "node": ">=24.0.0 <25"
@@ -56,6 +57,7 @@
     "express-rate-limit": "^7.5.1",
     "helmet": "^8.1.0",
     "jose": "^6.2.12",
+    "nodemailer": "^10.0.10",
     "pg": "^8.20.0",
     "zod": "^4.4.3",
     "zod-openapi": "^6.0.2"
@@ -67,6 +69,7 @@
     "@types/express": "^5.0.6",
     "@types/express-rate-limit": "^6.0.2",
     "@types/node": "^24.13.6",
+    "@types/nodemailer": "^8.0.2",
     "@types/supertest": "^7.2.0",
     "@usebruno/cli": "4.1.0",
     "@usebruno/mcp": "github:usebruno/bruno-mcp#0779b7a62e5a0d599dd9c1e170faec720fd85e74",

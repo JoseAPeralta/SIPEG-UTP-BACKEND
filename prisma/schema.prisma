@@ -527,10 +527,13 @@ model Verification {
 }
 
 model Jwks {
-  id         String   @id
-  publicKey  String   @map("public_key") @db.Text
-  privateKey String   @map("private_key") @db.Text
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id         String    @id
+  publicKey  String    @map("public_key") @db.Text
+  privateKey String    @map("private_key") @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(3)
+  alg        String?   @db.VarChar(20)
+  crv        String?   @db.VarChar(20)
 
   @@map("jwks")
 }
