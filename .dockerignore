@@ -39,6 +39,7 @@ prettier.config.js
 .prettierignore
 vitest.config.ts
 .node-version
+.snyk
 
 Dockerfile
 .dockerignore
