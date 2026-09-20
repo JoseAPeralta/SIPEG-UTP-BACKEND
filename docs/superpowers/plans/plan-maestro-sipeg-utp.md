@@ -19,13 +19,13 @@
 | Infraestructura: Express, errores, health, entorno, Prisma, Docker, rate limit, Helmet, OpenAPI/Scalar, Bruno y seed      | Implementado; seed dividido en base de produccion (`ensure`) y demo (`sync`), ADR-0005                                                                              |
 | Autenticacion: login, registro, refresh, logout, verificacion de email, recuperacion de contrasena y cambio de contrasena | Implementados y verificados (1.1-1.7)                                                                                                                               |
 | Usuarios: `GET/PATCH /users/me`, listado, detalle, creacion y actualizacion admin                                         | `GET/PATCH /users/me` verificado (1.6), `GET /admin/users` verificado (1.8), detalle verificado (1.9), creacion verificada (1.10) y actualizacion verificada (1.11) |
-| Autorizacion: catalogo, resolucion y delegacion                                                                           | Servicios implementados; faltan endpoints                                                                                                                           |
+| Autorizacion: catalogo, resolucion y delegacion                                                                           | Servicios implementados; endpoints de colaboradores 3.1-3.2 implementados; faltan 3.3-3.10                                                                          |
 | Programas: listado, creacion y actualizacion                                                                              | Parcial                                                                                                                                                             |
 | Actividades: listado de proximas y creacion                                                                               | Parcial                                                                                                                                                             |
 | Unidades organizativas, carreras y aulas                                                                                  | Implementadas y verificadas (2.A.1-2.A.7, 2.B.1-2.B.3 y 2.C.1-2.C.5); faltan archivos, email, alertas, propuestas, asistencia, certificados, reportes y auditoria   |
 | Archivos, email, alertas, propuestas, asistencia, certificados, reportes y auditoria                                      | Pendiente                                                                                                                                                           |
 
-Endpoints existentes: `/health`, `/auth/*`, `/users/me`, `/admin/users` (GET/POST), `/admin/users/:id` (GET/PATCH), `/event-programs`, `/activities`, `/organizational-units` con `POST /organizational-units`, `PATCH /:id`, `POST /:id/deactivate` y `POST /:id/reactivate`, `/careers` con `POST /careers`, `PATCH /:id` y `DELETE /:id`, y `/classrooms` con `GET/POST /classrooms`, `GET /classrooms/available`, `GET/PATCH /classrooms/:id` y subrecursos de amenidades y disponibilidad.
+Endpoints existentes: `/health`, `/auth/*`, `/users/me`, `/admin/users` (GET/POST), `/admin/users/:id` (GET/PATCH), `/event-programs`, `/activities`, `/organizational-units` con `POST /organizational-units`, `PATCH /:id`, `POST /:id/deactivate` y `POST /:id/reactivate`, `/careers` con `POST /careers`, `PATCH /:id` y `DELETE /:id`, `/classrooms` con `GET/POST /classrooms`, `GET /classrooms/available`, `GET/PATCH /classrooms/:id` y subrecursos de amenidades y disponibilidad, y `GET/POST /event-programs/:id/collaborators` y `GET/POST /activities/:id/collaborators`.
 
 ## Definicion de terminado global
 
@@ -317,8 +317,8 @@ Hallazgos abiertos:
 
 **Entregable:** exponer los servicios existentes de delegacion y permisos mediante API segura.
 
-- [ ] **3.1 Listar colaboradores.** Crear `GET /event-programs/:id/collaborators` y `GET /activities/:id/collaborators`, protegidos por `permission:grant` en el scope.
-- [ ] **3.2 Agregar colaborador.** Crear `POST .../collaborators`; materializar permisos `ROLE_DEFAULT`; probar que un actor no puede otorgar permisos que no posee.
+- [x] **3.1 Listar colaboradores.** Crear `GET /event-programs/:id/collaborators` y `GET /activities/:id/collaborators`, protegidos por `permission:grant` en el scope.
+- [x] **3.2 Agregar colaborador.** Crear `POST .../collaborators`; materializar permisos `ROLE_DEFAULT`; probar que un actor no puede otorgar permisos que no posee.
 - [ ] **3.3 Cambiar rol.** Crear `PATCH .../collaborators/:userId`; reemplazar `ROLE_DEFAULT` y preservar `OVERRIDE`.
 - [ ] **3.4 Eliminar colaborador.** Crear `DELETE .../collaborators/:userId`; impedir que el scope quede sin un actor capaz de delegar.
 - [ ] **3.5 Otorgar permiso.** Crear `POST .../permissions`; validar subconjunto y atenuacion temporal; un envelope acotado no puede crear grants ilimitados.
@@ -327,6 +327,19 @@ Hallazgos abiertos:
 - [ ] **3.8 Exponer procedencia de permisos.** En detalles privados mostrar `inherited`, `local` y `effective`.
 - [ ] **3.9 Ignorar permisos vencidos sin borrarlos.** Probar con reloj controlado.
 - [ ] **3.10 Minimizar auditoria expuesta.** No devolver `grantedById` ni `grantedAt` salvo a actores autorizados.
+
+**Registro de ejecucion (2026-09-20 - 3.1/3.2):**
+
+- [x] Plan detallado en `docs/superpowers/plans/2026-09-20-fase-3-1-3-2-colaboradores.md` con ciclo TDD rojo/verde en servicio (7 pruebas nuevas), esquemas (7), rutas (13) y contrato OpenAPI (2).
+- [x] Implementacion: `listCollaborators` y `addCollaborator` (retorna DTO) en `delegation.service.ts`; `authorization.schemas.ts`/`controller.ts`/`routes.ts`/`openapi.ts`; montaje en `src/routes.ts`; DTO `Collaborator`/`CollaboratorPermission`/`CollaboratorList`.
+- [x] Decisiones: modulo `authorization` extendido; `GET` devuelve permisos locales con `source`/`validFrom`/`validUntil` sin `grantedById`/`grantedAt` (3.10); listado solo local del scope (herencia en 3.8); `POST` a programa `ARCHIVED` responde `409`.
+- [x] Guardas nuevas: 404 si el programa no existe (antes `addCollaborator` producia una violacion de FK) y 409 si esta `ARCHIVED`; el rol asignado se valida contra los envelopes del actor (subconjunto) y el body es estricto.
+- [x] Pruebas: `pnpm test` 656 en 43 archivos en verde; `typecheck`, `lint`, `build`, `format:check`, `docs:generate` y `docs:check` en verde.
+- [x] Verificacion real (stack Docker dev, seed demo): `org-fisc` lista `seed_program_congreso-cit` con 17 permisos incluido `permission:grant` `OVERRIDE`; actividad lista solo `seed_user_editor`; head 403 en su programa default sin grant; head agrega `seed_user_visor` como VIEWER (201) y psql confirma 1 colaboracion + 5 filas `ROLE_DEFAULT` con `granted_by_id = seed_user_org-fisc`; duplicado 409, rol invalido 400, archivado 409, programa inexistente 404; limpieza total verificada.
+- [x] Bruno: nueva carpeta `Collaborators` con 14 requests y 15 tests (`bru run Collaborators --env local` en verde) y variables `collaboratorsProgramId`/`collaboratorsActivityId`/`archivedProgramId`/`unknownProgramId`.
+- [x] Contrato: 4 operaciones nuevas, tag `Collaborators` y componentes `Collaborator`/`CollaboratorPermission`/`CollaboratorList`; `openapi.json` regenerado sin drift.
+- [x] Documentacion: README y CONTEXT describen los endpoints, el subconjunto simetrico y el rechazo de programas archivados. Sin migraciones, variables de entorno ni permisos nuevos.
+- [x] Hallazgo `F3.2-A`: la carrera `findFirst` + `create` de `addCollaborator` puede producir `P2002` (500) si dos peticiones simultaneas agregan al mismo usuario; diferido. Sin commit: el usuario no lo solicito.
 
 **Criterio de salida:** tests de rutas con ADMIN, ORGANIZER, EDITOR y VIEWER cubren subconjunto simetrico, atenuacion, herencia y no ampliacion de scope.
 
