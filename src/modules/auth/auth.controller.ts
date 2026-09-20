@@ -1,8 +1,10 @@
 import type { RequestHandler } from 'express';
 
+import { requireAuthenticatedUser } from '../../middlewares/authenticate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
 import { successResponse } from '../../utils/response.js';
 import type {
+  ChangePasswordBody,
   ForgotPasswordBody,
   LoginBody,
   LogoutBody,
@@ -12,6 +14,7 @@ import type {
   VerifyEmailBody,
 } from './auth.schemas.js';
 import {
+  changePassword,
   loginWithPassword,
   logoutUser,
   refreshAccessToken,
@@ -53,6 +56,12 @@ export const refresh: RequestHandler = asyncHandler(async (req, res) => {
 export const logout: RequestHandler = asyncHandler(async (req, res) => {
   await logoutUser(req.body as LogoutBody);
   res.status(200).json(successResponse('Logout successful.', {}));
+});
+
+export const changePasswordHandler: RequestHandler = asyncHandler(async (req, res) => {
+  const user = requireAuthenticatedUser(req);
+  await changePassword(user.id, req.body as ChangePasswordBody);
+  res.status(200).json(successResponse('Password updated successfully.', {}));
 });
 
 export const verifyEmailHandler: RequestHandler = asyncHandler(async (req, res) => {

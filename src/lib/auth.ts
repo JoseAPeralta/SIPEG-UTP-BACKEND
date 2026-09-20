@@ -4,6 +4,8 @@ import { jwt } from 'better-auth/plugins';
 
 import { getPrismaClient } from '../config/prisma.js';
 import { env } from '../config/env.js';
+import { parseTtlToSeconds } from '../utils/ttl.js';
+import { sendPasswordResetEmail, sendVerificationEmail } from '../modules/auth/auth.email.js';
 import { hashPassword, verifyPassword } from './password.js';
 
 const trustedOrigins = [
@@ -12,6 +14,10 @@ const trustedOrigins = [
     .map((o) => o.trim())
     .filter(Boolean) ?? []),
 ];
+
+const reportEmailDeliveryFailure = (): void => {
+  console.error('Failed to deliver authentication email.');
+};
 
 export const auth = betterAuth({
   appName: 'SIPEG UTP Backend',
@@ -31,25 +37,33 @@ export const auth = betterAuth({
     customRules: {
       '/sign-in/email': { window: 60, max: 5 },
       '/sign-up/email': { window: 60, max: 3 },
-      '/forget-password': { window: 60, max: 3 },
+      '/request-password-reset': { window: 60, max: 3 },
       '/reset-password': { window: 60, max: 5 },
     },
   },
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false,
+    requireEmailVerification: true,
     minPasswordLength: 12,
     maxPasswordLength: 128,
     autoSignIn: false,
+    resetPasswordTokenExpiresIn: parseTtlToSeconds(env.AUTH_PASSWORD_RESET_TTL),
+    revokeSessionsOnPasswordReset: true,
+    sendResetPassword: async ({ user, token }) => {
+      void sendPasswordResetEmail(user.email, token).catch(reportEmailDeliveryFailure);
+    },
     password: {
       hash: hashPassword,
       verify: ({ hash, password }) => verifyPassword(hash, password),
     },
   },
   emailVerification: {
-    sendOnSignUp: false,
-    autoSignInAfterVerification: true,
-    expiresIn: 60 * 60 * 24,
+    sendOnSignUp: true,
+    autoSignInAfterVerification: false,
+    expiresIn: parseTtlToSeconds(env.AUTH_EMAIL_VERIFICATION_TTL),
+    sendVerificationEmail: async ({ user, token }) => {
+      void sendVerificationEmail(user.email, token).catch(reportEmailDeliveryFailure);
+    },
   },
   user: {
     additionalFields: {
@@ -67,8 +81,8 @@ export const auth = betterAuth({
     },
   },
   session: {
-    expiresIn: 60 * 60 * 24 * 7,
-    updateAge: 60 * 60 * 24,
+    expiresIn: parseTtlToSeconds(env.AUTH_REFRESH_TTL),
+    disableSessionRefresh: true,
   },
   plugins: [
     jwt({
@@ -99,9 +113,10 @@ export const auth = betterAuth({
               id: row.id,
               publicKey: row.publicKey,
               privateKey: row.privateKey,
-              alg: publicJwk['alg'] ?? null,
-              crv: publicJwk['crv'] ?? null,
+              alg: row.alg ?? publicJwk['alg'] ?? null,
+              crv: row.crv ?? publicJwk['crv'] ?? null,
               createdAt: row.createdAt,
+              expiresAt: row.expiresAt,
             };
           }) as never;
         },
@@ -114,12 +129,16 @@ export const auth = betterAuth({
             alg?: string;
             crv?: string;
             createdAt?: Date;
+            expiresAt?: Date;
           };
           await prisma.jwks.create({
             data: {
               id: data.id ?? crypto.randomUUID(),
               publicKey: data.publicKey,
               privateKey: data.privateKey,
+              alg: data.alg ?? null,
+              crv: data.crv ?? null,
+              expiresAt: data.expiresAt ?? null,
             },
           });
           return data as never;

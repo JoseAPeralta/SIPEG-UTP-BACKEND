@@ -15,8 +15,19 @@ post {
 
 body:json {
   {
-    "refreshToken": ""
+    "refreshToken": "{{refreshToken}}"
   }
+}
+
+script:pre-request {
+  bru.setVar("revokedRefreshToken", bru.getVar("refreshToken") ?? "");
+}
+
+tests {
+  test("logout revokes the current refresh token", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().success).to.equal(true);
+  });
 }
 
 example {

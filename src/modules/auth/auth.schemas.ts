@@ -44,6 +44,14 @@ export const logoutSchema = z.object({
   body: z.object({ refreshToken: z.string().min(1, 'Refresh token is required.') }),
 });
 
+export const changePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1, 'Current password is required.'),
+    newPassword: z.string().min(12, 'Password must be at least 12 characters.').max(128),
+    refreshToken: z.string().min(1, 'Refresh token is required.'),
+  }),
+});
+
 export const authTokensSchema = z
   .object({
     accessToken: z.string().meta({ description: 'Signed JWT access token (EdDSA).' }),
@@ -74,3 +82,4 @@ export type VerifyEmailBody = z.infer<typeof verifyEmailSchema>['body'];
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordSchema>['body'];
 export type ResetPasswordBody = z.infer<typeof resetPasswordSchema>['body'];
 export type LogoutBody = z.infer<typeof logoutSchema>['body'];
+export type ChangePasswordBody = z.infer<typeof changePasswordSchema>['body'];

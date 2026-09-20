@@ -1,11 +1,16 @@
+import { randomBytes } from 'node:crypto';
+
 import { APIError } from 'better-auth/api';
 import { SignJWT, importJWK } from 'jose';
 
 import { env } from '../../config/env.js';
 import { auth } from '../../lib/auth.js';
 import { getPrismaClient } from '../../config/prisma.js';
+import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { parseTtlToMilliseconds } from '../../utils/ttl.js';
 import type {
+  ChangePasswordBody,
   ForgotPasswordBody,
   LoginBody,
   LogoutBody,
@@ -28,18 +33,10 @@ const betterAuthHeaders = (extra?: Record<string, string>): Record<string, strin
   ...extra,
 });
 
-const parseTtlToMs = (ttl: string): number => {
-  const match = /^(\d+)([smhd])$/.exec(ttl);
-  if (!match) return 15 * 60 * 1000;
-  const value = Number(match[1]);
-  const unit = match[2];
-  if (unit === 's') return value * 1000;
-  if (unit === 'm') return value * 60 * 1000;
-  if (unit === 'h') return value * 60 * 60 * 1000;
-  return value * 24 * 60 * 60 * 1000;
-};
-
 const throwBetterAuthError = (error: unknown): never => {
+  if (error instanceof ApiError) {
+    throw error;
+  }
   if (error instanceof APIError) {
     throw new ApiError(error.statusCode ?? 400, error.message);
   }
@@ -74,7 +71,7 @@ const loadSigningKey = async () => {
 
 const signAccessJwt = async (input: SignAccessTokenInput): Promise<string> => {
   const key = await loadSigningKey();
-  const expiresIn = parseTtlToMs(env.AUTH_TOKEN_TTL);
+  const expiresIn = parseTtlToMilliseconds(env.AUTH_TOKEN_TTL);
   return new SignJWT({
     email: input.email,
     role: input.globalRole,
@@ -123,7 +120,12 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       },
     });
     if (!user) {
-      throw new ApiError(401, 'User not found.');
+      await prisma.session.deleteMany({ where: { token: result.token } });
+      throw new ApiError(401, 'Invalid credentials.');
+    }
+    if (!user.isActive) {
+      await prisma.session.deleteMany({ where: { token: result.token } });
+      throw new ApiError(401, 'Invalid email or password');
     }
     const accessToken = await signAccessJwt({
       userId: user.id,
@@ -136,7 +138,7 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
     const refreshExpiresAt = await fetchSessionExpiry(result.token);
     return {
       accessToken,
-      accessTokenExpiresAt: new Date(Date.now() + parseTtlToMs(env.AUTH_TOKEN_TTL)),
+      accessTokenExpiresAt: new Date(Date.now() + parseTtlToMilliseconds(env.AUTH_TOKEN_TTL)),
       refreshToken: result.token,
       refreshTokenExpiresAt: refreshExpiresAt,
     };
@@ -147,10 +149,29 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
 };
 
 export const registerUser = async (body: RegisterBody): Promise<{ userId: string }> => {
+  const prisma = getPrismaClient();
+  const email = body.email.trim().toLowerCase();
+
+  const duplicateEmail = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+  if (duplicateEmail) {
+    throw new ApiError(409, 'Email is already registered.');
+  }
+
+  const duplicateIdentification = await prisma.user.findUnique({
+    where: { identificationNumber: body.identificationNumber },
+    select: { id: true },
+  });
+  if (duplicateIdentification) {
+    throw new ApiError(409, 'Identification number is already registered.');
+  }
+
   try {
     const result = await auth.api.signUpEmail({
       body: {
-        email: body.email,
+        email,
         password: body.password,
         name: `${body.firstName} ${body.lastName}`,
         firstName: body.firstName,
@@ -162,8 +183,33 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
       headers: betterAuthHeaders(),
       asResponse: false,
     });
+    const persisted = await prisma.user.findUnique({
+      where: { id: result.user.id },
+      select: { id: true },
+    });
+    if (!persisted) {
+      throw new ApiError(409, 'Email is already registered.');
+    }
     return { userId: result.user.id };
   } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (error instanceof APIError && error.statusCode === 422) {
+      const raceEmail = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+      if (raceEmail) {
+        throw new ApiError(409, 'Email is already registered.');
+      }
+      const raceIdentification = await prisma.user.findUnique({
+        where: { identificationNumber: body.identificationNumber },
+        select: { id: true },
+      });
+      if (raceIdentification) {
+        throw new ApiError(409, 'Identification number is already registered.');
+      }
+      throw new ApiError(422, error.message);
+    }
     throwBetterAuthError(error);
     throw new Error('Failed to register user.', { cause: error });
   }
@@ -172,6 +218,7 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
 export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess> => {
   try {
     const prisma = getPrismaClient();
+    const now = new Date();
     const session = await prisma.session.findFirst({
       where: { token: body.refreshToken },
       select: {
@@ -192,6 +239,13 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
     if (!session) {
       throw new ApiError(401, 'Refresh token is invalid.');
     }
+    if (session.expiresAt.getTime() <= now.getTime()) {
+      throw new ApiError(401, 'Refresh token has expired.');
+    }
+    if (!session.user.isActive) {
+      await prisma.session.deleteMany({ where: { token: body.refreshToken } });
+      throw new ApiError(401, 'Refresh token is invalid.');
+    }
     const accessToken = await signAccessJwt({
       userId: session.user.id,
       email: session.user.email,
@@ -200,10 +254,18 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
       careerId: session.user.careerId,
       isActive: session.user.isActive,
     });
+    const rotatedToken = randomBytes(32).toString('base64url');
+    const rotated = await prisma.session.updateMany({
+      where: { token: body.refreshToken, expiresAt: { gt: now } },
+      data: { token: rotatedToken },
+    });
+    if (rotated.count !== 1) {
+      throw new ApiError(401, 'Refresh token is invalid.');
+    }
     return {
       accessToken,
-      accessTokenExpiresAt: new Date(Date.now() + parseTtlToMs(env.AUTH_TOKEN_TTL)),
-      refreshToken: body.refreshToken,
+      accessTokenExpiresAt: new Date(Date.now() + parseTtlToMilliseconds(env.AUTH_TOKEN_TTL)),
+      refreshToken: rotatedToken,
       refreshTokenExpiresAt: session.expiresAt,
     };
   } catch (error) {
@@ -211,6 +273,40 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
     throwBetterAuthError(error);
     throw new Error('Failed to refresh token.', { cause: error });
   }
+};
+
+export const changePassword = async (userId: string, body: ChangePasswordBody): Promise<void> => {
+  const prisma = getPrismaClient();
+
+  const account = await prisma.account.findFirst({
+    where: { userId, providerId: 'credential' },
+    select: { id: true, password: true },
+  });
+
+  if (!account?.password || !(await verifyPassword(account.password, body.currentPassword))) {
+    throw new ApiError(400, 'Current password is incorrect.');
+  }
+
+  const currentSession = await prisma.session.findFirst({
+    where: { token: body.refreshToken, userId },
+    select: { id: true },
+  });
+
+  if (!currentSession) {
+    throw new ApiError(400, 'Refresh token is invalid.');
+  }
+
+  const newHash = await hashPassword(body.newPassword);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.account.update({
+      where: { id: account.id },
+      data: { password: newHash },
+    });
+    await tx.session.deleteMany({
+      where: { userId, token: { not: body.refreshToken } },
+    });
+  });
 };
 
 export const logoutUser = async (_body: LogoutBody): Promise<void> => {
@@ -232,6 +328,9 @@ export const verifyEmail = async (body: VerifyEmailBody): Promise<void> => {
       asResponse: false,
     });
   } catch (error) {
+    if (error instanceof APIError && (error.statusCode ?? 500) < 500) {
+      throw new ApiError(400, 'Email verification token is invalid or expired.');
+    }
     throwBetterAuthError(error);
   }
 };
@@ -239,7 +338,10 @@ export const verifyEmail = async (body: VerifyEmailBody): Promise<void> => {
 export const requestPasswordReset = async (body: ForgotPasswordBody): Promise<void> => {
   try {
     await auth.api.requestPasswordReset({
-      body: { email: body.email, redirectTo: `${env.AUTH_URL}/reset-password` },
+      body: {
+        email: body.email.trim().toLowerCase(),
+        redirectTo: env.AUTH_PASSWORD_RESET_URL,
+      },
       headers: betterAuthHeaders(),
       asResponse: false,
     });
@@ -256,6 +358,9 @@ export const resetPassword = async (body: ResetPasswordBody): Promise<void> => {
       asResponse: false,
     });
   } catch (error) {
+    if (error instanceof APIError && (error.statusCode ?? 500) < 500) {
+      throw new ApiError(400, 'Password reset token is invalid or expired.');
+    }
     throwBetterAuthError(error);
   }
 };

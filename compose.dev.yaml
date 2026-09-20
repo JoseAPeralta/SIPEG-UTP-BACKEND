@@ -30,6 +30,15 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      AUTH_REFRESH_TTL: ${AUTH_REFRESH_TTL:-7d}
+      AUTH_EMAIL_VERIFICATION_URL: ${AUTH_EMAIL_VERIFICATION_URL:-http://localhost:5173/verify-email}
+      AUTH_PASSWORD_RESET_URL: ${AUTH_PASSWORD_RESET_URL:-http://localhost:5173/reset-password}
+      AUTH_EMAIL_VERIFICATION_TTL: ${AUTH_EMAIL_VERIFICATION_TTL:-24h}
+      AUTH_PASSWORD_RESET_TTL: ${AUTH_PASSWORD_RESET_TTL:-1h}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_SECURE: 'false'
+      MAIL_FROM: ${MAIL_FROM:-SIPEG UTP <no-reply@sipeg.local>}
     ports:
       - '${PORT:-3000}:3000'
     volumes:
@@ -38,6 +47,24 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
+      mailpit:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - sipeg-utp-dev
+
+  mailpit:
+    image: axllent/mailpit:v1.27.8
+    ports:
+      - '127.0.0.1:${MAILPIT_PORT:-8025}:8025'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

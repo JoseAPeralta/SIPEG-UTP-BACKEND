@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { authTokensSchema, registerResultSchema } from './auth.schemas.js';
+import { authTokensSchema, changePasswordSchema, registerResultSchema } from './auth.schemas.js';
 
 const authTokensPayload = {
   accessToken: 'header.payload.signature',
@@ -23,6 +23,39 @@ describe('authTokensSchema', () => {
 
   it('rejects an unknown token type', () => {
     expect(() => authTokensSchema.parse({ ...authTokensPayload, tokenType: 'Basic' })).toThrow();
+  });
+});
+
+describe('changePasswordSchema', () => {
+  const validBody = {
+    currentPassword: 'currentpass123',
+    newPassword: 'newstrongpass12',
+    refreshToken: 'session-token',
+  };
+
+  it('accepts a valid change password body', () => {
+    expect(changePasswordSchema.parse({ body: validBody })).toEqual({ body: validBody });
+  });
+
+  it('rejects a new password shorter than 12 characters', () => {
+    expect(changePasswordSchema).toBeDefined();
+    expect(() =>
+      changePasswordSchema.parse({ body: { ...validBody, newPassword: 'short123456' } }),
+    ).toThrow();
+  });
+
+  it('rejects an empty current password', () => {
+    expect(changePasswordSchema).toBeDefined();
+    expect(() =>
+      changePasswordSchema.parse({ body: { ...validBody, currentPassword: '' } }),
+    ).toThrow();
+  });
+
+  it('rejects an empty refresh token', () => {
+    expect(changePasswordSchema).toBeDefined();
+    expect(() =>
+      changePasswordSchema.parse({ body: { ...validBody, refreshToken: '' } }),
+    ).toThrow();
   });
 });
 

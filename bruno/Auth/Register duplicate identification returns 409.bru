@@ -1,0 +1,40 @@
+meta {
+  name: Register duplicate identification returns 409
+  type: http
+  seq: 21
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/register
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "email": "dup.ident.{{$timestamp}}.{{$randomInt}}@utp.ac.pa",
+    "password": "PruebaSipeg2026*",
+    "firstName": "Prueba",
+    "lastName": "Duplicado",
+    "identificationNumber": "{{newUserIdentification}}",
+    "unitId": "seed_unit_fic",
+    "careerId": "seed_career_fic-civ"
+  }
+}
+
+tests {
+  test("duplicate identification returns 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+
+  test("duplicate identification message is explicit", function () {
+    expect(res.getBody().message).to.contain("Identification number");
+  });
+}
+
+docs {
+  Run "Register a new user" first: this request reuses the generated newUserIdentification and expects 409.
+}

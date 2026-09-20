@@ -15,8 +15,35 @@ post {
 
 body:json {
   {
-    "refreshToken": ""
+    "refreshToken": "{{refreshToken}}"
   }
+}
+
+script:pre-request {
+  bru.setVar("previousRefreshToken", bru.getVar("refreshToken") ?? "");
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.refreshToken) {
+    bru.setVar("token", body.data.accessToken);
+    bru.setVar("refreshToken", body.data.refreshToken);
+  }
+}
+
+tests {
+  test("refresh returns a rotated refresh token and an EdDSA access token", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.tokenType).to.equal("Bearer");
+    expect(body.data.refreshToken).to.not.equal(bru.getVar("previousRefreshToken"));
+    const [encodedHeader] = body.data.accessToken.split(".");
+    const base64Header = encodedHeader.replace(/-/g, "+").replace(/_/g, "/");
+    const header = JSON.parse(Buffer.from(base64Header, "base64").toString("utf8"));
+    expect(header.alg).to.equal("EdDSA");
+  });
 }
 
 example {

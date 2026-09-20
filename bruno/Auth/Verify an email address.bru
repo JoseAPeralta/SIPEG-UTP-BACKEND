@@ -1,7 +1,7 @@
 meta {
   name: Verify an email address
   type: http
-  seq: 5
+  seq: 6
   tags: [
     Auth
   ]
@@ -15,8 +15,25 @@ post {
 
 body:json {
   {
-    "token": ""
+    "token": "{{verificationToken}}"
   }
+}
+
+tests {
+  const configured = Boolean(String(bru.getVar("verificationToken") ?? "").trim());
+
+  test("verification uses a configured private token or returns generic 400", function () {
+    expect(res.getStatus()).to.equal(configured ? 200 : 400);
+    const body = res.getBody();
+    expect(body.success).to.equal(configured);
+    if (!configured) {
+      expect(body.message).to.equal("Validation error.");
+    }
+  });
+}
+
+docs {
+  Define verificationToken como variable runtime o en un environment privado ignorado por Git. Sin token, esta request valida el 400 de entrada; con el token extraido de Mailpit valida el flujo real.
 }
 
 example {
