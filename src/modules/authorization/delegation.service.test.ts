@@ -26,6 +26,7 @@ interface PrismaMock {
     createMany: ReturnType<typeof vi.fn>;
   };
   activity: { findUnique: ReturnType<typeof vi.fn> };
+  eventProgram: { findUnique: ReturnType<typeof vi.fn> };
   user: { findUnique: ReturnType<typeof vi.fn> };
   permission: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
@@ -46,6 +47,7 @@ const createPrismaMock = (): PrismaMock => {
       createMany: vi.fn(),
     },
     activity: { findUnique: vi.fn() },
+    eventProgram: { findUnique: vi.fn() },
     user: { findUnique: vi.fn() },
     permission: { findMany: vi.fn(), findUnique: vi.fn() },
     $transaction: vi.fn(),
@@ -90,6 +92,22 @@ const grant = (
 });
 
 const collaboration = (...permissions: GrantRecord[]): CollaborationRecord => ({ permissions });
+
+const collaboratorRecord = (overrides: Record<string, unknown> = {}) => ({
+  userId: 'user-002',
+  role: 'VIEWER',
+  createdAt: new Date('2026-09-19T12:00:00.000Z'),
+  user: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' },
+  permissions: [
+    {
+      source: 'ROLE_DEFAULT',
+      validFrom: null,
+      validUntil: null,
+      permission: { name: PERMISSIONS.ACTIVITY_READ },
+    },
+  ],
+  ...overrides,
+});
 
 const permissionRecords = (names: readonly PermissionName[]) =>
   names.map((name, index) => ({ id: `perm-${index}`, name }));
@@ -223,7 +241,8 @@ describe('delegation service', () => {
     prisma.permission.findMany.mockResolvedValue(permissionRecords(ROLE_DEFAULTS.VIEWER));
     prisma.user.findUnique.mockResolvedValue({ id: 'user-002', isActive: true });
     prisma.collaboration.findFirst.mockResolvedValue(null);
-    prisma.collaboration.create.mockResolvedValue({ id: 'collab-001' });
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.create.mockResolvedValue(collaboratorRecord());
     const { addCollaborator } = await loadService(prisma);
 
     await addCollaborator(
@@ -258,6 +277,7 @@ describe('delegation service', () => {
 
   it('rejects adding a collaborator that already exists in the scope', async () => {
     const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
     prisma.user.findUnique.mockResolvedValue({ id: 'user-002', isActive: true });
     prisma.collaboration.findFirst.mockResolvedValue({ id: 'collab-001' });
     const { addCollaborator } = await loadService(prisma);
@@ -275,6 +295,7 @@ describe('delegation service', () => {
 
   it('rejects adding an inactive user', async () => {
     const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
     prisma.user.findUnique.mockResolvedValue({ id: 'user-002', isActive: false });
     const { addCollaborator } = await loadService(prisma);
 
@@ -514,5 +535,190 @@ describe('delegation service', () => {
         NOW,
       ),
     ).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  it('rejects listing collaborators without permission:grant', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PROGRAM_READ)),
+    ]);
+    const { listCollaborators } = await loadService(prisma);
+
+    await expect(
+      listCollaborators(buildUser(), { eventProgramId: 'p1' }, NOW),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(prisma.collaboration.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns 404 when listing a missing event program', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(null);
+    const { listCollaborators } = await loadService(prisma);
+
+    await expect(
+      listCollaborators(buildUser({ globalRole: 'ADMIN' }), { eventProgramId: 'missing' }, NOW),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(prisma.collaboration.findMany).not.toHaveBeenCalled();
+  });
+
+  it('lists the local collaborators of a program with their grants sorted by name', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboratorRecord({
+        permissions: [
+          {
+            source: 'OVERRIDE',
+            validFrom: new Date('2026-09-19T10:00:00.000Z'),
+            validUntil: new Date('2026-09-30T10:00:00.000Z'),
+            permission: { name: PERMISSIONS.REPORT_EXPORT },
+          },
+          {
+            source: 'ROLE_DEFAULT',
+            validFrom: null,
+            validUntil: null,
+            permission: { name: PERMISSIONS.ACTIVITY_READ },
+          },
+          {
+            source: 'ROLE_DEFAULT',
+            validFrom: null,
+            validUntil: null,
+            permission: { name: 'legacy:unknown' },
+          },
+        ],
+      }),
+    ]);
+    const { listCollaborators } = await loadService(prisma);
+
+    const result = await listCollaborators(
+      buildUser({ globalRole: 'ADMIN' }),
+      { eventProgramId: 'p1' },
+      NOW,
+    );
+
+    expect(prisma.collaboration.findMany).toHaveBeenCalledWith({
+      where: { eventProgramId: 'p1' },
+      orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
+      select: expect.any(Object),
+    });
+    expect(result).toEqual({
+      items: [
+        {
+          userId: 'user-002',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          email: 'ada@example.com',
+          role: 'VIEWER',
+          createdAt: '2026-09-19T12:00:00.000Z',
+          permissions: [
+            {
+              name: PERMISSIONS.ACTIVITY_READ,
+              source: 'ROLE_DEFAULT',
+              validFrom: null,
+              validUntil: null,
+            },
+            {
+              name: PERMISSIONS.REPORT_EXPORT,
+              source: 'OVERRIDE',
+              validFrom: '2026-09-19T10:00:00.000Z',
+              validUntil: '2026-09-30T10:00:00.000Z',
+            },
+          ],
+        },
+      ],
+    });
+    expect(JSON.stringify(result)).not.to.include('grantedById');
+    expect(JSON.stringify(result)).not.to.include('grantedAt');
+  });
+
+  it('lists activity-local collaborators using the activity scope', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue({ eventProgramId: 'p1' });
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findMany.mockResolvedValue([]);
+    const { listCollaborators } = await loadService(prisma);
+
+    const result = await listCollaborators(
+      buildUser({ globalRole: 'ADMIN' }),
+      { activityId: 'a1' },
+      NOW,
+    );
+
+    expect(result).toEqual({ items: [] });
+    expect(prisma.collaboration.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { activityId: 'a1' } }),
+    );
+  });
+
+  it('returns 404 when adding a collaborator to a missing event program', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(null);
+    const { addCollaborator } = await loadService(prisma);
+
+    await expect(
+      addCollaborator(
+        buildUser({ globalRole: 'ADMIN' }),
+        { eventProgramId: 'missing' },
+        'user-002',
+        'VIEWER',
+        NOW,
+      ),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(prisma.collaboration.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects adding collaborators to an archived event program', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ARCHIVED' });
+    const { addCollaborator } = await loadService(prisma);
+
+    await expect(
+      addCollaborator(
+        buildUser({ globalRole: 'ADMIN' }),
+        { eventProgramId: 'p1' },
+        'user-002',
+        'VIEWER',
+        NOW,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Archived event programs cannot be modified.',
+    });
+    expect(prisma.collaboration.create).not.toHaveBeenCalled();
+  });
+
+  it('returns the created collaborator as a DTO', async () => {
+    const prisma = createPrismaMock();
+    prisma.permission.findMany.mockResolvedValue(permissionRecords(ROLE_DEFAULTS.VIEWER));
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-002', isActive: true });
+    prisma.collaboration.findFirst.mockResolvedValue(null);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.create.mockResolvedValue(collaboratorRecord());
+    const { addCollaborator } = await loadService(prisma);
+
+    const result = await addCollaborator(
+      buildUser({ globalRole: 'ADMIN' }),
+      { eventProgramId: 'p1' },
+      'user-002',
+      'VIEWER',
+      NOW,
+    );
+
+    expect(result).toEqual({
+      userId: 'user-002',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      email: 'ada@example.com',
+      role: 'VIEWER',
+      createdAt: '2026-09-19T12:00:00.000Z',
+      permissions: [
+        {
+          name: PERMISSIONS.ACTIVITY_READ,
+          source: 'ROLE_DEFAULT',
+          validFrom: null,
+          validUntil: null,
+        },
+      ],
+    });
   });
 });

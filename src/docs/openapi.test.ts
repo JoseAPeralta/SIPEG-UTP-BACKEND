@@ -21,9 +21,13 @@ const expectedOperations = [
   'PATCH /api/v1/admin/users/{id}',
   'GET /api/v1/activities',
   'POST /api/v1/activities',
+  'GET /api/v1/activities/{id}/collaborators',
+  'POST /api/v1/activities/{id}/collaborators',
   'GET /api/v1/event-programs',
   'POST /api/v1/event-programs',
   'PATCH /api/v1/event-programs/{id}',
+  'GET /api/v1/event-programs/{id}/collaborators',
+  'POST /api/v1/event-programs/{id}/collaborators',
   'GET /api/v1/organizational-units',
   'POST /api/v1/organizational-units',
   'GET /api/v1/organizational-units/{id}',
@@ -113,6 +117,21 @@ describe('openApiDocument', () => {
     expect(names).toContain('id');
     expect(operation?.responses?.['200']).toBeDefined();
     expect(operation?.responses?.['409']).toBeDefined();
+  });
+
+  it('documents collaborator delegation with bearer security and conflict responses', () => {
+    const programPost = openApiDocument.paths?.['/api/v1/event-programs/{id}/collaborators']?.post;
+    const programGet = openApiDocument.paths?.['/api/v1/event-programs/{id}/collaborators']?.get;
+    const activityGet = openApiDocument.paths?.['/api/v1/activities/{id}/collaborators']?.get;
+
+    expect(programPost?.security).toEqual([{ bearerAuth: [] }]);
+    expect(programPost?.responses?.['201']).toBeDefined();
+    expect(programPost?.responses?.['409']).toBeDefined();
+    expect(programGet?.security).toEqual([{ bearerAuth: [] }]);
+    expect(activityGet?.security).toEqual([{ bearerAuth: [] }]);
+    expect(openApiDocument.components?.schemas).toHaveProperty('Collaborator');
+    expect(openApiDocument.components?.schemas).toHaveProperty('CollaboratorPermission');
+    expect(openApiDocument.components?.schemas).toHaveProperty('CollaboratorList');
   });
 
   it('documents rate limiting on the limited auth operations', () => {

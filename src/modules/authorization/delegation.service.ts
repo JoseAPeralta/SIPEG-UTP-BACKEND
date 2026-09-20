@@ -1,9 +1,24 @@
 import { getPrismaClient } from '../../config/prisma.js';
-import type { CollaborationRole } from '../../generated/prisma/enums.js';
+import type {
+  CollaborationRole,
+  PermissionGrantSource,
+  ProgramStatus,
+} from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { getPermissionEnvelopes, resolveScope } from './authorization.service.js';
-import type { AuthorizationScope, GrantEnvelope, ResolvedScope } from './authorization.types.js';
-import { PERMISSIONS, ROLE_DEFAULTS, type PermissionName } from './permissions.js';
+import type {
+  AuthorizationScope,
+  CollaboratorDetail,
+  CollaboratorList,
+  GrantEnvelope,
+  ResolvedScope,
+} from './authorization.types.js';
+import {
+  PERMISSIONS,
+  PERMISSION_NAMES,
+  ROLE_DEFAULTS,
+  type PermissionName,
+} from './permissions.js';
 
 export interface GrantWindowInput {
   validFrom?: Date | null;
@@ -64,6 +79,67 @@ const scopeWhere = (resolved: ResolvedScope) =>
     ? { activityId: resolved.activityId }
     : { eventProgramId: resolved.eventProgramId };
 
+const collaboratorSelect = {
+  userId: true,
+  role: true,
+  createdAt: true,
+  user: { select: { firstName: true, lastName: true, email: true } },
+  permissions: {
+    select: {
+      source: true,
+      validFrom: true,
+      validUntil: true,
+      permission: { select: { name: true } },
+    },
+  },
+} as const;
+
+interface CollaboratorRecord {
+  userId: string;
+  role: CollaborationRole;
+  createdAt: Date;
+  user: { firstName: string; lastName: string; email: string };
+  permissions: {
+    source: PermissionGrantSource;
+    validFrom: Date | null;
+    validUntil: Date | null;
+    permission: { name: string };
+  }[];
+}
+
+const toCollaboratorDetail = (record: CollaboratorRecord): CollaboratorDetail => ({
+  userId: record.userId,
+  firstName: record.user.firstName,
+  lastName: record.user.lastName,
+  email: record.user.email,
+  role: record.role,
+  createdAt: record.createdAt.toISOString(),
+  permissions: [...record.permissions]
+    .filter((row) => PERMISSION_NAMES.includes(row.permission.name as PermissionName))
+    .sort((first, second) => first.permission.name.localeCompare(second.permission.name))
+    .map((row) => ({
+      name: row.permission.name,
+      source: row.source,
+      validFrom: row.validFrom ? row.validFrom.toISOString() : null,
+      validUntil: row.validUntil ? row.validUntil.toISOString() : null,
+    })),
+});
+
+const loadScopeProgram = async (
+  resolved: ResolvedScope,
+): Promise<{ id: string; status: ProgramStatus }> => {
+  const program = await getPrismaClient().eventProgram.findUnique({
+    where: { id: resolved.eventProgramId },
+    select: { id: true, status: true },
+  });
+
+  if (!program) {
+    throw new ApiError(404, 'Event program not found.');
+  }
+
+  return program;
+};
+
 const loadPermissionIds = async (
   names: readonly PermissionName[],
 ): Promise<Map<string, string>> => {
@@ -94,17 +170,42 @@ const loadPermissionId = async (name: PermissionName): Promise<string> => {
   return record.id;
 };
 
+export const listCollaborators = async (
+  actor: Express.AuthenticatedUser,
+  scope: AuthorizationScope,
+  now: Date = new Date(),
+): Promise<CollaboratorList> => {
+  await assertActorCanDelegate(actor, scope, now);
+
+  const resolved = await resolveScope(scope);
+  await loadScopeProgram(resolved);
+
+  const records = await getPrismaClient().collaboration.findMany({
+    where: scopeWhere(resolved),
+    orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
+    select: collaboratorSelect,
+  });
+
+  return { items: records.map(toCollaboratorDetail) };
+};
+
 export const addCollaborator = async (
   actor: Express.AuthenticatedUser,
   scope: AuthorizationScope,
   targetUserId: string,
   role: CollaborationRole,
   now: Date = new Date(),
-): Promise<void> => {
+): Promise<CollaboratorDetail> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
   assertRoleWithinEnvelopes(role, envelopes);
 
   const resolved = await resolveScope(scope);
+  const program = await loadScopeProgram(resolved);
+
+  if (program.status === 'ARCHIVED') {
+    throw new ApiError(409, 'Archived event programs cannot be modified.');
+  }
+
   const prisma = getPrismaClient();
 
   const target = await prisma.user.findUnique({
@@ -131,8 +232,8 @@ export const addCollaborator = async (
 
   const permissionIds = await loadPermissionIds(ROLE_DEFAULTS[role]);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.collaboration.create({
+  const created = await prisma.$transaction((tx) =>
+    tx.collaboration.create({
       data: {
         role,
         eventProgramId: resolved.activityId ? null : resolved.eventProgramId,
@@ -146,8 +247,11 @@ export const addCollaborator = async (
           })),
         },
       },
-    });
-  });
+      select: collaboratorSelect,
+    }),
+  );
+
+  return toCollaboratorDetail(created);
 };
 
 export const updateCollaboratorRole = async (
