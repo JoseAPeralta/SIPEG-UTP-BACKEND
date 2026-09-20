@@ -1,0 +1,44 @@
+meta {
+  name: Add a collaborator
+  type: http
+  seq: 8
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("ADMIN adds a collaborator and materializes ROLE_DEFAULT grants", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Collaborator added successfully.");
+    expect(body.data.userId).to.equal(bru.getVar("collaboratorUserId"));
+    expect(body.data.role).to.equal("VIEWER");
+    expect(body.data.permissions).to.be.an("array");
+    expect(body.data.permissions.length).to.be.at.least(5);
+    for (const permission of body.data.permissions) {
+      expect(permission.source).to.equal("ROLE_DEFAULT");
+    }
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("grantedById");
+    expect(serialized).to.not.include("grantedAt");
+  });
+}

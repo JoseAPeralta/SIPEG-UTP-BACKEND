@@ -1,0 +1,28 @@
+meta {
+  name: Add a collaborator without a token returns 401
+  type: http
+  seq: 13
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "userId": "seed_user_visor",
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("authentication is required", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

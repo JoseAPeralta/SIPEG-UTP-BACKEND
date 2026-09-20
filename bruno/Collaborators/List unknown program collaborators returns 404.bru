@@ -1,0 +1,27 @@
+meta {
+  name: List unknown program collaborators returns 404
+  type: http
+  seq: 5
+  tags: [
+    Collaborators
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{unknownProgramId}}/collaborators
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("listing a missing scope returns 404", function () {
+    expect(res.getStatus()).to.equal(404);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Event program not found.");
+  });
+}

@@ -1,0 +1,34 @@
+meta {
+  name: Add a collaborator as an organizer without grant returns 403
+  type: http
+  seq: 15
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/seed_program_fisc_default/collaborators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "seed_user_visor",
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("ORGANIZER without permission:grant cannot add collaborators", function () {
+    expect(res.getStatus()).to.equal(403);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Insufficient privileges for this resource.");
+  });
+}

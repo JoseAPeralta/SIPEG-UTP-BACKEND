@@ -1,0 +1,33 @@
+meta {
+  name: List activity collaborators
+  type: http
+  seq: 4
+  tags: [
+    Collaborators
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities/{{collaboratorsActivityId}}/collaborators
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("ADMIN lists only the activity-local collaborators", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.be.an("array");
+    const editor = body.data.items.find(function (item) {
+      return item.userId === "seed_user_editor";
+    });
+
+    expect(editor).to.not.equal(undefined);
+    expect(editor.role).to.equal("EDITOR");
+  });
+}

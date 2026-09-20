@@ -1,0 +1,32 @@
+meta {
+  name: Add a collaborator with an invalid role returns 400
+  type: http
+  seq: 10
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "role": "OWNER"
+  }
+}
+
+tests {
+  test("unknown roles are rejected before the service", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().success).to.equal(false);
+  });
+}
