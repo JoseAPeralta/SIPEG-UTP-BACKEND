@@ -65,3 +65,49 @@ describe('API documentation routes', () => {
     await request(app).get('/api/docs').expect(404);
   });
 });
+
+describe('security middleware', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('./lib/auth.js');
+    vi.doUnmock('./config/prisma.js');
+    delete process.env['DOCS_ENABLED'];
+  });
+
+  it('rejects requests from origins outside the allowlist', async () => {
+    const { app } = await loadApp();
+
+    const response = await request(app)
+      .get('/api/openapi.json')
+      .set('Origin', 'https://evil.example')
+      .expect(403);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'CORS origin is not allowed.',
+      errors: [],
+    });
+  });
+
+  it('allows requests from the configured origin', async () => {
+    const { app } = await loadApp();
+
+    const response = await request(app)
+      .get('/api/openapi.json')
+      .set('Origin', 'http://localhost:5173')
+      .expect(200);
+
+    expect(response.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+  });
+
+  it('sets hardening headers and hides the framework header', async () => {
+    const { app } = await loadApp();
+
+    const response = await request(app).get('/api/openapi.json').expect(200);
+
+    expect(response.headers['x-powered-by']).toBeUndefined();
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['cross-origin-resource-policy']).toBe('same-site');
+  });
+});
