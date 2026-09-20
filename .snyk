@@ -1,0 +1,26 @@
+# Snyk (https://snyk.io) policy file
+# Excludes non-production code from Snyk Code scans.
+# Docs: https://docs.snyk.io/scan-fix-and-prevent/scan-with-snyk/snyk-projects/import-project-repository/exclude-directories-and-files-from-project-import
+exclude:
+  code:
+    # Test files are not compiled into dist and are not shipped (see tsconfig.build.json).
+    - "*.test.ts"
+    - "*.spec.ts"
+    - "tests/"
+    - "test/"
+    # Bruno HTTP client collection: development tooling, not production code.
+    - "bruno/**"
+    # Prisma demo/test seed population (prisma db seed). Development only.
+    # The production base seed stays scanned: prisma/seed.base.ts, prisma/seed/base.seed.ts
+    # and its production dependencies (helpers.ts, classrooms.seed.ts, organizations.seed.ts).
+    - "prisma/seed.ts"
+    - "prisma/seed/index.ts"
+    - "prisma/seed/activities.seed.ts"
+    - "prisma/seed/alerts.seed.ts"
+    - "prisma/seed/attendance.seed.ts"
+    - "prisma/seed/collaborations.seed.ts"
+    - "prisma/seed/programs.seed.ts"
+    - "prisma/seed/proposals.seed.ts"
+    - "prisma/seed/speakers.seed.ts"
+    - "prisma/seed/users.seed.ts"
+    - "prisma/seed/test-helpers/**"

@@ -1,9 +1,9 @@
 meta {
-  name: Log in as a regular user
+  name: Log in as FISC head
   type: http
-  seq: 2
+  seq: 14
   tags: [
-    Careers
+    Organizational_Units
   ]
 }
 
@@ -15,8 +15,8 @@ post {
 
 body:json {
   {
-    "email": "{{regularEmail}}",
-    "password": "{{demoPassword}}"
+    "email": "{{headEmail}}",
+    "password": "{{headPassword}}"
   }
 }
 
@@ -24,7 +24,8 @@ script:post-response {
   const body = res.getBody();
 
   if (body?.success && body.data?.accessToken) {
-    bru.setVar("regularToken", body.data.accessToken);
+    bru.setVar("token", body.data.accessToken);
+    bru.setVar("refreshToken", body.data.refreshToken);
   }
 }
 
