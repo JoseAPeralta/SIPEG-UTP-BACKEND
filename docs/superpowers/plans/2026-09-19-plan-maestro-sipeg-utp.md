@@ -51,14 +51,29 @@ Aplicar esta lista al finalizar cada modulo o fase:
 
 **Objetivo:** confirmar que la base tecnica es estable antes de ampliar el dominio.
 
-- [ ] **0.1 Verificar calidad base.** Ejecutar tests, typecheck, lint y build; registrar el baseline de cobertura.
-- [ ] **0.2 Revisar health y apagado ordenado.** Confirmar que `/api/v1/health` responde correctamente y que `server.ts` cierra HTTP y Prisma sin perder solicitudes.
-- [ ] **0.3 Revisar seguridad global.** Confirmar CORS explicito, Helmet, rate limit global y `DOCS_ENABLED=false` en produccion.
-- [ ] **0.4 Revisar migraciones y seed.** Ejecutar `pnpm prisma:migrate:status` y correr `pnpm prisma:seed` dos veces; el segundo pase no debe duplicar datos.
-- [ ] **0.5 Revisar OpenAPI.** Confirmar Scalar, `/api/openapi.json` y `pnpm run docs:check` sin drift.
-- [ ] **0.6 Definir estructura modular.** Decidir si se migran controllers y routes de actividades/programas al patron autocontenido de auth/users o si se documenta la coexistencia.
+- [x] **0.1 Verificar calidad base.** Ejecutar tests, typecheck, lint y build; registrar el baseline de cobertura.
+- [x] **0.2 Revisar health y apagado ordenado.** Confirmar que `/api/v1/health` responde correctamente y que `server.ts` cierra HTTP y Prisma sin perder solicitudes.
+- [x] **0.3 Revisar seguridad global.** Confirmar CORS explicito, Helmet, rate limit global y `DOCS_ENABLED=false` en produccion.
+- [x] **0.4 Revisar migraciones y seed.** Ejecutar `pnpm prisma:migrate:status` y correr `pnpm prisma:seed` dos veces; el segundo pase no debe duplicar datos.
+- [x] **0.5 Revisar OpenAPI.** Confirmar Scalar, `/api/openapi.json` y `pnpm run docs:check` sin drift.
+- [x] **0.6 Definir estructura modular.** Decidir si se migran controllers y routes de actividades/programas al patron autocontenido de auth/users o si se documenta la coexistencia.
 
 **Criterio de salida:** todos los comandos de calidad estan en verde, el seed es idempotente y el contrato OpenAPI no tiene drift.
+
+**Registro de ejecucion (2026-09-19):**
+
+- [x] Calidad base: 238 tests en 28 archivos con `typecheck`, `lint` y `build` en verde. Cobertura baseline registrada sin thresholds: statements 85.41%, branches 78.13%, functions 85.16%, lines 86.07%.
+- [x] Health: `GET /api/v1/health` responde 200 con `authJwksReachable: true`. Apagado verificado con `node dist/server.js` + SIGTERM (`SIGTERM received. Shutting down gracefully.`). `server.ts` ahora cierra conexiones inactivas y registra errores de listen con `exit(1)` (commit `f88f271`).
+- [x] Seguridad: CORS allowlist y headers de Helmet cubiertos por 3 tests nuevos (commit `5e63446`). Rate limit generico diferido a fases 8, 9 y 12.
+- [x] Migraciones: 9 aplicadas, `Database schema is up to date`. Seed ejecutado dos veces con conteos identicos (30 usuarios, 10 unidades, 24 carreras, 15 programas, 24 actividades, 13 ponentes, 10 aulas, 35 asistencias con 27 check-in, 27 certificados, 4 propuestas, 37 alertas); sin duplicados.
+- [x] OpenAPI: `docs:generate` sin diff y `docs:check` en verde; Scalar y `/api/openapi.json` verificados en vivo.
+- [x] Estructura modular normalizada en el commit `a873e51` (0.6).
+
+Hallazgos abiertos:
+
+- `F0-A`: `env.ts` valida `CORS_ORIGIN` como CSV, pero `app.ts` y `auth.ts` lo usan como origen unico. Es fail-closed; alinear validacion y parseo.
+- `F0-B`: con el binario compilado, Better Auth advierte columnas faltantes en `jwks` (`expiresAt`, `alg`, `crv`). El adapter las omite y JWKS funciona; revisar en Fase 1 (auth) si conviene migrar el schema.
+- `F0-C`: no existe limiter generico para rutas no-auth; se cubre con limiters especificos en fases 8 y 9 y uno general en Fase 12.
 
 ---
 
