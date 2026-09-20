@@ -1,0 +1,27 @@
+meta {
+  name: List collaborators as an organizer without grant returns 403
+  type: http
+  seq: 14
+  tags: [
+    Collaborators
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/seed_program_fisc_default/collaborators
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("ORGANIZER without permission:grant cannot list collaborators", function () {
+    expect(res.getStatus()).to.equal(403);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Insufficient privileges for this resource.");
+  });
+}

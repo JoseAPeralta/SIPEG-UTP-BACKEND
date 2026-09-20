@@ -1,0 +1,34 @@
+meta {
+  name: Add a collaborator to an archived program returns 409
+  type: http
+  seq: 11
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/collaborators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("archived event programs cannot accept new collaborators", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Archived event programs cannot be modified.");
+  });
+}

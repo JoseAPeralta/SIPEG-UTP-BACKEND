@@ -1,0 +1,21 @@
+meta {
+  name: List collaborators without a token returns 401
+  type: http
+  seq: 6
+  tags: [
+    Collaborators
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators
+  body: none
+  auth: none
+}
+
+tests {
+  test("authentication is required", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

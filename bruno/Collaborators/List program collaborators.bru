@@ -1,0 +1,49 @@
+meta {
+  name: List program collaborators
+  type: http
+  seq: 3
+  tags: [
+    Collaborators
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("ADMIN lists the local collaborators of a program", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Collaborators retrieved successfully.");
+    expect(body.data.items).to.be.an("array");
+    expect(body.data.items.length).to.be.at.least(1);
+  });
+
+  test("the organizer appears with role and local grants but no audit fields", function () {
+    const body = res.getBody();
+    const organizer = body.data.items.find(function (item) {
+      return item.userId === "seed_user_org-fisc";
+    });
+
+    expect(organizer).to.not.equal(undefined);
+    expect(organizer.role).to.equal("ORGANIZER");
+    expect(organizer.permissions).to.be.an("array");
+    const grant = organizer.permissions.find(function (permission) {
+      return permission.name === "permission:grant";
+    });
+    expect(grant).to.not.equal(undefined);
+    expect(grant.source).to.equal("OVERRIDE");
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("grantedById");
+    expect(serialized).to.not.include("grantedAt");
+    expect(serialized).to.not.include("$argon2");
+  });
+}

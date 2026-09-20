@@ -1,0 +1,37 @@
+meta {
+  name: Log in as admin
+  type: http
+  seq: 1
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{adminEmail}}",
+    "password": "{{adminPassword}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.accessToken) {
+    bru.setVar("token", body.data.accessToken);
+    bru.setVar("refreshToken", body.data.refreshToken);
+  }
+}
+
+tests {
+  test("admin login returns an access token", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().data.accessToken).to.be.a("string");
+  });
+}
