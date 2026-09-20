@@ -46,7 +46,7 @@ Catalogo unico de unidades de la universidad (`organizational_units`). Se distin
 
 ### Carrera
 
-Programa academico asociado a un usuario y a una unidad organizativa de tipo facultad. Se usa para segmentacion, reportes y comunicaciones.
+Programa academico asociado a un usuario y a una unidad organizativa de tipo facultad. Se usa para segmentacion, reportes y comunicaciones. El catalogo no usa `isActive` (ADR-0006): toda carrera es seleccionable. `unit_id` es opcional; una carrera sin unidad es global y se siembra una unica carrera global `Otros` (`OTROS`), seleccionable con cualquier facultad. `OTROS` no se elimina, no cambia de codigo y debe permanecer global; una carrera con usuarios asociados no puede cambiar de unidad y solo se elimina (`DELETE`, `204`) cuando no tiene usuarios. Gestion exclusiva de `ADMIN`; lectura publica.
 
 ### Permiso De Colaboracion
 
@@ -101,13 +101,25 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Proveedor de auth modular con env vars **library-agnostic** (`AUTH_*`). Internamente usa Better Auth 1.7.x + plugin JWT.
 - Password hashing: **Argon2id** con parametros OWASP (`t=2, m=19 MiB, p=1`).
 - API privada 100% stateless: access tokens JWT EdDSA Ed25519 validados contra JWKS cacheado (vida 15 min).
-- Refresh tokens = sesiones nativas del proveedor (vida 7 dias, revocacion server-side inmediata).
-- Flujos en `/api/v1/auth/*`: login, register, refresh, logout, verify-email, forgot-password, reset-password.
+- Refresh tokens = sesiones nativas del proveedor (`AUTH_REFRESH_TTL`, 7 dias por defecto), con expiracion absoluta y revocacion server-side inmediata.
+- Flujos en `/api/v1/auth/*`: login, register, refresh, logout, verify-email, forgot-password, reset-password, change-password.
+- `POST /auth/register` responde `201` con solo `userId`; email duplicado (normalizado a minusculas) o identificacion duplicada responden `409`. Con `autoSignIn: false` Better Auth devuelve un exito sintetico para emails existentes, por eso el servicio pre-valida en BD y verifica la persistencia del usuario creado.
+- `POST /api/v1/auth/login` autentica contra el proveedor, crea la sesion y firma un access token JWT EdDSA; credenciales invalidas o una cuenta desactivada responden `401` con el mensaje generico `Invalid email or password`, y una sesion creada para una cuenta desactivada se elimina; limite de 5 intentos por minuto por IP.
+- `POST /api/v1/auth/refresh` rota el refresh token: valida que la sesion exista, no este vencida y pertenezca a una cuenta activa, firma un access token EdDSA nuevo y reemplaza `sessions.token` de forma atomica. El refresh anterior deja de funcionar; un token vencido, revocado o de una cuenta desactivada responde `401`. La rotacion conserva la expiracion absoluta de la sesion.
+- `POST /api/v1/auth/logout` elimina solo la sesion identificada por el refresh token y es idempotente. No revoca el JWT ya emitido; los access tokens permanecen stateless hasta vencer.
+- El registro envia un correo de verificacion y el login exige `emailVerified=true`. Los tokens de verificacion duran `AUTH_EMAIL_VERIFICATION_TTL` (24 h por defecto), no crean una sesion al verificarse y tienen limite de 5 intentos/min por IP.
+- `forgot-password` responde el mismo 200 para emails existentes e inexistentes. El token de reset dura `AUTH_PASSWORD_RESET_TTL` (1 h), es de un solo uso y el reset revoca todas las sesiones del usuario. Los JWT ya emitidos pueden seguir validos hasta `AUTH_TOKEN_TTL`.
+- `POST /api/v1/auth/change-password` exige Bearer token, `currentPassword`, `newPassword` (12-128) y el `refreshToken` de la sesion actual: verifica la contrasena actual con Argon2id, actualiza `accounts.password` y revoca en una transaccion todas las sesiones del usuario excepto la actual. Un refresh token ajeno o una contrasena actual incorrecta responden `400`; limite de 5 intentos/min por usuario.
+- `authenticate` consulta el usuario en BD en cada request privada y responde `403 Account is disabled.` si fue desactivado, aunque el JWT todavia sea criptograficamente valido.
 - Handler del proveedor montado en `/api/auth/*splat` para flujos raw si el frontend los necesita.
 - Middlewares: `authenticate` (carga `req.user`) y `authorize` (`requireRole`, `requireAdmin`, `requireOwnership`, `requirePermission`).
-- Rate limit por endpoint sensible (login 5/min, register 3/min, password reset 3/min).
-- Email verification habilitada; SMTP opcional (en dev, Better Auth loguea el email).
-- Variables sensibles: `AUTH_SECRET` (requerido), `AUTH_URL`, opcionales `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_TOKEN_TTL`, `AUTH_REFRESH_TTL`.
+- `GET /api/v1/admin/users` es exclusivo de `ADMIN` (un `USER` recibe `403`): lista usuarios con paginación offset, búsqueda `q` insensible en nombre, apellido, email o identificación y filtros `globalRole`, `isActive`, `unitId` y `careerId`. El `select` excluye `name`, `accounts`, `password`, `passwordHash` y `emailVerified`.
+- `GET /api/v1/admin/users/{id}` es exclusivo de `ADMIN`: devuelve el mismo DTO seguro de un usuario y responde `404 User not found.` para un identificador inexistente; un id vacío o de solo espacios responde `400`.
+- `POST /api/v1/admin/users` es exclusivo de `ADMIN`: crea `users` + `accounts` en una transacción con Argon2id, acepta `globalRole`/`isActive` y valida unidad/carrera con las mismas reglas que el perfil. El email se normaliza, los duplicados de email o identificación responden `409` y el correo se crea sin verificar; `auth.api.sendVerificationEmail` envia el enlace y el login responde `403` hasta verificar.
+- `PATCH /api/v1/admin/users/{id}` es exclusivo de `ADMIN`: permite `globalRole`, `isActive`, `unitId` y `careerId`; reutiliza la validación de unidad/carrera de `PATCH /users/me`; al desactivar ejecuta `user.update` + `session.deleteMany` en una transacción; autodesactivación y autodegradación responden `409`, igual que degradar o desactivar al último administrador activo.
+- Rate limit por endpoint sensible (login 5/min, register 3/min, forgot/reset 3/min cada uno, verify-email 5/min y change-password 5/min por usuario).
+- Correo de identidad mediante Nodemailer/SMTP con TLS 1.2 minimo. Mailpit captura correo local en `127.0.0.1:8025`; produccion exige `MAIL_HOST` y `MAIL_FROM`. Errores y logs no contienen destinatarios, enlaces ni tokens.
+- Variables de auth: `AUTH_SECRET` (requerido), `AUTH_URL`, `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`; opcionales `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_TOKEN_TTL`, `AUTH_REFRESH_TTL`, `AUTH_EMAIL_VERIFICATION_TTL`, `AUTH_PASSWORD_RESET_TTL`.
 - Documentacion detallada: `AGENTS.md` y `docs/adr/adr-0001-time-aware-collaboration-authorization.md`.
 
 ### Autorizacion Por Colaboracion
@@ -118,7 +130,14 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Vigencia por permiso (`validFrom`/`validUntil`); grants vencidos se ignoran sin borrarse.
 - `permission:grant` habilita delegar; invariante de subconjunto simetrico y atenuacion temporal en `delegation.service.ts`.
 - Sin `DENY` local: un permiso heredado del programa no se revoca en la actividad.
-- El catalogo se siembra con `pnpm prisma:seed`.
+- El catalogo se siembra con `pnpm prisma:seed:base` en produccion y `pnpm prisma:seed` en desarrollo.
+
+### Unidades Organizativas
+
+- `GET /api/v1/organizational-units` y `GET /api/v1/organizational-units/{id}` son publicos; el listado muestra solo activas salvo `isActive=false`, con paginacion, filtro `type` y busqueda `q` por nombre o codigo. El detalle incluye `careers` y `defaultProgram`.
+- Gestion exclusiva de `ADMIN`: crear (unidad + programa predeterminado `ACTIVE` en una transaccion; `code` unico insensible a mayusculas y normalizado), actualizar `name`/`description`/`headId` (`code` y `type` inmutables), desactivar y reactivar.
+- Desactivar exige que el programa predeterminado no tenga actividades `SCHEDULED`/`ONGOING` (`409`); en la misma transaccion la unidad pasa a inactiva y el programa se archiva (la unidad debe quedar inactiva antes de archivar por el trigger de BD). Reactivar delega en el trigger la restauracion del programa predeterminado existente.
+- `headId` solo admite usuarios activos; `null` lo elimina. El encargado se expone solo como `{ id, firstName, lastName }`.
 
 ### Programas De Eventos Y Actividades
 
@@ -160,6 +179,11 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 
 ### Inventario De Aulas
 
+- `GET /api/v1/classrooms` y `GET /api/v1/classrooms/{id}` son publicos; el listado muestra solo activas salvo `isActive=false`, con paginacion y filtros `type`, `minCapacity` y `amenity`. El detalle incluye `amenities` y `availability`.
+- Gestion exclusiva de `ADMIN`: crear, actualizar (`name`, `type`, `capacity`, `building`, `floor`, `isActive`), agregar/quitar amenidades y agregar/quitar ventanas de disponibilidad.
+- `dayOfWeek` usa numeracion ISO (1 lunes a 7 domingo); una ventana exige `startTime < endTime` y un solape en el mismo dia responde `409`. Las amenidades duplicadas se rechazan sin distinguir mayusculas.
+- Desactivar un aula con actividades `SCHEDULED`/`ONGOING` responde `409`.
+- `GET /api/v1/classrooms/available` cruza la ventana semanal del dia institucional con las actividades que reservan aula (`SCHEDULED`/`ONGOING`, igual que la exclusion GiST `activities_classroom_no_overlap`); `DRAFT`, `COMPLETED` y `CANCELLED` no bloquean.
 - Administrar aulas, tipos, horarios, dias disponibles, capacidad y amenidades.
 - Validar disponibilidad antes de asignar aula a una actividad.
 - Exponer filtros para disponibilidad y capacidad.

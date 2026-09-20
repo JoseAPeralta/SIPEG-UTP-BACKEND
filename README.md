@@ -24,7 +24,7 @@ El proyecto usa dos archivos Compose independientes: uno de desarrollo y uno de 
 
 | Entorno    | Archivo             | Uso                                                                         |
 | ---------- | ------------------- | --------------------------------------------------------------------------- |
-| Desarrollo | `compose.dev.yaml`  | Hot reload, migraciones automaticas, PostgreSQL publicado en loopback.      |
+| Desarrollo | `compose.dev.yaml`  | Hot reload, migraciones, PostgreSQL y Mailpit publicados en loopback.       |
 | Produccion | `compose.prod.yaml` | Imagen runtime minima, sin puertos de base de datos, secretos obligatorios. |
 
 ### Desarrollo
@@ -37,6 +37,7 @@ docker compose -f compose.dev.yaml up --build
 - El codigo en `src/` y `prisma/` se monta como volumen: los cambios se recargan con `tsx watch`.
 - Un servicio one-shot `migrate` aplica `prisma migrate deploy` antes de arrancar la API.
 - PostgreSQL se expone solo en `127.0.0.1:${POSTGRES_PORT:-5432}` para uso local.
+- Mailpit recibe los correos de identidad por SMTP y expone su bandeja solo en `http://127.0.0.1:${MAILPIT_PORT:-8025}`.
 
 Para crear una migracion nueva durante el desarrollo:
 
@@ -55,16 +56,18 @@ Evita `down -v` salvo que quieras destruir los datos locales: elimina el volumen
 ### Produccion
 
 1. Crea un archivo `.env.prod` (no se versiona) con secretos reales. Usa la seccion de produccion de `.env.example` como guia.
-2. Levanta el stack:
+2. En el primer despliegue sobre una base vacia define el ADMIN inicial en `.env.prod` (`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_IDENTIFICATION_NUMBER`); el seed base falla si no existe ningun ADMIN y no hay bootstrap configurado.
+3. Levanta el stack:
 
 ```bash
 docker compose -f compose.prod.yaml --env-file .env.prod up -d --build
 ```
 
-- El servicio `migrate` aplica las migraciones pendientes y termina; la API solo arranca si finaliza correctamente.
+- El servicio `migrate` aplica las migraciones pendientes y termina; luego el servicio one-shot `seed` carga el catalogo base institucional y el ADMIN inicial; la API solo arranca si ambos finalizan correctamente.
+- El seed base es idempotente y no sobrescribe datos existentes: puedes re-ejecutarlo con `docker compose -f compose.prod.yaml --env-file .env.prod run --rm seed`.
 - La base de datos no publica puertos al host; solo es accesible por la red interna de Compose.
 - `DATABASE_URL` se construye automaticamente con host `db` a partir de `POSTGRES_DB`, `POSTGRES_USER` y `POSTGRES_PASSWORD`; no la definas en `.env.prod`.
-- Las variables obligatorias de Compose son: `CORS_ORIGIN`, `POSTGRES_DB`, `POSTGRES_USER` y `POSTGRES_PASSWORD`.
+- Las variables obligatorias de Compose son: `CORS_ORIGIN`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`, `MAIL_HOST` y `MAIL_FROM`.
 - Si `POSTGRES_PASSWORD` contiene caracteres especiales (`@ : / ? # %`), codificalos en porcentaje o usa solo caracteres alfanumericos.
 - `IMAGE_TAG` permite etiquetar la imagen de la API (por defecto `latest`).
 - La API se detiene con `stop_grace_period: 15s`, mayor que el timeout interno de apagado ordenado.
@@ -110,7 +113,8 @@ Luego restaura `backup.sql` en el nuevo volumen antes de levantar la API. El nom
 - `pnpm run prisma:migrate:dev`: crea y aplica migraciones de desarrollo; requiere una `DATABASE_URL` valida.
 - `pnpm run prisma:migrate:deploy`: aplica migraciones pendientes; usado por el servicio `migrate` en Docker.
 - `pnpm run prisma:migrate:status`: reporta el estado de las migraciones.
-- `pnpm run prisma:seed`: siembra el catalogo de permisos y los datos de prueba completos (idempotente).
+- `pnpm run prisma:seed`: siembra el catalogo de permisos y los datos de prueba completos (solo desarrollo; idempotente).
+- `pnpm run prisma:seed:base`: siembra el catalogo base de produccion (unidades, programas predeterminados, carreras, aulas y permisos) y el ADMIN inicial; crea solo lo que falta.
 
 ## API Inicial
 
@@ -161,7 +165,13 @@ pnpm run api:run:smoke # seguro: solo GET /api/v1/health
 pnpm run api:run       # coleccion completa; contiene operaciones que modifican datos
 ```
 
-`pnpm run api:collection:import` sobrescribe la coleccion: despues de reimportar hay que restaurar el script post-response de `Auth/Log in with email and password.bru`. No guardes tokens ni credenciales reales en archivos versionados; usa un archivo `*.private.bru`, ignorado por Git, o variables proporcionadas en runtime. El login tiene limite de 5 intentos por minuto.
+`pnpm run api:collection:import` sobrescribe la coleccion: despues de reimportar hay que restaurar el script post-response y las assertions de `Auth/Log in with email and password.bru`, los scripts/assertions de `Auth/Refresh the access token.bru` y `Auth/Log out and revoke the refresh token.bru`, y los scripts/assertions de `Auth/Register a new user.bru`, `Auth/Register duplicate email returns 409.bru`, `Auth/Register duplicate identification returns 409.bru`, `Auth/Register rate limit returns 429.bru`, `Auth/Login wrong password returns 401.bru`, `Auth/Login unknown email returns 401.bru`, `Auth/Login rate limit returns 429.bru`, `Auth/Refresh reused token returns 401.bru` y `Auth/Logout revoked token returns 401.bru`. No guardes tokens ni credenciales reales en archivos versionados; usa un archivo `*.private.bru`, ignorado por Git, o variables proporcionadas en runtime. El login tiene limite de 5 intentos por minuto.
+
+Flujo de registro (fase 1.1) en Bruno: ejecuta `Auth/Register a new user` (genera `newUserEmail` y `newUserIdentification` en runtime, espera 201 y valida que no se filtre el hash), luego `Auth/Register duplicate email returns 409` y `Auth/Register duplicate identification returns 409`. Para el limite de tasa, espera a una ventana limpia y envia `Auth/Register rate limit returns 429` cuatro veces en menos de un minuto: el cuarto intento responde 429. El registro tiene limite de 3 intentos por minuto por IP.
+
+Flujo de login (fase 1.2) en Bruno: `Auth/Log in with email and password` valida 200, captura los tokens y comprueba `alg=EdDSA` y ausencia de `$argon2`. `Auth/Login wrong password returns 401` y `Auth/Login unknown email returns 401` verifican el mismo 401 generico (`Invalid email or password`), sin revelar si el correo existe. El login tiene limite de 5 intentos por minuto por IP: invoca `Auth/Login rate limit returns 429` seis veces en una ventana limpia; el sexto responde 429. Espera 60 segundos entre corridas completas de `Auth`.
+
+Flujo de refresh y logout (fases 1.3-1.4) en Bruno: `Auth/Refresh the access token` usa el refresh token capturado por el login, espera 200, comprueba que el refresh token rota (nuevo distinto al anterior) y que el access token es EdDSA, y actualiza las variables de runtime. `Auth/Refresh reused token returns 401` reenvia el token anterior a la rotacion; `Auth/Log out and revoke the refresh token` revoca el token vigente y `Auth/Logout revoked token returns 401` demuestra que ya no puede renovarse. La sesion conserva una expiracion absoluta configurada por `AUTH_REFRESH_TTL`.
 
 El `opencode.json` del proyecto registra el MCP oficial `@usebruno/mcp`, fijado a un commit porque todavia no se publica en npm, y lo limita a la coleccion `bruno/`. Reinicia opencode despues de cambiar esa configuracion. El agente debe inspeccionar el request antes de ejecutar POST/PATCH/DELETE y no ejecutar requests contra produccion sin aprobacion explicita. Si MCP no esta disponible, los scripts pnpm anteriores son el fallback.
 
@@ -201,29 +211,58 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
 
 - Password hashing con **Argon2id** (parametros OWASP: `t=2, m=19 MiB, p=1`).
 - Access tokens: JWT EdDSA Ed25519 (15 min) validados contra JWKS cacheado.
-- Refresh tokens: sesiones server-side (7 dias) con revocacion inmediata.
+- Refresh tokens: sesiones server-side (`AUTH_REFRESH_TTL`, 7 dias por defecto), expiracion absoluta y revocacion inmediata.
 - Endpoints principales (`/api/v1/auth/*`):
-  - `POST /auth/login` — devuelve access token + refresh token.
-  - `POST /auth/refresh` — emite nuevo access token.
-  - `POST /auth/logout` — invalida el refresh token.
-  - `POST /auth/register` — crea cuenta; envia email de verificacion.
-  - `POST /auth/verify-email` — confirma email.
-  - `POST /auth/forgot-password` / `reset-password` — recuperacion.
-- Rutas privadas: `Authorization: Bearer <accessToken>`.
+  - `POST /auth/login` — devuelve access token EdDSA + refresh token; credenciales invalidas o cuenta desactivada responden 401 generico (`Invalid email or password`) sin revelar si el correo existe; una cuenta no verificada responde 403; limite de 5 intentos/min por IP.
+  - `POST /auth/refresh` — rota el refresh token y emite un nuevo par; el token anterior queda invalido y tokens expirados, revocados o de cuentas desactivadas responden 401.
+  - `POST /auth/logout` — invalida solo el refresh token enviado; es idempotente. El access token ya emitido sigue stateless hasta vencer.
+  - `POST /auth/register` — crea una cuenta no verificada y envia un enlace de verificacion con vigencia `AUTH_EMAIL_VERIFICATION_TTL` (24 h por defecto).
+  - `POST /auth/verify-email` — confirma el email; tokens invalidos o vencidos responden 400 generico y el limite es 5 intentos/min por IP.
+  - `POST /auth/forgot-password` — siempre responde el mismo 200 exista o no el email; limite independiente de 3 solicitudes/min por IP.
+  - `POST /auth/reset-password` — consume un token de un solo uso con vigencia `AUTH_PASSWORD_RESET_TTL` (1 h por defecto), actualiza el hash Argon2id y revoca todas las sesiones del usuario; tiene otro limite independiente de 3 intentos/min por IP.
+  - `POST /auth/change-password` — requiere Bearer token, contrasena actual y nueva de 12-128 caracteres, mas el `refreshToken` de la sesion actual; actualiza el hash Argon2id y revoca todas las demas sesiones conservando la actual; limite de 5 intentos/min por usuario.
+- Los access tokens ya emitidos son stateless y pueden conservar validez hasta `AUTH_TOKEN_TTL`: tras un reset se revocan todos los refresh tokens del usuario y tras un cambio de contrasena se revocan todos menos el de la sesion actual.
+- La entrega usa SMTP con TLS 1.2 minimo y no registra destinatarios, enlaces ni tokens. Desarrollo usa Mailpit; produccion requiere `MAIL_HOST` y `MAIL_FROM`, con `MAIL_USER`/`MAIL_PASSWORD` opcionales pero inseparables.
+- Rutas privadas: `Authorization: Bearer <accessToken>`. `authenticate` recarga el usuario desde la BD y responde 403 si la cuenta fue desactivada, incluso con un JWT aun vigente.
 - Variables de entorno (sin prefijo del proveedor):
   - `AUTH_SECRET` (requerido, generar con `openssl rand -base64 32`)
   - `AUTH_URL` (default `http://localhost:3000`)
   - `AUTH_TOKEN_TTL` (default `15m`)
   - `AUTH_REFRESH_TTL` (default `7d`)
+  - `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`
+  - `AUTH_EMAIL_VERIFICATION_TTL` (default `24h`), `AUTH_PASSWORD_RESET_TTL` (default `1h`)
+  - `MAIL_HOST`, `MAIL_PORT`, `MAIL_SECURE`, `MAIL_FROM`; `MAIL_USER`/`MAIL_PASSWORD` opcionales
   - Opcionales: `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_ARGON2_*`
 
 ### Usuarios
 
 - `POST /auth/register` acepta `unitId` (unidad organizativa) y `careerId` (carrera) opcionales.
 - `GET /api/v1/users/me` devuelve `unit` y `career` (objetos `{ id, name, code }`).
-- `PATCH /api/v1/users/me` acepta `firstName`, `lastName`, `unitId` y `careerId`.
-- El claim `unitId` viaja en el access token JWT; la coherencia carrera-unidad se valida en el servicio.
+- `PATCH /api/v1/users/me` acepta `firstName`, `lastName`, `unitId` y `careerId`. `unitId` admite `null` para la opción "Otro" (sin unidad): en ese caso la carrera queda forzada a la carrera global `Otros`; una carrera distinta produce 400 y la ausencia de `Otros` en la base produce 409.
+- `GET /api/v1/admin/users` (solo `ADMIN`, responde `403` a `USER`) lista usuarios con paginación offset (`page`/`limit`, máximo 50), búsqueda `q` insensible a mayúsculas en nombre, apellido, email o identificación y filtros `globalRole`, `isActive`, `unitId` y `careerId`. No expone `name`, `accounts`, `password`, `passwordHash` ni `emailVerified`.
+- `GET /api/v1/admin/users/{id}` (solo `ADMIN`) devuelve el DTO administrativo seguro de un usuario y responde `404` para un identificador inexistente; tampoco expone `name`, `accounts`, `password`, `passwordHash` ni `emailVerified`.
+- `POST /api/v1/admin/users` (solo `ADMIN`) crea la cuenta y su credencial Argon2id en una transacción, acepta `globalRole` e `isActive` (defaults `USER` y `true`) y valida conflictos de email e identificación (`409`). El correo queda sin verificar (`emailVerified=false`) y se envia el enlace de verificación; la cuenta no puede iniciar sesion hasta verificarlo.
+- `PATCH /api/v1/admin/users/{id}` (solo `ADMIN`) actualiza `globalRole`, `isActive`, `unitId` y `careerId`; al desactivar revoca todas las sesiones del usuario; no permite autodesactivación ni autodegradación y protege al último administrador activo (409). Devuelve el mismo DTO seguro y responde 400/404.
+- La carrera `Otros` (`unitId` nulo) es global y se puede elegir con cualquier unidad; al cambiar a una unidad real se conserva. Ya no existe desactivación de carreras (`isActive` fue eliminado). Ver `docs/adr/adr-0006-career-catalog-without-active-flag.md`.
+- El claim `unitId` viaja en el access token JWT; la coherencia carrera-unidad se valida en el servicio (solo para carreras con unidad propia).
 - Las unidades organizativas se modelan en `organizational_units` con `type` (`FACULTY` o `SUBDIRECTORATE`) y un `head` (encargado) opcional. Ver `docs/adr/adr-0003-unified-organizational-units.md`.
+
+### Unidades Organizativas
+
+- `GET /api/v1/organizational-units` es público y devuelve solo unidades activas por defecto; `isActive=false` lista las inactivas. Acepta paginación offset (`page`/`limit`, máximo 50), filtro `type` (`FACULTY`/`SUBDIRECTORATE`) y búsqueda `q` en nombre o código.
+- `GET /api/v1/organizational-units/{id}` es público e incluye `careers` y `defaultProgram` (`{ id, name, status }`), además del encargado (`head`) expuesto solo como `{ id, firstName, lastName }`.
+- `POST /api/v1/organizational-units` (solo `ADMIN`) crea la unidad y su programa de eventos predeterminado `ACTIVE` en una sola transacción; el `code` se normaliza a mayúsculas, admite letras, números y guiones, y un duplicado responde `409`. `headId` debe ser un usuario activo (`404` si no existe, `400` si está inactivo).
+- `PATCH /api/v1/organizational-units/{id}` (solo `ADMIN`) permite `name`, `description` y `headId`; `code` y `type` son inmutables y cualquier campo desconocido responde `400`.
+- `POST /api/v1/organizational-units/{id}/deactivate` (solo `ADMIN`) rechaza con `409` si el programa predeterminado tiene actividades `SCHEDULED`/`ONGOING`; en caso de éxito desactiva la unidad y archiva el programa en una transacción. Un segundo intento responde `409`.
+- `POST /api/v1/organizational-units/{id}/reactivate` (solo `ADMIN`) reactiva la unidad y restaura su programa predeterminado existente en la misma transacción (trigger `organizational_units_reactivate_default_program`).
+
+### Carreras
+
+- `GET /api/v1/careers` es público y devuelve el catálogo completo sin `isActive` (toda carrera es seleccionable). Paginación offset (`page`/`limit`, máximo 50) y búsqueda `q` en nombre o código.
+- `unitId=<id>` devuelve las carreras de esa facultad más las globales (`OTROS`); `unitId=global` devuelve solo las globales. La respuesta expone `unit` (`{ id, name, code } | null`).
+- `POST /api/v1/careers` y `PATCH /api/v1/careers/{id}` (solo `ADMIN`) permiten `name`, `code`, `description` y `unitId` (opcional; `null` = carrera global). El `code` se normaliza a mayúsculas, es único (duplicado `409`) y la unidad, si se envía, debe ser una facultad activa (`404` si no existe, `400` si no es `FACULTY` o está inactiva).
+- La carrera global `Otros` (`OTROS`) es una invariante del sistema: no se puede eliminar, no cambia su código y debe permanecer global; `name` y `description` sí son editables. Una carrera con usuarios asociados no puede cambiar de unidad (`409`).
+- `DELETE /api/v1/careers/{id}` (solo `ADMIN`) elimina físicamente una carrera y responde `204`; con usuarios asociados responde `409`. Ver `docs/adr/adr-0006-career-catalog-without-active-flag.md`.
 
 ### Programas De Eventos
 
@@ -244,13 +283,23 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
 - Los codigos de check-in (`code`) viven en `attendance` (uno por inscripcion, unico global) y no en la actividad. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 - Terminologia: "evento" se usa coloquialmente, pero el nombre oficial del recurso es **actividad** (`/activities`). La ruta `/events` fue retirada.
 
+### Aulas
+
+- `GET /api/v1/classrooms` es público y devuelve solo aulas activas por defecto; `isActive=false` lista las inactivas. Paginación offset (`page`/`limit`, máximo 50) y filtros `type` (`LABORATORY`/`CLASSROOM`), `minCapacity` y `amenity` (insensible a mayúsculas).
+- `GET /api/v1/classrooms/{id}` es público e incluye `amenities` y las ventanas semanales `availability` (`dayOfWeek` ISO 1-7, `startTime`/`endTime` en `HH:mm`, `period` opcional).
+- `GET /api/v1/classrooms/available` es público y exige `date` (`YYYY-MM-DD`), `startTime` y `endTime`; acepta `minCapacity`, `type` y `amenity`. Devuelve las aulas activas cuya ventana cubre el intervalo en el día institucional solicitado y que no están reservadas por actividades `SCHEDULED`/`ONGOING`; actividades `DRAFT`, `COMPLETED` y `CANCELLED` no bloquean.
+- `POST /api/v1/classrooms` y `PATCH /api/v1/classrooms/{id}` (solo `ADMIN`) gestionan `name`, `type`, `capacity` (> 0), `building` y `floor`; el PATCH admite `isActive` y rechaza con `409` desactivar un aula con actividades `SCHEDULED`/`ONGOING`. Un body vacío o con claves desconocidas responde `400`.
+- `POST /api/v1/classrooms/{id}/amenities` y `DELETE /api/v1/classrooms/{id}/amenities/{amenity}` (solo `ADMIN`) agregan y quitan amenidades; el alta normaliza espacios, conserva el formato original, rechaza duplicados sin distinguir mayúsculas con `409` y el borrado también es insensible a mayúsculas.
+- `POST /api/v1/classrooms/{id}/availability` y `DELETE /api/v1/classrooms/{id}/availability/{availabilityId}` (solo `ADMIN`) gestionan ventanas semanales; se exige `startTime < endTime` y un solape con otra ventana del mismo día responde `409` (las ventanas adyacentes, como 07:00-12:00 y 12:00-17:00, conviven).
+- Las mutaciones devuelven el detalle completo del aula. La consistencia de reservas se apoya también en la restricción de exclusión `activities_classroom_no_overlap` de PostgreSQL.
+
 ## Datos De Prueba (Seed)
 
 `pnpm run prisma:seed` carga un conjunto completo e idempotente de datos de prueba
 (re-ejecutable sin duplicar ni borrar nada):
 
 - 6 facultades y 4 subdirecciones, cada una con su programa predeterminado y encargado.
-- 24 carreras oficiales distribuidas por facultad.
+- 25 carreras: 24 oficiales distribuidas por facultad más la carrera global `Otros` (sin unidad).
 - 29 usuarios demo + 10 aulas con amenidades y disponibilidad.
 - 5 programas adicionales (activo, completado, archivado y borrador), 24 actividades,
   colaboraciones con permisos materializados y ventanas de vigencia, asistencias,
@@ -272,6 +321,36 @@ Notas:
 - Los correos y numeros de identificacion son sinteticos (`SEED-*`); no corresponden a personas reales.
 - El seed aborta si `NODE_ENV=production` salvo que definas `SEED_ALLOW_PRODUCTION=true`.
 - Re-ejecutarlo es seguro: usa upserts con IDs determinados `seed_*` y respeta los triggers de la base de datos.
+
+## Datos Base De Produccion (Seed Base)
+
+`pnpm run prisma:seed:base` carga unicamente la data institucional estable y es
+seguro en produccion (no requiere `SEED_ALLOW_PRODUCTION`):
+
+- Catalogo de permisos de autorizacion (19 claves `recurso:accion`).
+- 10 unidades organizativas (6 facultades + 4 subdirecciones) con sus 10 programas
+  de eventos predeterminados.
+- 25 carreras: 24 oficiales más la carrera global `Otros` (sin unidad).
+- 10 aulas con amenidades y ventanas de disponibilidad.
+- ADMIN inicial opcional via `SEED_ADMIN_*` (ver `.env.example`).
+
+Reglas del modo base:
+
+- **Crea solo lo que falta.** Si una unidad, carrera, aula o programa
+  predeterminado ya existe, no se toca (se preservan renombres, `isActive` y
+  `headId` definidos por administradores).
+- **Permisos:** siempre se hace `upsert`; el catalogo crece con cada fase y no es
+  editable por administradores. No se eliminan permisos.
+- **ADMIN inicial:** solo se crea si el email `SEED_ADMIN_EMAIL` no existe. Nunca
+  modifica un usuario ni un password existente. Si la base no tiene ningun ADMIN
+  y no hay bootstrap configurado, el seed falla con un mensaje claro.
+- **No siembra data sintetica:** usuarios demo, ponentes, programas adicionales,
+  actividades, colaboraciones, asistencias, certificados, propuestas y alertas
+  quedan excluidos.
+- **Recomendacion de seguridad:** cambia el password del ADMIN inicial y las
+  credenciales `SEED_ADMIN_*` despues del primer inicio de sesion.
+- En Docker, el servicio `seed` (`compose.prod.yaml`) ejecuta este seed
+  automaticamente despues de `migrate` y antes de la API.
 
 ## Estructura Base
 

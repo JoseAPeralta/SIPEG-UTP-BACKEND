@@ -83,6 +83,7 @@ pnpm prisma migrate dev
 pnpm prisma migrate deploy
 pnpm prisma studio
 pnpm prisma db seed
+pnpm run prisma:seed:base
 ```
 
 Rules:
@@ -133,7 +134,8 @@ src/
 prisma/
 |-- schema.prisma
 |-- migrations/
-`-- seed.ts
+|-- seed.ts          # seed demo (solo desarrollo)
+`-- seed.base.ts     # seed base de produccion
 ```
 
 > Estado actual: modulos `auth`, `authorization`, `users`, `event-programs`, `activities` y `health` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
@@ -245,12 +247,13 @@ For errors:
 - When raw SQL is necessary, use Prisma safe raw APIs and never interpolate untrusted strings.
 - Use relations, indexes, unique constraints, and enums where they improve data integrity.
 - Use soft delete only if the domain requires recoverability or auditability; otherwise implement deletion clearly and safely.
+- Separate seed data by stability. Institutional catalogs (organizational units, default programs, careers, classrooms, permissions) and the optional initial ADMIN live in `prisma/seed.base.ts` (`ensure` mode: create-only, never overwrites admin edits). Demo data lives in `prisma/seed.ts` (`sync` mode) and must never run in production without `SEED_ALLOW_PRODUCTION=true`. The permission catalog is always upserted so new permissions reach production on deploy.
 
 ## Authentication And Authorization Rules
 
 - Stack: proveedor de auth modular con env vars **library-agnostic** (`AUTH_*`). Internamente usa Better Auth 1.7.x + plugin JWT. Si se reemplaza el proveedor, las env vars no cambian.
 - Password hashing: **Argon2id** (OWASP Password Storage Cheat Sheet, parametros `t=2, m=19 MiB, p=1`). Configurable opcionalmente via `AUTH_ARGON2_MEMORY_COST`, `AUTH_ARGON2_TIME_COST`, `AUTH_ARGON2_PARALLELISM`.
-- Sesiones del proveedor = refresh tokens (vida 7 dias por defecto). Rotacion automatica, revocacion server-side inmediata via delete en `sessions`.
+- Sesiones del proveedor = refresh tokens (vida configurable via `AUTH_REFRESH_TTL`, default 7 dias). Rotacion automatica, revocacion server-side inmediata via delete en `sessions`. Expiracion absoluta: `disableSessionRefresh: true` evita el sliding del proveedor y la rotacion conserva `expiresAt`.
 - Access tokens: JWT EdDSA Ed25519 (vida 15 min por defecto), firmados con la clave privada del JWKS almacenado en la tabla `jwks`. Validados contra `/api/auth/jwks` cacheado con jose (`createRemoteJWKSet`). La API privada es stateless.
 - Algoritmos JWT permitidos en el verifier: solo `['EdDSA']`. Issuer/Audience validados contra `AUTH_ISSUER`/`AUTH_AUDIENCE` (default = `AUTH_URL`).
 - Variables de entorno relevantes:
@@ -258,16 +261,21 @@ For errors:
   - `AUTH_URL` (default `http://localhost:3000`)
   - `AUTH_ISSUER`, `AUTH_AUDIENCE` (default = `AUTH_URL`)
   - `AUTH_TOKEN_TTL` (default `15m`), `AUTH_REFRESH_TTL` (default `7d`)
+  - `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`
+  - `AUTH_EMAIL_VERIFICATION_TTL` (default `24h`), `AUTH_PASSWORD_RESET_TTL` (default `1h`)
   - `TRUSTED_ORIGINS` (CSV adicional a `CORS_ORIGIN`)
 - Rate limiting (via express-rate-limit):
   - Login: 5/min por usuario/IP
   - Register: 3/min por usuario/IP
-  - Password reset: 3/min por usuario/IP
+  - Forgot password y reset password: limiters independientes de 3/min por usuario/IP
+  - Verify email: 5/min por usuario/IP
   - Better Auth rate limit global: 100/min (configurable)
 - `src/lib/auth.ts` es la unica instancia del proveedor.
 - `src/lib/password.ts` centraliza hashing Argon2id (usado por el proveedor via `password.hash`/`password.verify`).
+- `src/lib/email.ts` es el transporte SMTP comun; `src/modules/auth/auth.email.ts` contiene las plantillas de identidad. Produccion exige `MAIL_HOST`/`MAIL_FROM`; `MAIL_USER` y `MAIL_PASSWORD` se configuran juntos. Nunca loguear destinatarios, enlaces ni tokens.
+- Registro exige verificacion de email. Reset usa token de un solo uso, revoca todas las sesiones server-side y no invalida anticipadamente los access JWT stateless ya emitidos.
 - `src/utils/jwt-verifier.ts` es el unico verificador de access tokens.
-- `src/middlewares/authenticate.middleware.ts` carga `req.user` desde DB usando solo el `sub` del JWT.
+- `src/middlewares/authenticate.middleware.ts` carga `req.user` desde DB usando solo el `sub` del JWT. Responde 403 si el usuario fue desactivado, aunque el access token siga vigente; login y refresh de cuentas inactivas responden 401 generico y eliminan la sesion involucrada.
 - `src/middlewares/authorize.middleware.ts` provee `requireRole`, `requireAdmin`, `requireOwnership` y `requirePermission`.
 - Orden recomendado de middlewares en rutas privadas:
   `authenticate -> requirePermission/requireRole/requireOwnership -> validate(schema) -> controller`.
@@ -285,7 +293,7 @@ For errors:
 - Atenuacion temporal: la ventana otorgada debe quedar dentro del envelope del actor para ese permiso; un envelope acotado prohibe grants sin limite.
 - No ampliacion de scope: un permiso de actividad no permite gestionar el programa padre.
 - Todo grant registra `grantedById` y `grantedAt`. No exponer estos campos internos innecesariamente.
-- El catalogo se puebla con `pnpm prisma:seed` (idempotente).
+- El catalogo se puebla con `pnpm prisma:seed:base` en produccion y `pnpm prisma:seed` en desarrollo (ambos idempotentes).
 
 - Passwords: 12-128 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
 - **No devolver** password hashes, hashes Argon2, tokens internos, ni `name` (campo interno de Better Auth).
