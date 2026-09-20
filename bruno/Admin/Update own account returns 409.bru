@@ -1,0 +1,33 @@
+meta {
+  name: Update own account returns 409
+  type: http
+  seq: 9
+  tags: [
+    Admin
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/admin/users/{{adminUserId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "isActive": false
+  }
+}
+
+tests {
+  test("administrators cannot deactivate themselves", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("You cannot deactivate your own account.");
+  });
+}

@@ -1,0 +1,220 @@
+meta {
+  name: Refresh the access token
+  type: http
+  seq: 3
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/refresh
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "refreshToken": "{{refreshToken}}"
+  }
+}
+
+script:pre-request {
+  bru.setVar("previousRefreshToken", bru.getVar("refreshToken") ?? "");
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.refreshToken) {
+    bru.setVar("token", body.data.accessToken);
+    bru.setVar("refreshToken", body.data.refreshToken);
+  }
+}
+
+tests {
+  test("refresh returns a rotated refresh token and an EdDSA access token", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.tokenType).to.equal("Bearer");
+    expect(body.data.refreshToken).to.not.equal(bru.getVar("previousRefreshToken"));
+    const [encodedHeader] = body.data.accessToken.split(".");
+    const base64Header = encodedHeader.replace(/-/g, "+").replace(/_/g, "/");
+    const header = JSON.parse(Buffer.from(base64Header, "base64").toString("utf8"));
+    expect(header.alg).to.equal("EdDSA");
+  });
+}
+
+example {
+  name: 200 Response
+  description: New access/refresh token pair.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/refresh
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "accessToken": "",
+            "accessTokenExpiresAt": "",
+            "refreshToken": "",
+            "refreshTokenExpiresAt": "",
+            "tokenType": ""
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/refresh
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/refresh
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 429 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/refresh
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 429
+      text: Too Many Requests
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}

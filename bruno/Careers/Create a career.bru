@@ -1,0 +1,46 @@
+meta {
+  name: Create a career
+  type: http
+  seq: 5
+  tags: [
+    Careers
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/careers
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Carrera Temporal Bruno",
+    "code": "{{newCareerCode}}",
+    "description": "Carrera creada por la coleccion Bruno.",
+    "unitId": "{{unitId}}"
+  }
+}
+
+script:pre-request {
+  const suffix = Date.now().toString(36).toUpperCase();
+  bru.setVar("newCareerCode", `TMP-B2-${suffix}`);
+}
+
+tests {
+  test("admin creates a career inside a faculty", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Career created successfully.");
+    expect(body.data.code).to.equal(bru.getVar("newCareerCode"));
+    expect(body.data.unit).to.not.equal(null);
+    expect(body.data.unit.code).to.equal("FIC");
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+    bru.setVar("newCareerId", body.data.id);
+  });
+}

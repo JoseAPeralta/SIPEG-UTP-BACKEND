@@ -1,0 +1,31 @@
+meta {
+  name: Reactivate an organizational unit
+  type: http
+  seq: 12
+  tags: [
+    Organizational_Units
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/organizational-units/{{newUnitId}}/reactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("reactivation restores the existing default event program", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Organizational unit reactivated successfully.");
+    expect(body.data.id).to.equal(bru.getVar("newUnitId"));
+    expect(body.data.isActive).to.equal(true);
+    expect(body.data.defaultProgram).to.not.equal(null);
+    expect(body.data.defaultProgram.status).to.equal("ACTIVE");
+  });
+}

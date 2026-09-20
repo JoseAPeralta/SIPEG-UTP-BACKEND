@@ -1,0 +1,31 @@
+meta {
+  name: List inactive organizational units
+  type: http
+  seq: 4
+  tags: [
+    Organizational_Units
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/organizational-units?isActive=false&type=FACULTY
+  body: none
+  auth: none
+}
+
+params:query {
+  isActive: false
+  type: FACULTY
+}
+
+tests {
+  test("inactive filter returns only inactive units", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    for (const item of body.data.items) {
+      expect(item.isActive).to.equal(false);
+      expect(item.type).to.equal("FACULTY");
+    }
+  });
+}

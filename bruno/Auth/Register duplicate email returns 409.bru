@@ -1,0 +1,40 @@
+meta {
+  name: Register duplicate email returns 409
+  type: http
+  seq: 20
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/register
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "email": "{{newUserEmail}}",
+    "password": "PruebaSipeg2026*",
+    "firstName": "Prueba",
+    "lastName": "Duplicado",
+    "identificationNumber": "dup-email-{{$timestamp}}-{{$randomInt}}",
+    "unitId": "seed_unit_fic",
+    "careerId": "seed_career_fic-civ"
+  }
+}
+
+tests {
+  test("duplicate email returns 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+
+  test("duplicate email response does not leak hashes", function () {
+    expect(JSON.stringify(res.getBody())).to.not.include("$argon2");
+  });
+}
+
+docs {
+  Run "Register a new user" first: this request reuses the generated newUserEmail and expects 409.
+}

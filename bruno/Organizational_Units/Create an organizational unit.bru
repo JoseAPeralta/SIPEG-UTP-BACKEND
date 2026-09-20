@@ -1,0 +1,49 @@
+meta {
+  name: Create an organizational unit
+  type: http
+  seq: 7
+  tags: [
+    Organizational_Units
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/organizational-units
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Unidad Temporal Bruno",
+    "code": "{{newUnitCode}}",
+    "description": "Unidad creada por la coleccion Bruno.",
+    "type": "SUBDIRECTORATE",
+    "headId": "{{unitHeadId}}"
+  }
+}
+
+script:pre-request {
+  const suffix = Date.now().toString(36).toUpperCase();
+  bru.setVar("newUnitCode", `TMP-${suffix}`);
+}
+
+tests {
+  test("admin creates a unit with its default event program", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Organizational unit created successfully.");
+    expect(body.data.code).to.equal(bru.getVar("newUnitCode"));
+    expect(body.data.type).to.equal("SUBDIRECTORATE");
+    expect(body.data.isActive).to.equal(true);
+    expect(body.data.defaultProgram).to.not.equal(null);
+    expect(body.data.defaultProgram.status).to.equal("ACTIVE");
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+    bru.setVar("newUnitId", body.data.id);
+  });
+}

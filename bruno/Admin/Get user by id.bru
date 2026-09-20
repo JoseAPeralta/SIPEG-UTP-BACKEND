@@ -1,0 +1,35 @@
+meta {
+  name: Get user by id
+  type: http
+  seq: 5
+  tags: [
+    Admin
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/users/{{targetUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("admin detail returns the safe administrative DTO", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("User retrieved successfully.");
+    expect(body.data.id).to.equal(bru.getEnvVar("targetUserId"));
+    expect(body.data).to.have.property("isActive");
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+    expect(body.data).to.not.have.property("name");
+    expect(body.data).to.not.have.property("accounts");
+    expect(body.data).to.not.have.property("password");
+    expect(body.data).to.not.have.property("passwordHash");
+    expect(body.data).to.not.have.property("emailVerified");
+  });
+}

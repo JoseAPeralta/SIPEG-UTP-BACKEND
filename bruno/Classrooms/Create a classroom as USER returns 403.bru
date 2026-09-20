@@ -1,0 +1,33 @@
+meta {
+  name: Create a classroom as USER returns 403
+  type: http
+  seq: 8
+  tags: [
+    Classrooms
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classrooms
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{regularToken}}
+}
+
+body:json {
+  {
+    "name": "Aula USER",
+    "type": "CLASSROOM",
+    "capacity": 20
+  }
+}
+
+tests {
+  test("USER cannot manage the classroom catalog", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().message).to.equal("Insufficient privileges for this resource.");
+  });
+}

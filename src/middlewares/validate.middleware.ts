@@ -27,7 +27,12 @@ export const validate = (schema: ZodType<RequestParts>): RequestHandler => {
       }
 
       if ('query' in parsed) {
-        req.query = parsed.query as typeof req.query;
+        Object.defineProperty(req, 'query', {
+          value: parsed.query,
+          writable: true,
+          configurable: true,
+          enumerable: true,
+        });
       }
 
       next();

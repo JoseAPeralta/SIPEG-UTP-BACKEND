@@ -1,0 +1,38 @@
+meta {
+  name: Update a career
+  type: http
+  seq: 7
+  tags: [
+    Careers
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/careers/{{newCareerId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Carrera Temporal Actualizada",
+    "description": "Descripcion actualizada por Bruno."
+  }
+}
+
+tests {
+  test("admin updates the editable career fields", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Career updated successfully.");
+    expect(body.data.name).to.equal("Carrera Temporal Actualizada");
+    expect(body.data.description).to.equal("Descripcion actualizada por Bruno.");
+    expect(body.data.unit).to.not.equal(null);
+    expect(body.data.unit.code).to.equal("FIC");
+  });
+}

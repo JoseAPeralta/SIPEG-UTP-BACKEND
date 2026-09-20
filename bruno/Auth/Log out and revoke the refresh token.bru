@@ -1,0 +1,112 @@
+meta {
+  name: Log out and revoke the refresh token
+  type: http
+  seq: 4
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/logout
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "refreshToken": "{{refreshToken}}"
+  }
+}
+
+script:pre-request {
+  bru.setVar("revokedRefreshToken", bru.getVar("refreshToken") ?? "");
+}
+
+tests {
+  test("logout revokes the current refresh token", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().success).to.equal(true);
+  });
+}
+
+example {
+  name: 200 Response
+  description: Session revoked.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/logout
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {}
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/logout
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "refreshToken": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}

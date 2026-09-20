@@ -1,0 +1,27 @@
+meta {
+  name: Remove an amenity
+  type: http
+  seq: 13
+  tags: [
+    Classrooms
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/classrooms/{{newClassroomId}}/amenities/Proyector%20TMP
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("ADMIN removes an amenity from a classroom", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.message).to.equal("Classroom amenity removed successfully.");
+    expect(body.data.amenities).to.not.include("Proyector TMP");
+  });
+}

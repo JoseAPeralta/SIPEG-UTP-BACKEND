@@ -1,0 +1,31 @@
+meta {
+  name: Add a duplicate amenity returns 409
+  type: http
+  seq: 12
+  tags: [
+    Classrooms
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classrooms/{{newClassroomId}}/amenities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "amenity": "proyector tmp"
+  }
+}
+
+tests {
+  test("duplicate amenities are rejected case-insensitively", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().message).to.equal("Amenity already exists for this classroom.");
+  });
+}

@@ -1,0 +1,23 @@
+meta {
+  name: Get unknown organizational unit returns 404
+  type: http
+  seq: 6
+  tags: [
+    Organizational_Units
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/organizational-units/{{unknownUnitId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("unknown unit ids produce a generic 404", function () {
+    expect(res.getStatus()).to.equal(404);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Organizational unit not found.");
+  });
+}

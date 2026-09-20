@@ -1,0 +1,35 @@
+meta {
+  name: Update a classroom
+  type: http
+  seq: 7
+  tags: [
+    Classrooms
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/classrooms/{{newClassroomId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "capacity": 33,
+    "floor": 2
+  }
+}
+
+tests {
+  test("ADMIN updates classroom fields", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.message).to.equal("Classroom updated successfully.");
+    expect(body.data.capacity).to.equal(33);
+    expect(body.data.floor).to.equal(2);
+  });
+}

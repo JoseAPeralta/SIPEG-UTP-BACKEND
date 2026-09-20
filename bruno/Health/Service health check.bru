@@ -1,0 +1,52 @@
+meta {
+  name: Service health check
+  type: http
+  seq: 1
+  tags: [
+    Health
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/health
+  body: none
+  auth: inherit
+}
+
+example {
+  name: 200 Response
+  description: Current health status of the API.
+
+  request: {
+    url: {{baseUrl}}/api/v1/health
+    method: GET
+    mode: none
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "status": "",
+            "service": "",
+            "environment": "",
+            "authJwksReachable": false
+          }
+        }
+      '''
+    }
+  }
+}

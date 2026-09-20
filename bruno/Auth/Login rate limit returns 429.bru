@@ -1,0 +1,38 @@
+meta {
+  name: Login rate limit returns 429
+  type: http
+  seq: 25
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "email": "{{demoEmail}}",
+    "password": "ClaveIncorrecta2026*"
+  }
+}
+
+tests {
+  const attempts = Number(bru.getVar("loginAttempts") ?? 0) + 1;
+  bru.setVar("loginAttempts", attempts);
+
+  test("sixth login attempt within a minute returns 429", function () {
+    if (attempts >= 6) {
+      expect(res.getStatus()).to.equal(429);
+    } else {
+      expect([401, 429]).to.include(res.getStatus());
+    }
+  });
+}
+
+docs {
+  Envia este request seis veces en menos de un minuto desde una ventana limpia: los primeros cinco responden 401 y el sexto 429. En una corrida completa de la carpeta, login, refresh y las pruebas de credenciales invalidas tambien consumen la cuota de 5/min.
+}

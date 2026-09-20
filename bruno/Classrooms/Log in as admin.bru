@@ -1,0 +1,36 @@
+meta {
+  name: Log in as admin
+  type: http
+  seq: 1
+  tags: [
+    Classrooms
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{demoEmail}}",
+    "password": "{{demoPassword}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.accessToken) {
+    bru.setVar("adminToken", body.data.accessToken);
+  }
+}
+
+tests {
+  test("admin login returns an access token", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().data.accessToken).to.be.a("string");
+  });
+}

@@ -1,0 +1,39 @@
+meta {
+  name: Login unknown email returns 401
+  type: http
+  seq: 24
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: inherit
+}
+
+headers {
+  X-Forwarded-For: 203.0.113.201
+}
+
+body:json {
+  {
+    "email": "no-existe.{{$randomInt}}@utp.ac.pa",
+    "password": "ClaveIncorrecta2026*"
+  }
+}
+
+tests {
+  test("unknown email returns 401 with the generic message", function () {
+    expect(res.getStatus()).to.equal(401);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Invalid email or password");
+    expect(body.errors).to.deep.equal([]);
+  });
+}
+
+docs {
+  Afirma el mismo status y mensaje que el password incorrecto: la respuesta no revela si el correo existe. Usa una IP propia (X-Forwarded-For) para que la corrida completa de Auth no agote el limite de 5/min antes de este request.
+}

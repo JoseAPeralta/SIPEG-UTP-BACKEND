@@ -1,0 +1,35 @@
+meta {
+  name: Manage organizational units as USER returns 403
+  type: http
+  seq: 14
+  tags: [
+    Organizational_Units
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/organizational-units
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{regularToken}}
+}
+
+body:json {
+  {
+    "name": "Unidad No Autorizada",
+    "code": "NOAUTH-1",
+    "type": "FACULTY"
+  }
+}
+
+tests {
+  test("regular users cannot manage organizational units", function () {
+    expect(res.getStatus()).to.equal(403);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Insufficient privileges for this resource.");
+  });
+}

@@ -1,0 +1,50 @@
+meta {
+  name: List users
+  type: http
+  seq: 2
+  tags: [
+    Admin
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/users?page=1&limit=5
+  body: none
+  auth: bearer
+}
+
+params:query {
+  page: 1
+  limit: 5
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("admin list returns a paginated envelope", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.be.an("array");
+    expect(body.data.page).to.equal(1);
+    expect(body.data.limit).to.equal(5);
+    expect(body.data.total).to.be.a("number");
+    expect(body.data.totalPages).to.be.a("number");
+  });
+
+  test("admin list does not leak internal or credential fields", function () {
+    const body = res.getBody();
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("$argon2");
+    for (const item of body.data.items) {
+      expect(item).to.have.property("isActive");
+      expect(item).to.not.have.property("name");
+      expect(item).to.not.have.property("accounts");
+      expect(item).to.not.have.property("password");
+      expect(item).to.not.have.property("passwordHash");
+      expect(item).to.not.have.property("emailVerified");
+    }
+  });
+}

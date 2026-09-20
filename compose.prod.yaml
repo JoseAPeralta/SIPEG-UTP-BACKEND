@@ -17,6 +17,30 @@ services:
     networks:
       - sipeg-utp-prod
 
+  seed:
+    build:
+      context: .
+      target: migrate
+    image: sipeg-utp-backend:migrate
+    entrypoint: ['pnpm', 'exec', 'tsx']
+    command: ['prisma/seed.base.ts']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_ADMIN_IDENTIFICATION_NUMBER: ${SEED_ADMIN_IDENTIFICATION_NUMBER:-}
+      SEED_ADMIN_FIRST_NAME: ${SEED_ADMIN_FIRST_NAME:-}
+      SEED_ADMIN_LAST_NAME: ${SEED_ADMIN_LAST_NAME:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: 'no'
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - sipeg-utp-prod
+
   api:
     build:
       context: .
@@ -30,10 +54,23 @@ services:
       CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_URL: ${AUTH_URL:?AUTH_URL is required}
+      AUTH_REFRESH_TTL: ${AUTH_REFRESH_TTL:-7d}
+      AUTH_EMAIL_VERIFICATION_URL: ${AUTH_EMAIL_VERIFICATION_URL:?AUTH_EMAIL_VERIFICATION_URL is required}
+      AUTH_PASSWORD_RESET_URL: ${AUTH_PASSWORD_RESET_URL:?AUTH_PASSWORD_RESET_URL is required}
+      AUTH_EMAIL_VERIFICATION_TTL: ${AUTH_EMAIL_VERIFICATION_TTL:-24h}
+      AUTH_PASSWORD_RESET_TTL: ${AUTH_PASSWORD_RESET_TTL:-1h}
+      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_SECURE: ${MAIL_SECURE:-false}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required}
     ports:
       - '${PORT:-3000}:3000'
     depends_on:
       migrate:
+        condition: service_completed_successfully
+      seed:
         condition: service_completed_successfully
     restart: unless-stopped
     stop_grace_period: 15s

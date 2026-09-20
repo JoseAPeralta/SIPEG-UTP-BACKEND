@@ -15,7 +15,7 @@
 - **Runtime target**: Node.js 24.x LTS, or the latest active LTS available in the project environment.
 - **Backend framework**: Express.
 - **ORM**: Prisma.
-- **Authentication**: Pendiente de reimplementar desde 0. El backend actualmente no incluye modulo `auth`, middlewares `authenticate`/`authorize` ni utilitarios de tokens.
+- **Authentication**: Better Auth 1.7.x + plugin JWT. Modulos `auth`, `authorization` y `users` activos, con middlewares `authenticate`/`authorize`, rate limiting y utilitarios de tokens. Ver `docs/adr/adr-0001-time-aware-collaboration-authorization.md`.
 - **Language**: TypeScript.
 - **Package manager**: pnpm.
 
@@ -71,6 +71,11 @@ pnpm run start
 pnpm run lint
 pnpm test
 pnpm run test:coverage
+pnpm run docs:generate
+pnpm run docs:check
+pnpm run api:collection:import
+pnpm run api:run:smoke
+pnpm run api:run
 pnpm prisma generate
 pnpm prisma validate
 pnpm prisma format
@@ -78,6 +83,7 @@ pnpm prisma migrate dev
 pnpm prisma migrate deploy
 pnpm prisma studio
 pnpm prisma db seed
+pnpm run prisma:seed:base
 ```
 
 Rules:
@@ -87,6 +93,10 @@ Rules:
 - Use one-shot validation commands. Avoid watch or long-running development servers unless the user asks.
 - Run `pnpm test` when adding or modifying tested behavior.
 - Run `pnpm run build` or `pnpm exec tsc --noEmit` before considering substantial TypeScript changes complete when tooling is configured.
+- Run `pnpm run docs:generate` after changing routes, request schemas, or response schemas, and commit `openapi.json` with the change. Run `pnpm run docs:check` to detect drift.
+- `bruno/` is the versioned HTTP client collection imported from `openapi.json`. `pnpm run api:collection:import` is destructive and overwrites manual collection changes, including the login token-capture script.
+- Prefer `pnpm run api:run:smoke` for safe connectivity checks. The full `pnpm run api:run` includes state-changing requests and must not target production without explicit user approval.
+- Bruno MCP is pinned to an exact commit of the official `usebruno/bruno-mcp` repository until an npm release exists. Inspect requests before POST/PATCH/DELETE, and fall back to the pnpm/Bruno CLI scripts if MCP is unavailable.
 
 ## Expected Backend Structure
 
@@ -94,16 +104,17 @@ Rules:
 src/
 |-- app.ts
 |-- server.ts
+|-- routes.ts
 |-- config/
 |   |-- env.ts
 |   `-- prisma.ts
 |-- modules/
-|   |-- faculties/
-|   |-- subdirectorates/
+|   |-- organizational-units/
 |   |-- careers/
 |   |-- permissions/
 |   |-- event-programs/
 |   |-- activities/
+|   |-- health/
 |   |-- attendance/
 |   |-- certificates/
 |   |-- classrooms/
@@ -123,14 +134,16 @@ src/
 prisma/
 |-- schema.prisma
 |-- migrations/
-`-- seed.ts
+|-- seed.ts          # seed demo (solo desarrollo)
+`-- seed.base.ts     # seed base de produccion
 ```
 
-> Estado actual: el modulo `auth/`, los archivos de `users/` (que dependenian del middleware `authenticate` eliminado), los middlewares `auth.middleware.ts`/`authorize.middleware.ts`/`rateLimit.middleware.ts`, y los utilitarios `jwt.ts`/`token.ts`/`panamanianId.ts` fueron removidos. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
+> Estado actual: modulos `auth`, `authorization`, `users`, `event-programs`, `activities` y `health` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
 
 Rules:
 
 - Follow existing structure when it exists.
+- Keep each module self-contained under `src/modules/<module>/`: controller, routes, schemas, service, OpenAPI paths and tests live together. `src/routes.ts` only aggregates and mounts module routers.
 - Keep files focused. Split only when it improves clarity or testability.
 - Keep controllers focused on HTTP concerns: DTO extraction, status codes, response shape, and delegating to services.
 - Keep services focused on business rules.
@@ -147,6 +160,7 @@ NODE_ENV=development
 PORT=3000
 DATABASE_URL=""
 CORS_ORIGIN="http://localhost:5173"
+DOCS_ENABLED=true
 ```
 
 Rules:
@@ -162,11 +176,12 @@ Rules:
 - Use Express for HTTP routing.
 - Keep `server.ts` responsible for starting the HTTP server and handling graceful shutdown.
 - Keep `app.ts` responsible for configuring Express, global middleware, routes, not-found handling, and error handling.
-- Use modular domain folders for users, faculties, subdirectorates, careers, permissions, event programs, activities, attendance, certificates, classrooms, speakers, and reports.
+- Use modular domain folders for users, organizational units, careers, permissions, event programs, activities, attendance, certificates, classrooms, speakers, and reports.
 - Route files should only wire paths, validation, middleware, and controller handlers.
 - Controllers should not call Prisma directly.
 - Services should enforce business rules and authorization-sensitive decisions.
 - Shared utilities should stay small and generic.
+- Calculate business calendar dates in the institutional time zone `America/Panama` (UTC-5, no DST) via `src/utils/date.ts`; keep audit instants in UTC. See `docs/adr/adr-0002-institutional-timezone-panama.md`.
 - Implement health checks when deployment or container work needs them.
 - Use structured logging when logging is added, and never log passwords, tokens, authorization headers, database URLs, CV contents, or private environment variables.
 
@@ -203,7 +218,12 @@ For errors:
 
 - Use pagination for list endpoints that can grow.
 - Prefer cursor pagination for large or frequently changing lists; offset pagination is acceptable for simple administrative lists.
-- Use filters for event-program and activity lists, reports, attendance records, faculties, subdirectorates, careers, and classroom availability.
+- Use filters for event-program and activity lists, reports, attendance records, organizational units, careers, and classroom availability.
+- Document endpoints with the code-first OpenAPI 3.1 pipeline: Zod schemas are the single source of truth, `zod-openapi` builds the document, and `pnpm run docs:generate` writes `openapi.json`.
+- Keep public request and response schemas in the module `*.schemas.ts`; never document raw Prisma models or internal Better Auth fields. Fixed component names come from `.meta({ id })` and are breaking changes for the frontend when renamed.
+- Serve the contract at `/api/openapi.json` and the Scalar UI at `/api/docs`, gated by `DOCS_ENABLED` (default enabled outside production).
+- Keep the Bruno collection under `bruno/` aligned with `openapi.json`; after a destructive import, restore the login post-response script that captures `data.accessToken` and `data.refreshToken`.
+- Never commit real Bruno tokens or production credentials. Use ignored `bruno/environments/*.private.bru` overrides or runtime variables.
 - Do not return password hashes, refresh tokens, JWT internals, raw database errors, internal-only IDs, or sensitive audit information.
 - Keep frontend URLs out of controllers except for explicitly configured redirects or CORS rules.
 
@@ -227,12 +247,13 @@ For errors:
 - When raw SQL is necessary, use Prisma safe raw APIs and never interpolate untrusted strings.
 - Use relations, indexes, unique constraints, and enums where they improve data integrity.
 - Use soft delete only if the domain requires recoverability or auditability; otherwise implement deletion clearly and safely.
+- Separate seed data by stability. Institutional catalogs (organizational units, default programs, careers, classrooms, permissions) and the optional initial ADMIN live in `prisma/seed.base.ts` (`ensure` mode: create-only, never overwrites admin edits). Demo data lives in `prisma/seed.ts` (`sync` mode) and must never run in production without `SEED_ALLOW_PRODUCTION=true`. The permission catalog is always upserted so new permissions reach production on deploy.
 
 ## Authentication And Authorization Rules
 
 - Stack: proveedor de auth modular con env vars **library-agnostic** (`AUTH_*`). Internamente usa Better Auth 1.7.x + plugin JWT. Si se reemplaza el proveedor, las env vars no cambian.
 - Password hashing: **Argon2id** (OWASP Password Storage Cheat Sheet, parametros `t=2, m=19 MiB, p=1`). Configurable opcionalmente via `AUTH_ARGON2_MEMORY_COST`, `AUTH_ARGON2_TIME_COST`, `AUTH_ARGON2_PARALLELISM`.
-- Sesiones del proveedor = refresh tokens (vida 7 dias por defecto). Rotacion automatica, revocacion server-side inmediata via delete en `sessions`.
+- Sesiones del proveedor = refresh tokens (vida configurable via `AUTH_REFRESH_TTL`, default 7 dias). Rotacion automatica, revocacion server-side inmediata via delete en `sessions`. Expiracion absoluta: `disableSessionRefresh: true` evita el sliding del proveedor y la rotacion conserva `expiresAt`.
 - Access tokens: JWT EdDSA Ed25519 (vida 15 min por defecto), firmados con la clave privada del JWKS almacenado en la tabla `jwks`. Validados contra `/api/auth/jwks` cacheado con jose (`createRemoteJWKSet`). La API privada es stateless.
 - Algoritmos JWT permitidos en el verifier: solo `['EdDSA']`. Issuer/Audience validados contra `AUTH_ISSUER`/`AUTH_AUDIENCE` (default = `AUTH_URL`).
 - Variables de entorno relevantes:
@@ -240,19 +261,40 @@ For errors:
   - `AUTH_URL` (default `http://localhost:3000`)
   - `AUTH_ISSUER`, `AUTH_AUDIENCE` (default = `AUTH_URL`)
   - `AUTH_TOKEN_TTL` (default `15m`), `AUTH_REFRESH_TTL` (default `7d`)
+  - `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`
+  - `AUTH_EMAIL_VERIFICATION_TTL` (default `24h`), `AUTH_PASSWORD_RESET_TTL` (default `1h`)
   - `TRUSTED_ORIGINS` (CSV adicional a `CORS_ORIGIN`)
 - Rate limiting (via express-rate-limit):
   - Login: 5/min por usuario/IP
   - Register: 3/min por usuario/IP
-  - Password reset: 3/min por usuario/IP
+  - Forgot password y reset password: limiters independientes de 3/min por usuario/IP
+  - Verify email: 5/min por usuario/IP
   - Better Auth rate limit global: 100/min (configurable)
 - `src/lib/auth.ts` es la unica instancia del proveedor.
 - `src/lib/password.ts` centraliza hashing Argon2id (usado por el proveedor via `password.hash`/`password.verify`).
+- `src/lib/email.ts` es el transporte SMTP comun; `src/modules/auth/auth.email.ts` contiene las plantillas de identidad. Produccion exige `MAIL_HOST`/`MAIL_FROM`; `MAIL_USER` y `MAIL_PASSWORD` se configuran juntos. Nunca loguear destinatarios, enlaces ni tokens.
+- Registro exige verificacion de email. Reset usa token de un solo uso, revoca todas las sesiones server-side y no invalida anticipadamente los access JWT stateless ya emitidos.
 - `src/utils/jwt-verifier.ts` es el unico verificador de access tokens.
-- `src/middlewares/authenticate.middleware.ts` carga `req.user` desde DB usando solo el `sub` del JWT.
-- `src/middlewares/authorize.middleware.ts` provee `requireRole`, `requireAdmin`, `requireOwnership`.
+- `src/middlewares/authenticate.middleware.ts` carga `req.user` desde DB usando solo el `sub` del JWT. Responde 403 si el usuario fue desactivado, aunque el access token siga vigente; login y refresh de cuentas inactivas responden 401 generico y eliminan la sesion involucrada.
+- `src/middlewares/authorize.middleware.ts` provee `requireRole`, `requireAdmin`, `requireOwnership` y `requirePermission`.
 - Orden recomendado de middlewares en rutas privadas:
-  `authenticate -> requireRole/requireOwnership -> validate(schema) -> controller`.
+  `authenticate -> requirePermission/requireRole/requireOwnership -> validate(schema) -> controller`.
+
+### Modelo de Autorizacion Por Colaboracion
+
+- Fuente de verdad: `GlobalRole` (`USER`/`ADMIN`), `Collaboration` (scope programa o actividad), `CollaborationRole` (`ORGANIZER`/`EDITOR`/`VIEWER`), catalogo `Permission` y `CollaborationPermission`.
+- Catalogo canonico y defaults en `src/modules/authorization/permissions.ts`. Formato de clave `recurso:accion`. `permission:grant` no esta en ningun default de rol: se concede manualmente.
+- Permisos efectivos en un scope = union aditiva de las colaboraciones de la actividad y de su programa padre, filtrada por ventana vigente. No hay `DENY` local; un permiso heredado no se puede revocar en la actividad.
+- Resolutor: `getEffectivePermissions` / `getPermissionEnvelopes` en `src/modules/authorization/authorization.service.ts`. `ADMIN` hace bypass total.
+- Ventana temporal por permiso: `validFrom`/`validUntil` en `collaboration_permissions`. `NULL` = sin limite de ese lado. Los grants vencidos se ignoran y no se borran (historico). CHECK `valid_until > valid_from`.
+- `source` distingue `ROLE_DEFAULT` (materializado al asignar rol) de `OVERRIDE` (ajuste fino). Cambiar de rol reemplaza los `ROLE_DEFAULT` y preserva los `OVERRIDE`.
+- Delegacion en `src/modules/authorization/delegation.service.ts`: `addCollaborator`, `updateCollaboratorRole`, `removeCollaborator`, `grantPermission`, `revokePermission`.
+- Invariante de subconjunto simetrico: otorgar, revocar y asignar rol exigen que el conjunto actuado este contenido en los permisos efectivos del actor en el mismo scope. `permission:grant` se puede delegar si el actor lo posee.
+- Atenuacion temporal: la ventana otorgada debe quedar dentro del envelope del actor para ese permiso; un envelope acotado prohibe grants sin limite.
+- No ampliacion de scope: un permiso de actividad no permite gestionar el programa padre.
+- Todo grant registra `grantedById` y `grantedAt`. No exponer estos campos internos innecesariamente.
+- El catalogo se puebla con `pnpm prisma:seed:base` en produccion y `pnpm prisma:seed` en desarrollo (ambos idempotentes).
+
 - Passwords: 12-128 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
 - **No devolver** password hashes, hashes Argon2, tokens internos, ni `name` (campo interno de Better Auth).
 - **No loguear** tokens, headers `Authorization`, passwords ni env vars con secretos.
@@ -361,7 +403,7 @@ For errors:
 - Authenticate users.
 - Manage user sessions or token refresh when required.
 - Send email notifications if an email service is configured.
-- Select faculty.
+- Select organizational unit.
 - Select career.
 - Modify user data.
 - Assign permissions in event programs and activities.
@@ -370,36 +412,37 @@ For errors:
 ### Event Programs And Activities
 
 - Treat an event program as the mandatory organizational parent of activities.
-- Create one permanent default event program automatically for every faculty and subdirectorate.
+- Create one permanent default event program automatically for every organizational unit (faculty or subdirectorate).
 - Keep the default flag and owning organizational unit immutable for default event programs.
 - Allow only site administrators to create additional event programs.
-- Associate each event program with exactly one faculty or one subdirectorate.
+- Associate each event program with exactly one organizational unit.
 - Default event programs do not require start or end dates; additional programs include name, dates, custom label, and banner.
 - Add collaborators and permissions to event programs.
 - Event-program collaborators and permissions are inherited by their activities by default.
 - Create activities only inside an existing event program.
 - Allow new activities only in active event programs.
-- Activities include name, type, speaker, classroom, date, time, required equipment, and banner.
+- Activities include name, type, one or more speakers, classroom, date, time, required equipment, and banner.
 - Add collaborators and permissions directly to activities when local access is required.
 - Expose inherited and local permissions through the API with an explicit precedence rule.
 - Archive event programs instead of deleting them physically.
 - Prohibit physical deletion of event programs, including empty programs.
 - Do not archive an additional event program while it has scheduled or ongoing activities.
-- Do not archive a default event program while its faculty or subdirectorate remains active.
+- Do not archive a default event program while its organizational unit remains active.
 - Reactivate an organizational unit and its existing default event program atomically.
 - Delete or cancel activities according to the applicable retention rule.
 - Before modifying, cancelling, or deleting an activity, support an option to notify registered attendees.
 - Provide event-program and activity list endpoints.
 - Provide available and past activity endpoints or filters.
-- Allow filtering by faculty and subdirectorate.
+- Allow filtering by organizational unit and unit type.
 - Prioritize or filter activities through the organizational unit of their event program.
 
 ### Attendance
 
 - Allow an attendance record to represent registration before check-in and presence after check-in.
 - Register attendance for a specific activity.
+- Store a single per-registration `code` (unique global) on `attendance`; it is the QR/manual check-in validation method. See `docs/adr/adr-0004-attendance-checkin-codes.md`.
 - Support QR code attendance.
-- Support manual attendance codes.
+- Support manual attendance codes (`method` records `QR`/`MANUAL`).
 - Prevent duplicate attendance records when the business rule requires unique attendance per user and activity.
 - Validate activity availability before accepting attendance.
 - Keep attendance operations auditable when possible.
@@ -425,7 +468,7 @@ For errors:
 ### Speaker Registration
 
 - Provide a speaker registration endpoint.
-- Require the speaker to have or create a user account before submitting a proposal.
+- Allow speakers to submit proposals without a platform account; the `speakers` catalog links a `userId` only when an account exists.
 - Capture first name and last name.
 - Capture email.
 - Capture CV.

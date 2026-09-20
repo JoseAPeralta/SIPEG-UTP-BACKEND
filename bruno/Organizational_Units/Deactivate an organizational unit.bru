@@ -1,0 +1,31 @@
+meta {
+  name: Deactivate an organizational unit
+  type: http
+  seq: 11
+  tags: [
+    Organizational_Units
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/organizational-units/{{newUnitId}}/deactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("deactivation archives the default event program", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Organizational unit deactivated successfully.");
+    expect(body.data.id).to.equal(bru.getVar("newUnitId"));
+    expect(body.data.isActive).to.equal(false);
+    expect(body.data.defaultProgram).to.not.equal(null);
+    expect(body.data.defaultProgram.status).to.equal("ARCHIVED");
+  });
+}

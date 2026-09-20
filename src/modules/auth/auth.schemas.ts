@@ -16,7 +16,7 @@ export const registerSchema = z.object({
     firstName: trimmedString.min(2).max(100),
     lastName: trimmedString.min(2).max(100),
     identificationNumber: trimmedString.min(5).max(30),
-    facultyId: z.string().min(1).optional(),
+    unitId: z.string().min(1).optional(),
     careerId: z.string().min(1).optional(),
   }),
 });
@@ -44,6 +44,37 @@ export const logoutSchema = z.object({
   body: z.object({ refreshToken: z.string().min(1, 'Refresh token is required.') }),
 });
 
+export const changePasswordSchema = z.object({
+  body: z.object({
+    currentPassword: z.string().min(1, 'Current password is required.'),
+    newPassword: z.string().min(12, 'Password must be at least 12 characters.').max(128),
+    refreshToken: z.string().min(1, 'Refresh token is required.'),
+  }),
+});
+
+export const authTokensSchema = z
+  .object({
+    accessToken: z.string().meta({ description: 'Signed JWT access token (EdDSA).' }),
+    accessTokenExpiresAt: z.iso
+      .datetime()
+      .meta({ description: 'ISO 8601 expiration timestamp of the access token.' }),
+    refreshToken: z.string().meta({
+      description: 'Opaque refresh token backed by a server-side session.',
+    }),
+    refreshTokenExpiresAt: z.iso
+      .datetime()
+      .meta({ description: 'ISO 8601 expiration timestamp of the refresh token.' }),
+    tokenType: z.literal('Bearer'),
+  })
+  .meta({
+    id: 'AuthTokens',
+    description: 'Access and refresh token pair returned by the login and refresh flows.',
+  });
+
+export const registerResultSchema = z
+  .object({ userId: z.string().meta({ description: 'Identifier of the new user.' }) })
+  .meta({ id: 'RegisterResult', description: 'Result of a successful registration.' });
+
 export type LoginBody = z.infer<typeof loginSchema>['body'];
 export type RegisterBody = z.infer<typeof registerSchema>['body'];
 export type RefreshBody = z.infer<typeof refreshSchema>['body'];
@@ -51,3 +82,4 @@ export type VerifyEmailBody = z.infer<typeof verifyEmailSchema>['body'];
 export type ForgotPasswordBody = z.infer<typeof forgotPasswordSchema>['body'];
 export type ResetPasswordBody = z.infer<typeof resetPasswordSchema>['body'];
 export type LogoutBody = z.infer<typeof logoutSchema>['body'];
+export type ChangePasswordBody = z.infer<typeof changePasswordSchema>['body'];

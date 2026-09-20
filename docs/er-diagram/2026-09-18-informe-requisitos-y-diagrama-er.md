@@ -5,6 +5,11 @@
 **Justificación evaluada:** [`ER-design-justification.md`](./ER-design-justification.md)  
 **Requisitos de referencia:** [`AGENTS.md`](../../AGENTS.md) y [`CONTEXT.md`](../../CONTEXT.md)
 
+> Nota (2026-09-19): este informe evalúa el ER previo al catálogo `speakers`.
+> Hoy los ponentes no requieren cuenta (`speakers.user_id` opcional) y una
+> actividad puede tener varios mediante `activity_speakers`; las referencias a
+> `activities.speaker_id` describen el diseño anterior.
+
 ## 1. Resumen ejecutivo
 
 El modelo entidad-relación propuesto representa una plataforma académica organizada alrededor de **programas de eventos** y **actividades**. La distinción es apropiada: el programa funciona como unidad administrativa, de permisos y clasificación; la actividad representa el evento concreto al que se asignan fecha, horario, ponente, aula, asistencia y certificados.
@@ -12,14 +17,14 @@ El modelo entidad-relación propuesto representa una plataforma académica organ
 La revisión concluye que el ER cubre adecuadamente la estructura central del producto y corrige varias ambigüedades del lenguaje anterior:
 
 - Toda actividad tiene obligatoriamente un programa.
-- Cada facultad y subdirección dispone de un programa predeterminado permanente.
+- Cada unidad organizativa dispone de un programa predeterminado permanente.
 - Los programas adicionales solo pueden ser creados por administradores.
-- Los programas pertenecen exactamente a una facultad o subdirección.
+- Los programas pertenecen exactamente a una unidad organizativa.
 - Los programas se archivan y no se eliminan físicamente.
 - Los permisos del programa pueden heredarse en sus actividades.
 - La asistencia, los certificados y las propuestas quedan vinculados a entidades concretas y normalizadas.
 
-El diseño contiene **19 entidades** y **9 enums**. Su cobertura funcional es alta, pero todavía requiere decisiones o controles adicionales en inscripción, auditoría, seguridad de códigos, archivos, certificados, temporalidad y concurrencia.
+El diseño contiene **18 entidades** y **10 enums**. Su cobertura funcional es alta, pero todavía requiere decisiones o controles adicionales en inscripción, auditoría, seguridad de códigos, archivos, certificados, temporalidad y concurrencia.
 
 Los riesgos más importantes antes de implementar son:
 
@@ -62,12 +67,11 @@ Los riesgos más importantes antes de implementar son:
 
 ### 3.1 Unidades organizativas
 
-El modelo distingue dos propietarios posibles de un programa:
+El modelo usa una única entidad propietaria de programas:
 
-- `faculties`: unidades académicas relacionadas con carreras y usuarios.
-- `subdirectorates`: unidades administrativas independientes.
+- `organizational_units`: catálogo de unidades organizativas diferenciadas por `type` (`UnitType`: `FACULTY` o `SUBDIRECTORATE`), con `head_id` opcional hacia el usuario encargado.
 
-`event_programs` contiene dos FKs opcionales, protegidas por un CHECK XOR. De esta manera, un programa tiene exactamente una unidad propietaria sin introducir una referencia polimórfica carente de integridad.
+`event_programs` contiene una FK obligatoria `organizational_unit_id`. De esta manera, un programa tiene exactamente una unidad propietaria sin duplicar catálogos de atributos idénticos.
 
 ### 3.2 Programas de eventos
 
@@ -82,7 +86,7 @@ La combinación `status` y `archived_at` permite conservar el histórico. `creat
 
 `activities` representa el evento ejecutable. Contiene fecha, horas, tipo, capacidad, códigos de asistencia, aula, ponente y programa obligatorio.
 
-La FK obligatoria elimina actividades huérfanas y permite obtener facultad o subdirección siempre a través del programa.
+La FK obligatoria elimina actividades huérfanas y permite obtener la unidad organizativa siempre a través del programa.
 
 ### 3.4 Colaboración y permisos
 
@@ -98,7 +102,7 @@ Como el modelo solo expresa concesiones, la interpretación coherente actual es 
 
 ### 3.5 Asistencia y certificados
 
-`attendance` garantiza un registro por usuario y actividad. La fila nace con `registered_at`; `method`, `used_code` y `checked_in_at` se completan durante el check-in. `certificates` depende uno a uno de una asistencia y evita duplicar usuario o actividad.
+`attendance` garantiza un registro por usuario y actividad. La fila nace con `registered_at` y su propio `code` único de validación; `method` y `checked_in_at` se completan durante el check-in. `certificates` depende uno a uno de una asistencia y evita duplicar usuario o actividad. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 
 La normalización es correcta y permite distinguir registro de presencia. La entidad todavía no representa cancelación, ausencia ni lista de espera.
 
@@ -116,28 +120,27 @@ Las alertas pueden referenciar exactamente una propuesta, programa, actividad o 
 
 ### 4.1 Usuarios y afiliación
 
-| Requisito                   | Soporte                                 | Estado      | Observación                                     |
-| --------------------------- | --------------------------------------- | ----------- | ----------------------------------------------- |
-| Crear y modificar usuarios  | `users`                                 | Cubierto    | Contiene identidad y timestamps                 |
-| Autenticación               | Email, identificación y `password_hash` | Parcial     | Tokens y sesiones están fuera del ER            |
-| Rol global                  | `GlobalRole`                            | Cubierto    | `ADMIN` y `USER`                                |
-| Seleccionar facultad        | `users.faculty_id`                      | Cubierto    | Referencia opcional                             |
-| Seleccionar carrera         | `users.career_id`                       | Cubierto    | Referencia opcional                             |
-| Coherencia carrera-facultad | Ambas relaciones                        | Parcial     | Requiere validación entre tablas                |
-| Desactivar usuario          | `is_active`                             | Cubierto    | Conserva referencias históricas                 |
-| Sesiones revocables         | Sin entidad de sesión                   | No cubierto | Solo necesaria si se implementan refresh tokens |
+| Requisito                  | Soporte                                   | Estado      | Observación                                                                             |
+| -------------------------- | ----------------------------------------- | ----------- | --------------------------------------------------------------------------------------- |
+| Crear y modificar usuarios | `users`                                   | Cubierto    | Contiene identidad y timestamps                                                         |
+| Autenticación              | Email, identificación y `accounts`        | Parcial     | Better Auth guarda el hash en `accounts.password`; tokens y sesiones están fuera del ER |
+| Rol global                 | `GlobalRole`                              | Cubierto    | `ADMIN` y `USER`                                                                        |
+| Seleccionar unidad         | `users.unit_id`                           | Cubierto    | Referencia opcional                                                                     |
+| Seleccionar carrera        | `users.career_id`                         | Cubierto    | Referencia opcional                                                                     |
+| Coherencia carrera-unidad  | Ambas relaciones                          | Parcial     | Requiere validación entre tablas                                                        |
+| Desactivar usuario         | `is_active`                               | Cubierto    | Conserva referencias históricas                                                         |
+| Sesiones revocables        | Sin entidad de sesión en el ER de dominio | No cubierto | Gestionadas por Better Auth                                                             |
 
 ### 4.2 Programas de eventos
 
 | Requisito                                          | Soporte                                     | Estado   | Observación                                                  |
 | -------------------------------------------------- | ------------------------------------------- | -------- | ------------------------------------------------------------ |
-| Programa predeterminado por facultad               | Índice parcial + creación/reconciliación    | Parcial  | La BD garantiza máximo uno; la operación garantiza el mínimo |
-| Programa predeterminado por subdirección           | Índice parcial + creación/reconciliación    | Parcial  | La BD garantiza máximo uno; la operación garantiza el mínimo |
+| Programa predeterminado por unidad organizativa    | Índice parcial + creación/reconciliación    | Parcial  | La BD garantiza máximo uno; la operación garantiza el mínimo |
 | Programa permanente                                | Fechas nulas y estados restringidos         | Parcial  | Unidad activa y programa `ACTIVE` se coordinan atómicamente  |
 | Reactivar unidad y predeterminado                  | Cambio atómico de ambos estados             | Parcial  | Regla transaccional entre dos entidades                      |
 | Programas adicionales                              | `is_default = false` + CHECK                | Cubierto | Requieren fechas, etiqueta y banner                          |
 | Solo administrador puede crear                     | `created_by_id`, `GlobalRole`               | Parcial  | La autorización no puede imponerse solo con FKs              |
-| Una unidad propietaria                             | CHECK XOR                                   | Cubierto | Facultad o subdirección, nunca ambas                         |
+| Una unidad propietaria                             | `organizational_unit_id NOT NULL` + FK      | Cubierto | FK obligatoria con `ON DELETE RESTRICT`                      |
 | Nombre, fechas, etiqueta y banner                  | Campos y CHECK condicional                  | Cubierto | Metadata obligatoria en programas adicionales                |
 | Archivar, no eliminar                              | Estado, timestamp y prohibición de `DELETE` | Parcial  | Requiere privilegios o guarda fuera de una FK                |
 | Bloquear archivo de adicional con actividad activa | Estados relacionados                        | Parcial  | Requiere transacción de negocio                              |
@@ -145,21 +148,20 @@ Las alertas pueden referenciar exactamente una propuesta, programa, actividad o 
 
 ### 4.3 Actividades
 
-| Requisito                           | Soporte                    | Estado   | Observación                                  |
-| ----------------------------------- | -------------------------- | -------- | -------------------------------------------- |
-| Toda actividad pertenece a programa | FK `NOT NULL`              | Cubierto | No existen actividades independientes        |
-| Crear solo en programa activo       | `ProgramStatus.ACTIVE`     | Parcial  | Regla transaccional entre entidades          |
-| Nombre y descripción                | Campos explícitos          | Cubierto | Descripción opcional                         |
-| Tipo                                | `ActivityType`             | Cubierto | Incluye `OTHER`                              |
-| Ponente                             | `speaker_id?`              | Parcial  | Debe definirse cuándo pasa a ser obligatorio |
-| Aula                                | `classroom_id?`            | Parcial  | Admite actividades sin aula; falta modalidad |
-| Fecha y hora                        | Campos explícitos          | Cubierto | Falta política de zona horaria y medianoche  |
-| Capacidad                           | `max_capacity?`            | Parcial  | Falta obligatoriedad por estado/tipo         |
-| Equipamiento                        | `activity_equipment`       | Cubierto | Dominio abierto de nombres                   |
-| Banner                              | `banner_url?`              | Cubierto | Falta metadata del archivo                   |
-| Estados                             | `ActivityStatus`           | Cubierto | Faltan transiciones permitidas               |
-| Código QR                           | `qr_code UQ`               | Parcial  | Falta expiración y rotación                  |
-| Código manual                       | Unique dentro del programa | Parcial  | Falta seguridad y ventana de uso             |
+| Requisito                           | Soporte                | Estado   | Observación                                  |
+| ----------------------------------- | ---------------------- | -------- | -------------------------------------------- |
+| Toda actividad pertenece a programa | FK `NOT NULL`          | Cubierto | No existen actividades independientes        |
+| Crear solo en programa activo       | `ProgramStatus.ACTIVE` | Parcial  | Regla transaccional entre entidades          |
+| Nombre y descripción                | Campos explícitos      | Cubierto | Descripción opcional                         |
+| Tipo                                | `ActivityType`         | Cubierto | Incluye `OTHER`                              |
+| Ponente                             | `speaker_id?`          | Parcial  | Debe definirse cuándo pasa a ser obligatorio |
+| Aula                                | `classroom_id?`        | Parcial  | Admite actividades sin aula; falta modalidad |
+| Fecha y hora                        | Campos explícitos      | Cubierto | Falta política de zona horaria y medianoche  |
+| Capacidad                           | `max_capacity?`        | Parcial  | Falta obligatoriedad por estado/tipo         |
+| Equipamiento                        | `activity_equipment`   | Cubierto | Dominio abierto de nombres                   |
+| Banner                              | `banner_url?`          | Cubierto | Falta metadata del archivo                   |
+| Estados                             | `ActivityStatus`       | Cubierto | Faltan transiciones permitidas               |
+| Código de validación                | `attendance.code UQ`   | Cubierto | Único por inscripción; falta expiración      |
 
 ### 4.4 Colaboradores y permisos
 
@@ -175,17 +177,17 @@ Las alertas pueden referenciar exactamente una propuesta, programa, actividad o 
 
 ### 4.5 Asistencia
 
-| Requisito                          | Soporte                  | Estado      | Observación                                  |
-| ---------------------------------- | ------------------------ | ----------- | -------------------------------------------- |
-| Registrar asistencia por actividad | `attendance.activity_id` | Cubierto    | FK obligatoria                               |
-| Asociar usuario                    | `user_id`                | Cubierto    | FK obligatoria                               |
-| Registro previo                    | `registered_at`          | Cubierto    | Existe antes del check-in                    |
-| QR/manual                          | `method?` y `used_code?` | Cubierto    | Ambos son obligatorios al completar check-in |
-| Evitar duplicados                  | UQ actividad-usuario     | Cubierto    | Protección declarativa                       |
-| Auditar instante                   | `checked_in_at?`         | Cubierto    | Falta actor, dispositivo u origen            |
-| Validar capacidad                  | Conteo y `max_capacity`  | Parcial     | Requiere bloqueo o actualización atómica     |
-| Distinguir registro y presencia    | Timestamps diferenciados | Cubierto    | Mantiene una sola fila                       |
-| Cancelación/lista de espera        | Sin estado específico    | No cubierto | Requiere entidad o estados adicionales       |
+| Requisito                          | Soporte                  | Estado      | Observación                                               |
+| ---------------------------------- | ------------------------ | ----------- | --------------------------------------------------------- |
+| Registrar asistencia por actividad | `attendance.activity_id` | Cubierto    | FK obligatoria                                            |
+| Asociar usuario                    | `user_id`                | Cubierto    | FK obligatoria                                            |
+| Registro previo                    | `registered_at`          | Cubierto    | Existe antes del check-in                                 |
+| QR/manual                          | `code` y `method?`       | Cubierto    | `code` nace en la inscripción; `method` al hacer check-in |
+| Evitar duplicados                  | UQ actividad-usuario     | Cubierto    | Protección declarativa                                    |
+| Auditar instante                   | `checked_in_at?`         | Cubierto    | Falta actor, dispositivo u origen                         |
+| Validar capacidad                  | Conteo y `max_capacity`  | Parcial     | Requiere bloqueo o actualización atómica                  |
+| Distinguir registro y presencia    | Timestamps diferenciados | Cubierto    | Mantiene una sola fila                                    |
+| Cancelación/lista de espera        | Sin estado específico    | No cubierto | Requiere entidad o estados adicionales                    |
 
 ### 4.6 Certificados
 
@@ -244,9 +246,9 @@ Las alertas pueden referenciar exactamente una propuesta, programa, actividad o 
 
 ## 5. Funcionamiento futuro esperado
 
-### 5.1 Creación de facultad o subdirección
+### 5.1 Creación de unidad organizativa
 
-1. Un administrador valida y crea la unidad.
+1. Un administrador valida y crea la unidad (`FACULTY` o `SUBDIRECTORATE`) y opcionalmente registra su encargado en `head_id`.
 2. La misma transacción crea el programa predeterminado.
 3. El programa queda `ACTIVE`, con fechas nulas y asociado únicamente a esa unidad.
 4. Si falla cualquier escritura, se revierte la operación completa.
@@ -258,7 +260,7 @@ Cuando una unidad inactiva se reactiva, la misma transacción bloquea ambos regi
 ### 5.2 Creación de programa adicional
 
 1. Se verifica `GlobalRole.ADMIN`.
-2. Se selecciona una facultad o subdirección.
+2. Se selecciona una unidad organizativa.
 3. Se validan fechas, nombre, etiqueta y banner.
 4. Se registra al administrador en `created_by_id`.
 5. El programa comienza en borrador y se activa cuando cumple sus reglas.
@@ -287,7 +289,7 @@ Cuando una unidad inactiva se reactiva, la misma transacción bloquea ambos regi
 3. Se reserva cupo de forma atómica y se crea la fila con `registered_at`.
 4. Durante el check-in se recupera esa misma fila.
 5. Se valida método, código, vigencia y correspondencia.
-6. Se completan `method`, `used_code` y `checked_in_at` de forma idempotente, exigiendo `checked_in_at >= registered_at`.
+6. Se completan `method` y `checked_in_at` de forma idempotente, exigiendo `checked_in_at >= registered_at`; el `code` ya existe desde la inscripción.
 
 La comprobación de cupo y la escritura deben formar una única transacción para evitar que solicitudes simultáneas excedan la capacidad.
 
@@ -373,9 +375,9 @@ El día semanal no representa festivos, mantenimiento, semestres o reservas exte
 
 **Mitigación:** agregar vigencia y excepciones de calendario.
 
-#### M7. Compatibilidad facultad-carrera
+#### M7. Compatibilidad unidad-carrera
 
-Un usuario puede guardar una carrera de una facultad distinta.
+Un usuario puede guardar una carrera de una unidad distinta.
 
 **Mitigación:** validación transaccional, FK compuesta o tabla de afiliaciones.
 
@@ -439,7 +441,7 @@ Debe comprobarse que el usuario de despliegue pueda instalar o utilizar la exten
 ### 8.2 Orden recomendado
 
 1. Crear enums.
-2. Crear facultades, subdirecciones, carreras y permisos.
+2. Crear unidades organizativas, carreras y permisos.
 3. Crear usuarios y aulas.
 4. Crear programas.
 5. Crear actividades y colaboraciones.
@@ -453,8 +455,7 @@ Debe comprobarse que el usuario de despliegue pueda instalar o utilizar la exten
 
 Se necesitan cargas idempotentes para:
 
-- Facultades.
-- Subdirecciones.
+- Unidades organizativas.
 - Carreras.
 - Permisos.
 - Programas predeterminados de unidades existentes.
@@ -466,7 +467,7 @@ Antes de activar restricciones deben buscarse:
 
 - Unidades sin programa predeterminado.
 - Más de un programa predeterminado por unidad.
-- Programas sin propietario o con dos propietarios.
+- Programas sin unidad propietaria.
 - Actividades sin programa.
 - Fechas y horas invertidas.
 - Capacidades inválidas.
@@ -505,7 +506,7 @@ Antes de activar restricciones deben buscarse:
 10. Añadir auditoría administrativa.
 11. Añadir metadata y almacenamiento privado de archivos.
 12. Añadir vigencia y excepciones de aulas.
-13. Garantizar compatibilidad facultad-carrera.
+13. Garantizar compatibilidad unidad organizativa-carrera.
 14. Proteger generación de versiones de propuesta contra concurrencia.
 15. Añadir idempotencia para check-in, alertas y certificados.
 
@@ -536,6 +537,6 @@ Antes de activar restricciones deben buscarse:
 
 ## 11. Conclusión
 
-El ER actualizado es una base coherente para SIPEG UTP. La jerarquía **programa de eventos → actividad** elimina la ambigüedad de tamaño, garantiza contexto organizativo y simplifica permisos, filtros y reportes. La incorporación de subdirecciones y programas predeterminados cubre el funcionamiento administrativo esperado.
+El ER actualizado es una base coherente para SIPEG UTP. La jerarquía **programa de eventos → actividad** elimina la ambigüedad de tamaño, garantiza contexto organizativo y simplifica permisos, filtros y reportes. La unificación de facultades y subdirecciones en `organizational_units` con programas predeterminados cubre el funcionamiento administrativo esperado.
 
 Antes de convertir el diseño en un esquema ejecutable deben resolverse principalmente el ciclo completo de registro, la seguridad de códigos, el control concurrente de cupos, la política de archivos y certificados, y la auditoría administrativa. Estas decisiones afectan integridad y privacidad, por lo que no deberían aplazarse hasta después del despliegue.
