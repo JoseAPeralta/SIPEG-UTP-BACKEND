@@ -1,0 +1,35 @@
+meta {
+  name: Add an overlapping window returns 409
+  type: http
+  seq: 15
+  tags: [
+    Classrooms
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classrooms/{{newClassroomId}}/availability
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "dayOfWeek": 1,
+    "startTime": "09:00",
+    "endTime": "11:00"
+  }
+}
+
+tests {
+  test("overlapping windows on the same day are rejected", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().message).to.equal(
+      "Classroom availability overlaps an existing window.",
+    );
+  });
+}

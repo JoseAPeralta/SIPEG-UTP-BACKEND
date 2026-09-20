@@ -1,0 +1,32 @@
+meta {
+  name: List classrooms
+  type: http
+  seq: 3
+  tags: [
+    Classrooms
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classrooms?page=1&limit=20
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 20
+}
+
+tests {
+  test("lists active classrooms publicly", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Classrooms retrieved successfully.");
+    expect(body.data.items).to.be.an("array");
+    expect(body.data.page).to.equal(1);
+    expect(body.data.limit).to.equal(20);
+    expect(body.data.items[0]).to.have.property("amenities");
+  });
+}

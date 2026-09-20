@@ -1,0 +1,32 @@
+meta {
+  name: Remove an availability window
+  type: http
+  seq: 16
+  tags: [
+    Classrooms
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/classrooms/{{newClassroomId}}/availability/{{availabilityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("ADMIN removes a weekly availability window", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.message).to.equal("Classroom availability removed successfully.");
+
+    const remaining = body.data.availability.filter(function (slot) {
+      return slot.id === bru.getVar("availabilityId");
+    });
+
+    expect(remaining).to.have.length(0);
+  });
+}

@@ -12,7 +12,7 @@
         <mxCell id="organizational_units" value="&lt;b&gt;organizational_units&lt;/b&gt;&lt;hr&gt;id (PK)&lt;br&gt;name&lt;br&gt;code (UQ)&lt;br&gt;description?&lt;br&gt;type (UnitType)&lt;br&gt;head_id (FK?)&lt;br&gt;is_active&lt;br&gt;created_at&lt;br&gt;updated_at" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=10;fontSize=12;fillColor=#e8f1f8;strokeColor=#356a91;strokeWidth=2;" vertex="1" parent="1">
           <mxGeometry x="40" y="120" width="260" height="280" as="geometry" />
         </mxCell>
-        <mxCell id="careers" value="&lt;b&gt;careers&lt;/b&gt;&lt;hr&gt;id (PK)&lt;br&gt;name&lt;br&gt;code (UQ)&lt;br&gt;description?&lt;br&gt;is_active&lt;br&gt;unit_id (FK)&lt;br&gt;created_at&lt;br&gt;updated_at" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=10;fontSize=12;fillColor=#e8f1f8;strokeColor=#356a91;strokeWidth=2;" vertex="1" parent="1">
+        <mxCell id="careers" value="&lt;b&gt;careers&lt;/b&gt;&lt;hr&gt;id (PK)&lt;br&gt;name&lt;br&gt;code (UQ)&lt;br&gt;description?&lt;br&gt;unit_id (FK?)&lt;br&gt;created_at&lt;br&gt;updated_at" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=10;fontSize=12;fillColor=#e8f1f8;strokeColor=#356a91;strokeWidth=2;" vertex="1" parent="1">
           <mxGeometry x="40" y="660" width="260" height="240" as="geometry" />
         </mxCell>
         <mxCell id="users" value="&lt;b&gt;users&lt;/b&gt;&lt;hr&gt;id (PK)&lt;br&gt;first_name&lt;br&gt;last_name&lt;br&gt;identification_number (UQ)&lt;br&gt;email (UQ)&lt;br&gt;global_role (enum)&lt;br&gt;is_active&lt;br&gt;unit_id (FK?)&lt;br&gt;career_id (FK?)&lt;br&gt;created_at&lt;br&gt;updated_at" style="rounded=0;whiteSpace=wrap;html=1;align=left;verticalAlign=top;spacing=10;fontSize=12;fillColor=#e8f1f8;strokeColor=#356a91;strokeWidth=2;" vertex="1" parent="1">
@@ -73,7 +73,7 @@
           <mxGeometry x="40" y="950" width="620" height="320" as="geometry" />
         </mxCell>
 
-        <mxCell id="e1" value="1 : 0..N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;strokeColor=#356a91;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="organizational_units" target="careers"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e1" value="0..1 : 0..N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;strokeColor=#356a91;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="organizational_units" target="careers"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e2" value="0..1 : 0..N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;strokeColor=#356a91;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="organizational_units" target="users"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e3" value="0..1 : 0..N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;strokeColor=#356a91;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="careers" target="users"><mxGeometry relative="1" as="geometry" /></mxCell>
         <mxCell id="e4" value="0..1 : 1..N (mínimo operativo)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;endArrow=none;startArrow=none;strokeColor=#b58b00;fontSize=10;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="organizational_units" target="event_programs"><mxGeometry relative="1" as="geometry" /></mxCell>

@@ -1,0 +1,33 @@
+meta {
+  name: Reject immutable organizational unit fields returns 400
+  type: http
+  seq: 10
+  tags: [
+    Organizational_Units
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/organizational-units/{{newUnitId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "code": "OTRO-CODIGO"
+  }
+}
+
+tests {
+  test("code and type cannot be changed through PATCH", function () {
+    expect(res.getStatus()).to.equal(400);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Validation error.");
+  });
+}

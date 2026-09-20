@@ -1,0 +1,33 @@
+meta {
+  name: Add an amenity
+  type: http
+  seq: 11
+  tags: [
+    Classrooms
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classrooms/{{newClassroomId}}/amenities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "amenity": "Proyector TMP"
+  }
+}
+
+tests {
+  test("ADMIN adds an amenity to a classroom", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.message).to.equal("Classroom amenity added successfully.");
+    expect(body.data.amenities).to.include("Proyector TMP");
+  });
+}

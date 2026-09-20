@@ -1,0 +1,25 @@
+meta {
+  name: Get a classroom
+  type: http
+  seq: 5
+  tags: [
+    Classrooms
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classrooms/{{classroomId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("returns the classroom detail with amenities and availability", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.message).to.equal("Classroom retrieved successfully.");
+    expect(body.data.id).to.equal(bru.interpolate("{{classroomId}}"));
+    expect(body.data.amenities).to.be.an("array");
+    expect(body.data.availability).to.be.an("array");
+  });
+}

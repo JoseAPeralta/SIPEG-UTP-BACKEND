@@ -1,0 +1,26 @@
+meta {
+  name: Delete a career
+  type: http
+  seq: 8
+  tags: [
+    Careers
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/careers/{{newCareerId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("admin deletes a career without users", function () {
+    expect(res.getStatus()).to.equal(204);
+    const body = res.getBody();
+    expect(body === undefined || body === null || body === "").to.equal(true);
+  });
+}
