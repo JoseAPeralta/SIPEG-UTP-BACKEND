@@ -1,7 +1,7 @@
 meta {
   name: Manage careers as USER returns 403
   type: http
-  seq: 11
+  seq: 13
   tags: [
     Careers
   ]
@@ -14,7 +14,7 @@ post {
 }
 
 auth:bearer {
-  token: {{regularToken}}
+  token: {{token}}
 }
 
 body:json {

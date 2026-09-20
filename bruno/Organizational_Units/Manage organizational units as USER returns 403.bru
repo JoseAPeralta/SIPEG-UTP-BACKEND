@@ -1,7 +1,7 @@
 meta {
   name: Manage organizational units as USER returns 403
   type: http
-  seq: 14
+  seq: 15
   tags: [
     Organizational_Units
   ]
@@ -14,7 +14,7 @@ post {
 }
 
 auth:bearer {
-  token: {{regularToken}}
+  token: {{token}}
 }
 
 body:json {

@@ -15,8 +15,8 @@ post {
 
 body:json {
   {
-    "email": "{{demoEmail}}",
-    "password": "{{demoPassword}}"
+    "email": "{{adminEmail}}",
+    "password": "{{adminPassword}}"
   }
 }
 
@@ -24,7 +24,8 @@ script:post-response {
   const body = res.getBody();
 
   if (body?.success && body.data?.accessToken) {
-    bru.setVar("adminToken", body.data.accessToken);
+    bru.setVar("token", body.data.accessToken);
+    bru.setVar("refreshToken", body.data.refreshToken);
   }
 }
 
