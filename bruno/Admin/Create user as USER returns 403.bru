@@ -1,0 +1,41 @@
+meta {
+  name: Create user as USER returns 403
+  type: http
+  seq: 9
+  tags: [
+    Admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/users
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{regularToken}}
+}
+
+body:json {
+  {
+    "email": "{{forbiddenUserEmail}}",
+    "password": "SipegCreado2026*",
+    "firstName": "Sin",
+    "lastName": "Permiso",
+    "identificationNumber": "{{forbiddenUserIdentification}}"
+  }
+}
+
+script:pre-request {
+  const suffix = bru.interpolate("{{$randomInt}}");
+  bru.setVar("forbiddenUserEmail", `prohibido.admin.${suffix}.${Date.now()}@utp.ac.pa`);
+  bru.setVar("forbiddenUserIdentification", `7-${Date.now()}-${suffix}`);
+}
+
+tests {
+  test("USER role cannot create users", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().message).to.equal("Insufficient privileges for this resource.");
+  });
+}

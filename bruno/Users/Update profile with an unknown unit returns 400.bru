@@ -1,0 +1,37 @@
+meta {
+  name: Update profile with an unknown unit returns 400
+  type: http
+  seq: 3
+  tags: [
+    Users
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/users/me
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "unitId": "{{unknownUnitId}}"
+  }
+}
+
+docs {
+  A non-existent or inactive organizational unit is rejected with 400 before any write; the profile remains unchanged.
+}
+
+tests {
+  test("unknown unit returns 400 and does not modify the profile", function () {
+    expect(res.getStatus()).to.equal(400);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Organizational unit is not available.");
+  });
+}

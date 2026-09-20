@@ -1,0 +1,44 @@
+meta {
+  name: Create duplicate user returns 409
+  type: http
+  seq: 8
+  tags: [
+    Admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/users
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "email": "{{createdUserEmail}}",
+    "password": "SipegCreado2026*",
+    "firstName": "Duplicado",
+    "lastName": "PorAdmin",
+    "identificationNumber": "{{duplicateUserIdentification}}",
+    "globalRole": "USER",
+    "isActive": true
+  }
+}
+
+script:pre-request {
+  const suffix = bru.interpolate("{{$randomInt}}");
+  bru.setVar("duplicateUserIdentification", `8-${Date.now()}-${suffix}`);
+}
+
+tests {
+  test("duplicate emails produce a 409", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Email is already registered.");
+  });
+}

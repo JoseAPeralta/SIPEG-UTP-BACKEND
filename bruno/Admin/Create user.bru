@@ -1,0 +1,57 @@
+meta {
+  name: Create user
+  type: http
+  seq: 7
+  tags: [
+    Admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/users
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "email": "{{createdUserEmail}}",
+    "password": "SipegCreado2026*",
+    "firstName": "Creado",
+    "lastName": "PorAdmin",
+    "identificationNumber": "{{createdUserIdentification}}",
+    "globalRole": "USER",
+    "isActive": true,
+    "unitId": "seed_unit_fic",
+    "careerId": "seed_career_fic-civ"
+  }
+}
+
+script:pre-request {
+  const suffix = bru.interpolate("{{$randomInt}}");
+  bru.setVar("createdUserEmail", `creado.admin.${suffix}.${Date.now()}@utp.ac.pa`);
+  bru.setVar("createdUserIdentification", `9-${Date.now()}-${suffix}`);
+}
+
+tests {
+  test("admin creates an unverified user account", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("User created successfully.");
+    expect(body.data).to.have.property("id");
+    expect(body.data.email).to.equal(bru.getVar("createdUserEmail"));
+    expect(body.data.globalRole).to.equal("USER");
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+    expect(body.data).to.not.have.property("name");
+    expect(body.data).to.not.have.property("accounts");
+    expect(body.data).to.not.have.property("password");
+    expect(body.data).to.not.have.property("passwordHash");
+    expect(body.data).to.not.have.property("emailVerified");
+    bru.setVar("createdUserId", body.data.id);
+  });
+}

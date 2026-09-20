@@ -1,0 +1,33 @@
+meta {
+  name: Update unknown user returns 404
+  type: http
+  seq: 8
+  tags: [
+    Admin
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/admin/users/{{unknownUserId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "isActive": true
+  }
+}
+
+tests {
+  test("unknown user ids produce a generic 404 on update", function () {
+    expect(res.getStatus()).to.equal(404);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("User not found.");
+  });
+}
