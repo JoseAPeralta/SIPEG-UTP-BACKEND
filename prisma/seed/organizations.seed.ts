@@ -4,7 +4,7 @@ import {
   PERMISSION_DESCRIPTIONS,
   PERMISSION_NAMES,
 } from '../../src/modules/authorization/permissions.js';
-import { logStep, seedId, requireEntry } from './helpers.js';
+import { logStep, seedId, requireEntry, type SeedWriteMode } from './helpers.js';
 
 interface UnitCatalogEntry {
   key: string;
@@ -18,7 +18,7 @@ interface CareerCatalogEntry {
   key: string;
   code: string;
   name: string;
-  unitKey: string;
+  unitKey: string | null;
 }
 
 export const FACULTIES: readonly UnitCatalogEntry[] = [
@@ -226,6 +226,12 @@ export const CAREERS: readonly CareerCatalogEntry[] = [
     name: 'Licenciatura en Comunicación Ejecutiva Bilingüe',
     unitKey: 'fct',
   },
+  {
+    key: 'otros',
+    code: 'OTROS',
+    name: 'Otros',
+    unitKey: null,
+  },
 ];
 
 export interface SeedUnit {
@@ -243,6 +249,7 @@ export interface OrganizationCatalog {
 const ensureDefaultProgram = async (
   prisma: PrismaClient,
   unit: { id: string; key: string; name: string },
+  mode: SeedWriteMode,
 ): Promise<string> => {
   const existing = await prisma.eventProgram.findFirst({
     where: { organizationalUnitId: unit.id, isDefault: true },
@@ -250,13 +257,15 @@ const ensureDefaultProgram = async (
   });
 
   if (existing) {
-    await prisma.eventProgram.update({
-      where: { id: existing.id },
-      data: {
-        name: `Programa de Eventos - ${unit.name}`,
-        description: `Programa predeterminado de ${unit.name}.`,
-      },
-    });
+    if (mode === 'sync') {
+      await prisma.eventProgram.update({
+        where: { id: existing.id },
+        data: {
+          name: `Programa de Eventos - ${unit.name}`,
+          description: `Programa predeterminado de ${unit.name}.`,
+        },
+      });
+    }
     return existing.id;
   }
 
@@ -275,7 +284,10 @@ const ensureDefaultProgram = async (
   return created.id;
 };
 
-export const seedOrganizations = async (prisma: PrismaClient): Promise<OrganizationCatalog> => {
+export const seedOrganizations = async (
+  prisma: PrismaClient,
+  mode: SeedWriteMode = 'sync',
+): Promise<OrganizationCatalog> => {
   logStep('Sembrando catálogo de permisos...');
   for (const name of PERMISSION_NAMES) {
     const description = PERMISSION_DESCRIPTIONS[name];
@@ -292,32 +304,39 @@ export const seedOrganizations = async (prisma: PrismaClient): Promise<Organizat
   for (const unit of UNITS) {
     const existing = await prisma.organizationalUnit.findUnique({
       where: { code: unit.code },
-      select: { id: true },
+      select: { id: true, code: true, type: true },
     });
 
-    const record = existing
-      ? await prisma.organizationalUnit.update({
-          where: { id: existing.id },
-          data: { name: unit.name, description: unit.description, type: unit.type },
-          select: { id: true, code: true, type: true },
-        })
-      : await prisma.organizationalUnit.create({
-          data: {
-            id: seedId('unit', unit.key),
-            code: unit.code,
-            name: unit.name,
-            description: unit.description,
-            type: unit.type,
-            isActive: true,
-          },
-          select: { id: true, code: true, type: true },
-        });
+    const record =
+      existing && mode === 'ensure'
+        ? existing
+        : existing
+          ? await prisma.organizationalUnit.update({
+              where: { id: existing.id },
+              data: { name: unit.name, description: unit.description, type: unit.type },
+              select: { id: true, code: true, type: true },
+            })
+          : await prisma.organizationalUnit.create({
+              data: {
+                id: seedId('unit', unit.key),
+                code: unit.code,
+                name: unit.name,
+                description: unit.description,
+                type: unit.type,
+                isActive: true,
+              },
+              select: { id: true, code: true, type: true },
+            });
 
-    const programId = await ensureDefaultProgram(prisma, {
-      id: record.id,
-      key: unit.key,
-      name: unit.name,
-    });
+    const programId = await ensureDefaultProgram(
+      prisma,
+      {
+        id: record.id,
+        key: unit.key,
+        name: unit.name,
+      },
+      mode,
+    );
 
     units.set(unit.key, {
       id: record.id,
@@ -331,28 +350,31 @@ export const seedOrganizations = async (prisma: PrismaClient): Promise<Organizat
   const careers = new Map<string, string>();
 
   for (const career of CAREERS) {
-    const unit = requireEntry(units, career.unitKey, 'unidad organizativa');
+    const unit = career.unitKey ? requireEntry(units, career.unitKey, 'unidad organizativa') : null;
+    const unitId = unit?.id ?? null;
     const existing = await prisma.career.findUnique({
       where: { code: career.code },
       select: { id: true },
     });
 
-    const record = existing
-      ? await prisma.career.update({
-          where: { id: existing.id },
-          data: { name: career.name, unitId: unit.id },
-          select: { id: true },
-        })
-      : await prisma.career.create({
-          data: {
-            id: seedId('career', career.key),
-            code: career.code,
-            name: career.name,
-            unitId: unit.id,
-            isActive: true,
-          },
-          select: { id: true },
-        });
+    const record =
+      existing && mode === 'ensure'
+        ? existing
+        : existing
+          ? await prisma.career.update({
+              where: { id: existing.id },
+              data: { name: career.name, unitId },
+              select: { id: true },
+            })
+          : await prisma.career.create({
+              data: {
+                id: seedId('career', career.key),
+                code: career.code,
+                name: career.name,
+                unitId,
+              },
+              select: { id: true },
+            });
 
     careers.set(career.code, record.id);
   }

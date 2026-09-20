@@ -1,6 +1,6 @@
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
 import type { ClassroomType } from '../../src/generated/prisma/enums.js';
-import { logStep, seedId, timeOfDay } from './helpers.js';
+import { logStep, seedId, timeOfDay, type SeedWriteMode } from './helpers.js';
 
 interface AvailabilityEntry {
   dayOfWeek: number;
@@ -146,12 +146,26 @@ export const CLASSROOMS: readonly ClassroomCatalogEntry[] = [
   },
 ];
 
-export const seedClassrooms = async (prisma: PrismaClient): Promise<Map<string, string>> => {
+export const seedClassrooms = async (
+  prisma: PrismaClient,
+  mode: SeedWriteMode = 'sync',
+): Promise<Map<string, string>> => {
   logStep('Sembrando aulas, amenidades y disponibilidad...');
   const classrooms = new Map<string, string>();
 
   for (const classroom of CLASSROOMS) {
     const id = seedId('classroom', classroom.key);
+
+    const existing = await prisma.classroom.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (existing && mode === 'ensure') {
+      classrooms.set(classroom.key, existing.id);
+      continue;
+    }
+
     const record = await prisma.classroom.upsert({
       where: { id },
       update: {

@@ -38,13 +38,16 @@ RUN pnpm --version
 EXPOSE 3000
 CMD ["sh", "-c", "pnpm run prisma:generate && pnpm run dev"]
 
+# One-shot image for `migrate deploy` and `prisma:seed:base`.
 FROM deps AS migrate
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules
-COPY --chown=node:node --chmod=644 package.json pnpm-lock.yaml pnpm-workspace.yaml prisma.config.ts ./
+COPY --chown=node:node --chmod=644 package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json prisma.config.ts ./
 COPY --chown=node:node prisma ./prisma
+COPY --chown=node:node src ./src
 ENV NODE_ENV=production
 USER node
-RUN pnpm --version
+RUN pnpm --version \
+    && pnpm run prisma:generate
 ENTRYPOINT ["pnpm", "exec", "prisma"]
 CMD ["migrate", "deploy"]
 
