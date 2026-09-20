@@ -1,7 +1,7 @@
 meta {
   name: Create a classroom as USER returns 403
   type: http
-  seq: 8
+  seq: 21
   tags: [
     Classrooms
   ]
@@ -14,7 +14,7 @@ post {
 }
 
 auth:bearer {
-  token: {{regularToken}}
+  token: {{token}}
 }
 
 body:json {
