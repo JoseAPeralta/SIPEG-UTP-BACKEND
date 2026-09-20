@@ -1,7 +1,7 @@
 meta {
   name: Update user as USER returns 403
   type: http
-  seq: 10
+  seq: 13
   tags: [
     Admin
   ]
@@ -14,7 +14,7 @@ patch {
 }
 
 auth:bearer {
-  token: {{regularToken}}
+  token: {{token}}
 }
 
 body:json {
