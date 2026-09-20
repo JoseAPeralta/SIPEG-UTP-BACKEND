@@ -132,6 +132,12 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Sin `DENY` local: un permiso heredado del programa no se revoca en la actividad.
 - El catalogo se siembra con `pnpm prisma:seed:base` en produccion y `pnpm prisma:seed` en desarrollo.
 
+### Colaboradores Por Scope
+
+- `GET /api/v1/event-programs/{id}/collaborators` y `GET /api/v1/activities/{id}/collaborators` listan las colaboraciones locales del scope con `userId`, `firstName`, `lastName`, `email`, `role`, `createdAt` y `permissions` locales (`name`, `source`, `validFrom`, `validUntil`). Requieren `permission:grant` en el scope o rol `ADMIN`; no expanden la herencia del programa padre (la procedencia llega en la fase 3.8) y no exponen `grantedById`/`grantedAt`.
+- `POST` de los mismos paths agrega un colaborador (`{ userId, role }`) materializando los `ROLE_DEFAULT` del rol. Un actor no-admin no puede asignar un rol cuyos defaults no posea (403); usuario inexistente 404, inactivo 400, duplicado en el scope 409 y programa `ARCHIVED` 409 (`Archived event programs cannot be modified.`).
+- Sin cambios de esquema, migraciones, variables de entorno ni catalogo de permisos; `ADMIN` mantiene el bypass total.
+
 ### Unidades Organizativas
 
 - `GET /api/v1/organizational-units` y `GET /api/v1/organizational-units/{id}` son publicos; el listado muestra solo activas salvo `isActive=false`, con paginacion, filtro `type` y busqueda `q` por nombre o codigo. El detalle incluye `careers` y `defaultProgram`.

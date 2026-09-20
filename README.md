@@ -283,6 +283,12 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
 - Los codigos de check-in (`code`) viven en `attendance` (uno por inscripcion, unico global) y no en la actividad. Ver `docs/adr/adr-0004-attendance-checkin-codes.md`.
 - Terminologia: "evento" se usa coloquialmente, pero el nombre oficial del recurso es **actividad** (`/activities`). La ruta `/events` fue retirada.
 
+### Colaboradores Por Scope
+
+- `GET /api/v1/event-programs/{id}/collaborators` y `GET /api/v1/activities/{id}/collaborators` (privados) listan las colaboraciones locales del scope: `userId`, identidad (`firstName`, `lastName`, `email`), `role`, `createdAt` y permisos locales (`name`, `source`, `validFrom`, `validUntil`). Requieren `permission:grant` en el scope o rol `ADMIN`; no expanden la herencia del programa padre y no devuelven `grantedById`/`grantedAt`.
+- `POST` de los mismos paths agrega un colaborador con `{ userId, role }` (`VIEWER`, `EDITOR` u `ORGANIZER`) y materializa los permisos `ROLE_DEFAULT` del rol. Un actor no-admin no puede asignar un rol cuyos defaults no posea (`403`); usuario inexistente `404`, inactivo `400`, duplicado en el scope `409` y programa `ARCHIVED` `409`. Body estricto: rol inválido o claves desconocidas responden `400`.
+- Respuesta: `data = { items: [...] }` en el listado y `data = Collaborator` en la creación. Ver `docs/adr/adr-0001-time-aware-collaboration-authorization.md`.
+
 ### Aulas
 
 - `GET /api/v1/classrooms` es público y devuelve solo aulas activas por defecto; `isActive=false` lista las inactivas. Paginación offset (`page`/`limit`, máximo 50) y filtros `type` (`LABORATORY`/`CLASSROOM`), `minCapacity` y `amenity` (insensible a mayúsculas).
