@@ -2,6 +2,7 @@ import { createDocument, type ZodOpenApiObject } from 'zod-openapi';
 
 import { activitiesPaths } from '../modules/activities/activities.openapi.js';
 import { authPaths } from '../modules/auth/auth.openapi.js';
+import { authorizationPaths } from '../modules/authorization/authorization.openapi.js';
 import { careersPaths } from '../modules/careers/careers.openapi.js';
 import { classroomsPaths } from '../modules/classrooms/classrooms.openapi.js';
 import { eventProgramsPaths } from '../modules/event-programs/event-programs.openapi.js';
@@ -25,6 +26,10 @@ const document: ZodOpenApiObject = {
     { name: 'Admin', description: 'Administrative operations.' },
     { name: 'Activities', description: 'Event activities.' },
     { name: 'Event Programs', description: 'Event program management.' },
+    {
+      name: 'Collaborators',
+      description: 'Collaborator delegation for event programs and activities.',
+    },
     { name: 'Organizational Units', description: 'Organizational unit catalog and lifecycle.' },
     { name: 'Careers', description: 'Career catalog management.' },
     { name: 'Classrooms', description: 'Classroom catalog, amenities and availability.' },
@@ -33,6 +38,7 @@ const document: ZodOpenApiObject = {
   paths: {
     ...authPaths,
     ...usersPaths,
+    ...authorizationPaths,
     ...activitiesPaths,
     ...eventProgramsPaths,
     ...organizationalUnitsPaths,
