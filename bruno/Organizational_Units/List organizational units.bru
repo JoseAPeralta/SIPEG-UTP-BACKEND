@@ -1,0 +1,45 @@
+meta {
+  name: List organizational units
+  type: http
+  seq: 3
+  tags: [
+    Organizational_Units
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/organizational-units?page=1&limit=5
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 5
+}
+
+tests {
+  test("public list returns a paginated envelope of active units", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Organizational units retrieved successfully.");
+    expect(body.data.items).to.be.an("array");
+    expect(body.data.page).to.equal(1);
+    expect(body.data.limit).to.equal(5);
+    expect(body.data.total).to.be.a("number");
+    expect(body.data.totalPages).to.be.a("number");
+  });
+
+  test("listed units are active and expose only safe fields", function () {
+    const body = res.getBody();
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("$argon2");
+    for (const item of body.data.items) {
+      expect(item.isActive).to.equal(true);
+      expect(item).to.have.property("head");
+      expect(item).to.not.have.property("createdAt");
+      expect(item).to.not.have.property("updatedAt");
+    }
+  });
+}

@@ -1,0 +1,118 @@
+meta {
+  name: Verify an email address
+  type: http
+  seq: 6
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/verify-email
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "token": "{{verificationToken}}"
+  }
+}
+
+tests {
+  const configured = Boolean(String(bru.getVar("verificationToken") ?? "").trim());
+
+  test("verification uses a configured private token or returns generic 400", function () {
+    expect(res.getStatus()).to.equal(configured ? 200 : 400);
+    const body = res.getBody();
+    expect(body.success).to.equal(configured);
+    if (!configured) {
+      expect(body.message).to.equal("Validation error.");
+    }
+  });
+}
+
+docs {
+  Define verificationToken como variable runtime o en un environment privado ignorado por Git. Sin token, esta request valida el 400 de entrada; con el token extraido de Mailpit valida el flujo real.
+}
+
+example {
+  name: 200 Response
+  description: Email verified.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/verify-email
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "token": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {}
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/verify-email
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "token": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}

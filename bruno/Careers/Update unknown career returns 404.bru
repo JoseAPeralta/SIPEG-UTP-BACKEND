@@ -1,0 +1,33 @@
+meta {
+  name: Update unknown career returns 404
+  type: http
+  seq: 12
+  tags: [
+    Careers
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/careers/{{unknownCareerId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Carrera Inexistente"
+  }
+}
+
+tests {
+  test("an unknown career id produces 404", function () {
+    expect(res.getStatus()).to.equal(404);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Career not found.");
+  });
+}

@@ -1,0 +1,431 @@
+meta {
+  name: Create an activity
+  type: http
+  seq: 2
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "",
+    "description": "",
+    "type": "WORKSHOP",
+    "date": "",
+    "startTime": "",
+    "endTime": "",
+    "maxCapacity": 0,
+    "bannerUrl": "",
+    "eventProgramId": "",
+    "classroomId": "",
+    "speakers": [
+      {
+        "firstName": "",
+        "lastName": "",
+        "email": "",
+        "organization": ""
+      }
+    ],
+    "equipment": []
+  }
+}
+
+docs {
+  Creates an activity in DRAFT status inside an ACTIVE event program. Accepts inline speakers; a speaker is reused when the email matches an existing catalog entry and linked to a platform user when the email matches an account. Speakers do not need a platform account. Requires the activity:create permission on the target program (or the ADMIN role).
+}
+
+example {
+  name: 201 Response
+  description: Activity created successfully.
+
+  request: {
+    url: {{baseUrl}}/api/v1/activities
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "type": "WORKSHOP",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "maxCapacity": 0,
+        "bannerUrl": "",
+        "eventProgramId": "",
+        "classroomId": "",
+        "speakers": [
+          {
+            "firstName": "",
+            "lastName": "",
+            "email": "",
+            "organization": ""
+          }
+        ],
+        "equipment": []
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 201
+      text: Created
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "id": "",
+            "name": "",
+            "description": "",
+            "type": "WORKSHOP",
+            "date": "",
+            "startTime": "",
+            "endTime": "",
+            "capacity": "",
+            "bannerUrl": "",
+            "status": "DRAFT",
+            "equipment": [],
+            "speakers": [],
+            "classroom": "",
+            "eventProgram": {
+              "id": "",
+              "name": "",
+              "label": ""
+            },
+            "organizationalUnit": {
+              "type": "FACULTY",
+              "id": "",
+              "name": ""
+            }
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/activities
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "type": "WORKSHOP",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "maxCapacity": 0,
+        "bannerUrl": "",
+        "eventProgramId": "",
+        "classroomId": "",
+        "speakers": [
+          {
+            "firstName": "",
+            "lastName": "",
+            "email": "",
+            "organization": ""
+          }
+        ],
+        "equipment": []
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/activities
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "type": "WORKSHOP",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "maxCapacity": 0,
+        "bannerUrl": "",
+        "eventProgramId": "",
+        "classroomId": "",
+        "speakers": [
+          {
+            "firstName": "",
+            "lastName": "",
+            "email": "",
+            "organization": ""
+          }
+        ],
+        "equipment": []
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 403 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/activities
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "type": "WORKSHOP",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "maxCapacity": 0,
+        "bannerUrl": "",
+        "eventProgramId": "",
+        "classroomId": "",
+        "speakers": [
+          {
+            "firstName": "",
+            "lastName": "",
+            "email": "",
+            "organization": ""
+          }
+        ],
+        "equipment": []
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 403
+      text: Forbidden
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/activities
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "type": "WORKSHOP",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "maxCapacity": 0,
+        "bannerUrl": "",
+        "eventProgramId": "",
+        "classroomId": "",
+        "speakers": [
+          {
+            "firstName": "",
+            "lastName": "",
+            "email": "",
+            "organization": ""
+          }
+        ],
+        "equipment": []
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 404
+      text: Not Found
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 500 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/activities
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "type": "WORKSHOP",
+        "date": "",
+        "startTime": "",
+        "endTime": "",
+        "maxCapacity": 0,
+        "bannerUrl": "",
+        "eventProgramId": "",
+        "classroomId": "",
+        "speakers": [
+          {
+            "firstName": "",
+            "lastName": "",
+            "email": "",
+            "organization": ""
+          }
+        ],
+        "equipment": []
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 500
+      text: Internal Server Error
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}

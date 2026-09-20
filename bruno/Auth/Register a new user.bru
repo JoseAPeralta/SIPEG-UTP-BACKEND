@@ -1,0 +1,241 @@
+meta {
+  name: Register a new user
+  type: http
+  seq: 2
+  tags: [
+    Auth
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/register
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "email": "{{newUserEmail}}",
+    "password": "PruebaSipeg2026*",
+    "firstName": "{{newUserFirstName}}",
+    "lastName": "{{newUserLastName}}",
+    "identificationNumber": "{{newUserIdentification}}",
+    "unitId": "seed_unit_fic",
+    "careerId": "seed_career_fic-civ"
+  }
+}
+
+script:pre-request {
+  const suffix = bru.interpolate("{{$randomInt}}");
+  bru.setVar("newUserFirstName", "Prueba");
+  bru.setVar("newUserLastName", "Fase11");
+  bru.setVar("newUserEmail", `prueba.11.${suffix}.${Date.now()}@utp.ac.pa`);
+  bru.setVar("newUserIdentification", `8-${Date.now()}-${suffix}`);
+}
+
+tests {
+  test("register returns 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+
+  test("register returns only the new user id", function () {
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data).to.have.property("userId");
+    expect(body.data).to.not.have.property("password");
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+  });
+}
+
+example {
+  name: 201 Response
+  description: Registration successful. An email verification is sent.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/register
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "email": "",
+        "password": "",
+        "firstName": "",
+        "lastName": "",
+        "identificationNumber": "",
+        "unitId": "",
+        "careerId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 201
+      text: Created
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "userId": ""
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/register
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "email": "",
+        "password": "",
+        "firstName": "",
+        "lastName": "",
+        "identificationNumber": "",
+        "unitId": "",
+        "careerId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 409 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/register
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "email": "",
+        "password": "",
+        "firstName": "",
+        "lastName": "",
+        "identificationNumber": "",
+        "unitId": "",
+        "careerId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 409
+      text: Conflict
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 429 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/auth/register
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "email": "",
+        "password": "",
+        "firstName": "",
+        "lastName": "",
+        "identificationNumber": "",
+        "unitId": "",
+        "careerId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 429
+      text: Too Many Requests
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}

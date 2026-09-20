@@ -1,0 +1,39 @@
+meta {
+  name: Update an organizational unit
+  type: http
+  seq: 9
+  tags: [
+    Organizational_Units
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/organizational-units/{{newUnitId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Unidad Temporal Actualizada",
+    "description": "Descripcion actualizada por Bruno.",
+    "headId": null
+  }
+}
+
+tests {
+  test("admin updates the editable unit fields", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Organizational unit updated successfully.");
+    expect(body.data.name).to.equal("Unidad Temporal Actualizada");
+    expect(body.data.description).to.equal("Descripcion actualizada por Bruno.");
+    expect(body.data.head).to.equal(null);
+    expect(body.data.defaultProgram.status).to.equal("ACTIVE");
+  });
+}

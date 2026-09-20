@@ -1,0 +1,27 @@
+meta {
+  name: List users as USER returns 403
+  type: http
+  seq: 4
+  tags: [
+    Admin
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/admin/users
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{regularToken}}
+}
+
+tests {
+  test("regular users cannot list all users", function () {
+    expect(res.getStatus()).to.equal(403);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Insufficient privileges for this resource.");
+  });
+}

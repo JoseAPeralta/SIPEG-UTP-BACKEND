@@ -1,0 +1,34 @@
+meta {
+  name: List available classrooms
+  type: http
+  seq: 17
+  tags: [
+    Classrooms
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classrooms/available?date=2026-09-21&startTime=08:00&endTime=09:00
+  body: none
+  auth: none
+}
+
+params:query {
+  date: 2026-09-21
+  startTime: 08:00
+  endTime: 09:00
+}
+
+tests {
+  test("lists classrooms whose window covers the interval", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.message).to.equal("Available classrooms retrieved successfully.");
+    expect(body.data).to.be.an("array");
+
+    body.data.forEach(function (classroom) {
+      expect(classroom.isActive).to.equal(true);
+      expect(classroom.amenities).to.be.an("array");
+    });
+  });
+}

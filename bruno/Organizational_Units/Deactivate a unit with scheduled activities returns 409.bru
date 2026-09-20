@@ -1,0 +1,27 @@
+meta {
+  name: Deactivate a unit with scheduled activities returns 409
+  type: http
+  seq: 13
+  tags: [
+    Organizational_Units
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/organizational-units/{{unitId}}/deactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+tests {
+  test("a default program with scheduled activities blocks deactivation", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.include("scheduled or ongoing activities");
+  });
+}

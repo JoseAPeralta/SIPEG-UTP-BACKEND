@@ -23,7 +23,7 @@ const loadActiveUser = async (userId: string): Promise<Express.AuthenticatedUser
       id: true,
       email: true,
       globalRole: true,
-      facultyId: true,
+      unitId: true,
       careerId: true,
       isActive: true,
     },
@@ -40,7 +40,7 @@ const loadActiveUser = async (userId: string): Promise<Express.AuthenticatedUser
     id: user.id,
     email: user.email,
     globalRole: user.globalRole,
-    facultyId: user.facultyId,
+    unitId: user.unitId,
     careerId: user.careerId,
     isActive: user.isActive,
   };

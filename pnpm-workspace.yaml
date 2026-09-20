@@ -1,7 +1,9 @@
 allowBuilds:
   '@prisma/engines': true
+  '@usebruno/mcp@https://codeload.github.com/usebruno/bruno-mcp/tar.gz/0779b7a62e5a0d599dd9c1e170faec720fd85e74': true
   argon2: true
   esbuild: true
   prisma: true
+  protobufjs: false
 minimumReleaseAgeExclude:
   - '@types/node@24.13.6'

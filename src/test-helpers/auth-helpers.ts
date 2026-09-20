@@ -1,8 +1,8 @@
-import { SignJWT, generateKeyPair, exportJWK, calculateJwkThumbprint, type KeyLike } from 'jose';
+import { SignJWT, generateKeyPair, exportJWK, calculateJwkThumbprint, type CryptoKey } from 'jose';
 
 export interface TestJwks {
-  privateKey: KeyLike;
-  publicKey: KeyLike;
+  privateKey: CryptoKey;
+  publicKey: CryptoKey;
   kid: string;
   publicJwk: unknown;
 }
@@ -17,7 +17,7 @@ export const createTestJwks = async (): Promise<TestJwks> => {
 };
 
 export interface SignTestTokenInput {
-  privateKey: KeyLike;
+  privateKey: CryptoKey;
   kid: string;
   issuer: string;
   audience: string;

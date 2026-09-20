@@ -1,0 +1,29 @@
+meta {
+  name: Get an organizational unit
+  type: http
+  seq: 5
+  tags: [
+    Organizational_Units
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/organizational-units/{{unitId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("public detail includes careers and the default event program", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Organizational unit retrieved successfully.");
+    expect(body.data.id).to.equal(bru.getEnvVar("unitId"));
+    expect(body.data.careers).to.be.an("array");
+    expect(body.data.careers.length).to.be.greaterThan(0);
+    expect(body.data.defaultProgram).to.have.property("id");
+    expect(body.data.defaultProgram.status).to.equal("ACTIVE");
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+  });
+}

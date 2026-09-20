@@ -1,0 +1,27 @@
+meta {
+  name: List available classrooms with an invalid range returns 400
+  type: http
+  seq: 19
+  tags: [
+    Classrooms
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classrooms/available?date=2026-09-21&startTime=10:00&endTime=10:00
+  body: none
+  auth: none
+}
+
+params:query {
+  date: 2026-09-21
+  startTime: 10:00
+  endTime: 10:00
+}
+
+tests {
+  test("rejects an end time not after the start time", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().message).to.equal("Validation error.");
+  });
+}

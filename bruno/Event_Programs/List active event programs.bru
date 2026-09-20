@@ -1,0 +1,26 @@
+meta {
+  name: List active event programs
+  type: http
+  seq: 3
+  tags: [
+    Event_Programs
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs?page=1&limit=20&organizationalUnitId=seed_unit_fisc
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 20
+  organizationalUnitId: seed_unit_fisc
+  ~unitType: SUBDIRECTORATE
+  ~q:
+}
+
+docs {
+  Public. Returns ACTIVE event programs ordered by name. Supports filters by organizational unit, unit type and a name/label search term.
+}

@@ -1,3 +1,4 @@
+import { apiReference } from '@scalar/express-api-reference';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -5,9 +6,10 @@ import { toNodeHandler } from 'better-auth/node';
 
 import { auth } from './lib/auth.js';
 import { env } from './config/env.js';
+import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { notFoundHandler } from './middlewares/notFound.middleware.js';
-import { apiRoutes } from './routes/index.js';
+import { apiRoutes } from './routes.js';
 import { ApiError } from './utils/ApiError.js';
 
 const allowedOrigins = [
@@ -16,6 +18,8 @@ const allowedOrigins = [
     .map((o) => o.trim())
     .filter(Boolean) ?? []),
 ];
+
+const docsEnabled = env.DOCS_ENABLED ?? env.NODE_ENV !== 'production';
 
 export const app = express();
 
@@ -52,6 +56,13 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 app.use('/api/v1', apiRoutes);
+
+if (docsEnabled) {
+  app.get('/api/openapi.json', (_req, res) => {
+    res.json(openApiDocument);
+  });
+  app.get('/api/docs', apiReference({ content: openApiDocument }));
+}
 
 app.use(notFoundHandler);
 app.use(errorHandler);

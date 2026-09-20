@@ -1,0 +1,158 @@
+meta {
+  name: Get the authenticated user profile
+  type: http
+  seq: 1
+  tags: [
+    Users
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("profile response matches the authenticated user contract", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.id).to.be.a("string");
+    expect(body.data.firstName).to.be.a("string");
+    expect(body.data.lastName).to.be.a("string");
+    expect(body.data.email).to.include("@");
+  });
+
+  test("profile response does not leak internal or credential fields", function () {
+    const body = res.getBody();
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("$argon2");
+    expect(body.data).to.not.have.property("name");
+    expect(body.data).to.not.have.property("accounts");
+    expect(body.data).to.not.have.property("password");
+    expect(body.data).to.not.have.property("passwordHash");
+  });
+}
+
+example {
+  name: 200 Response
+  description: Authenticated user profile.
+
+  request: {
+    url: {{baseUrl}}/api/v1/users/me
+    method: GET
+    mode: none
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "id": "",
+            "firstName": "",
+            "lastName": "",
+            "identificationNumber": "",
+            "email": "",
+            "globalRole": "USER",
+            "unit": "",
+            "career": ""
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/users/me
+    method: GET
+    mode: none
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/users/me
+    method: GET
+    mode: none
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 404
+      text: Not Found
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}

@@ -1,0 +1,237 @@
+meta {
+  name: Update the authenticated user profile
+  type: http
+  seq: 2
+  tags: [
+    Users
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/users/me
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "firstName": "{{profileFirstName}}",
+    "lastName": "{{profileLastName}}"
+  }
+}
+
+tests {
+  test("update returns the updated profile", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.firstName).to.equal(bru.getEnvVar("profileFirstName"));
+    expect(body.data.lastName).to.equal(bru.getEnvVar("profileLastName"));
+  });
+
+  test("update response does not leak internal or credential fields", function () {
+    const body = res.getBody();
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("$argon2");
+    expect(body.data).to.not.have.property("name");
+    expect(body.data).to.not.have.property("accounts");
+    expect(body.data).to.not.have.property("password");
+    expect(body.data).to.not.have.property("passwordHash");
+  });
+}
+
+docs {
+  Partially updates the authenticated user profile. Send `unitId: null` to select the "Otro" faculty option: the career is then forced to the global `Otros` career (a different career returns 400 and a missing `Otros` returns 409). `Otros` is global and can be selected with any real unit; it is preserved when switching to a real unit.
+}
+
+example {
+  name: 200 Response
+  description: Updated user profile.
+
+  request: {
+    url: {{baseUrl}}/api/v1/users/me
+    method: PATCH
+    mode: json
+    body:json: {
+      {
+        "firstName": "",
+        "lastName": "",
+        "unitId": "",
+        "careerId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 200
+      text: OK
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "id": "",
+            "firstName": "",
+            "lastName": "",
+            "identificationNumber": "",
+            "email": "",
+            "globalRole": "USER",
+            "unit": "",
+            "career": ""
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/users/me
+    method: PATCH
+    mode: json
+    body:json: {
+      {
+        "firstName": "",
+        "lastName": "",
+        "unitId": "",
+        "careerId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/users/me
+    method: PATCH
+    mode: json
+    body:json: {
+      {
+        "firstName": "",
+        "lastName": "",
+        "unitId": "",
+        "careerId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/users/me
+    method: PATCH
+    mode: json
+    body:json: {
+      {
+        "firstName": "",
+        "lastName": "",
+        "unitId": "",
+        "careerId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 404
+      text: Not Found
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}

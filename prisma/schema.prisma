@@ -13,6 +13,11 @@ enum GlobalRole {
   ADMIN
 }
 
+enum UnitType {
+  FACULTY
+  SUBDIRECTORATE
+}
+
 enum CollaborationRole {
   ORGANIZER
   EDITOR
@@ -69,6 +74,11 @@ enum AlertType {
   CERTIFICATE_ISSUED
 }
 
+enum PermissionGrantSource {
+  ROLE_DEFAULT
+  OVERRIDE
+}
+
 model User {
   id                   String     @id @default(cuid())
   name                 String     @db.VarChar(200)
@@ -83,55 +93,49 @@ model User {
   createdAt            DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  facultyId String?  @map("faculty_id")
-  faculty   Faculty? @relation(fields: [facultyId], references: [id], onDelete: SetNull)
+  unitId String?             @map("unit_id")
+  unit   OrganizationalUnit? @relation("OrganizationalUnitMembers", fields: [unitId], references: [id], onDelete: SetNull)
 
   careerId String? @map("career_id")
   career   Career? @relation(fields: [careerId], references: [id], onDelete: SetNull)
 
-  sessions            Session[]
-  accounts            Account[]
-  createdPrograms     EventProgram[]
-  presentedActivities Activity[]
-  collaborations      Collaboration[]
-  attendance          Attendance[]
-  speakerProposals    SpeakerProposal[]
-  proposalFeedback    ProposalFeedback[]
-  alerts              Alert[]
+  headedUnits OrganizationalUnit[] @relation("OrganizationalUnitHead")
 
-  @@index([facultyId])
+  sessions           Session[]
+  accounts           Account[]
+  createdPrograms    EventProgram[]
+  collaborations     Collaboration[]
+  grantedPermissions CollaborationPermission[] @relation("GrantedCollaborationPermissions")
+  attendance         Attendance[]
+  speakerProfile     Speaker?
+  proposalFeedback   ProposalFeedback[]
+  alerts             Alert[]
+
+  @@index([unitId])
   @@index([careerId])
   @@map("users")
 }
 
-model Faculty {
+model OrganizationalUnit {
   id          String   @id @default(cuid())
   name        String   @db.VarChar(150)
   code        String   @unique @db.VarChar(20)
   description String?  @db.Text
+  type        UnitType
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  headId String? @map("head_id")
+  head   User?   @relation("OrganizationalUnitHead", fields: [headId], references: [id], onDelete: SetNull)
+
+  members       User[]         @relation("OrganizationalUnitMembers")
   careers       Career[]
-  users         User[]
   eventPrograms EventProgram[]
 
-  @@map("faculties")
-}
-
-model Subdirectorate {
-  id          String   @id @default(cuid())
-  name        String   @db.VarChar(150)
-  code        String   @unique @db.VarChar(20)
-  description String?  @db.Text
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  eventPrograms EventProgram[]
-
-  @@map("subdirectorates")
+  @@index([type, isActive])
+  @@index([headId])
+  @@map("organizational_units")
 }
 
 model Career {
@@ -139,16 +143,15 @@ model Career {
   name        String   @db.VarChar(150)
   code        String   @unique @db.VarChar(20)
   description String?  @db.Text
-  isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  facultyId String  @map("faculty_id")
-  faculty   Faculty @relation(fields: [facultyId], references: [id], onDelete: Restrict)
+  unitId String?             @map("unit_id")
+  unit   OrganizationalUnit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
   users User[]
 
-  @@index([facultyId])
+  @@index([unitId])
   @@map("careers")
 }
 
@@ -177,11 +180,8 @@ model EventProgram {
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  facultyId String?  @map("faculty_id")
-  faculty   Faculty? @relation(fields: [facultyId], references: [id], onDelete: Restrict)
-
-  subdirectorateId String?         @map("subdirectorate_id")
-  subdirectorate   Subdirectorate? @relation(fields: [subdirectorateId], references: [id], onDelete: Restrict)
+  organizationalUnitId String             @map("organizational_unit_id")
+  organizationalUnit   OrganizationalUnit @relation(fields: [organizationalUnitId], references: [id], onDelete: Restrict)
 
   createdById String? @map("created_by_id")
   createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: Restrict)
@@ -191,10 +191,8 @@ model EventProgram {
   speakerProposals SpeakerProposal[]
   alerts           Alert[]
 
-  @@unique([facultyId], map: "event_programs_default_faculty_key", where: { isDefault: true })
-  @@unique([subdirectorateId], map: "event_programs_default_subdirectorate_key", where: { isDefault: true })
-  @@index([facultyId, status])
-  @@index([subdirectorateId, status])
+  @@unique([organizationalUnitId], map: "event_programs_default_unit_key", where: { isDefault: true })
+  @@index([organizationalUnitId, status])
   @@index([createdById])
   @@map("event_programs")
 }
@@ -209,8 +207,6 @@ model Activity {
   endTime     DateTime       @map("end_time") @db.Time(3)
   maxCapacity Int?           @map("max_capacity")
   bannerUrl   String?        @map("banner_url") @db.VarChar(500)
-  qrCode      String         @unique @map("qr_code") @db.VarChar(50)
-  manualCode  String?        @map("manual_code") @db.VarChar(20)
   status      ActivityStatus @default(DRAFT)
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -221,18 +217,15 @@ model Activity {
   classroomId String?    @map("classroom_id")
   classroom   Classroom? @relation(fields: [classroomId], references: [id], onDelete: SetNull)
 
-  speakerId String? @map("speaker_id")
-  speaker   User?   @relation(fields: [speakerId], references: [id], onDelete: SetNull)
-
+  speakers       ActivitySpeaker[]
   equipment      ActivityEquipment[]
   collaborations Collaboration[]
   attendance     Attendance[]
   alerts         Alert[]
 
-  @@unique([eventProgramId, manualCode])
   @@index([eventProgramId, date, status])
+  @@index([status, date, startTime])
   @@index([classroomId, date, startTime])
-  @@index([speakerId])
   @@map("activities")
 }
 
@@ -243,6 +236,37 @@ model ActivityEquipment {
 
   @@id([activityId, name])
   @@map("activity_equipment")
+}
+
+model Speaker {
+  id           String   @id @default(cuid())
+  firstName    String   @map("first_name") @db.VarChar(100)
+  lastName     String   @map("last_name") @db.VarChar(100)
+  email        String?  @unique @db.VarChar(254)
+  organization String?  @db.VarChar(150)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  userId String? @unique @map("user_id")
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  activities ActivitySpeaker[]
+  proposals  SpeakerProposal[]
+
+  @@index([lastName, firstName])
+  @@map("speakers")
+}
+
+model ActivitySpeaker {
+  activityId String   @map("activity_id")
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  speakerId String  @map("speaker_id")
+  speaker   Speaker @relation(fields: [speakerId], references: [id], onDelete: Cascade)
+
+  @@id([activityId, speakerId])
+  @@index([speakerId])
+  @@map("activity_speakers")
 }
 
 model Collaboration {
@@ -274,16 +298,25 @@ model CollaborationPermission {
   permissionId String     @map("permission_id")
   permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
 
+  source      PermissionGrantSource @default(OVERRIDE)
+  validFrom   DateTime?             @map("valid_from") @db.Timestamptz(3)
+  validUntil  DateTime?             @map("valid_until") @db.Timestamptz(3)
+  grantedById String?               @map("granted_by_id")
+  grantedBy   User?                 @relation("GrantedCollaborationPermissions", fields: [grantedById], references: [id], onDelete: SetNull)
+  grantedAt   DateTime              @default(now()) @map("granted_at") @db.Timestamptz(3)
+
   @@id([collaborationId, permissionId])
   @@index([permissionId])
+  @@index([validUntil])
+  @@index([grantedById])
   @@map("collaboration_permissions")
 }
 
 model Attendance {
   id           String            @id @default(cuid())
+  code         String            @unique @db.VarChar(64)
   registeredAt DateTime          @default(now()) @map("registered_at") @db.Timestamptz(3)
   method       AttendanceMethod?
-  usedCode     String?           @map("used_code") @db.VarChar(50)
   checkedInAt  DateTime?         @map("checked_in_at") @db.Timestamptz(3)
 
   activityId String   @map("activity_id")
@@ -365,8 +398,8 @@ model SpeakerProposal {
   submittedAt       DateTime       @default(now()) @map("submitted_at") @db.Timestamptz(3)
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  speakerId String @map("speaker_id")
-  speaker   User   @relation(fields: [speakerId], references: [id], onDelete: Restrict)
+  speakerId String  @map("speaker_id")
+  speaker   Speaker @relation(fields: [speakerId], references: [id], onDelete: Restrict)
 
   eventProgramId String       @map("event_program_id")
   eventProgram   EventProgram @relation(fields: [eventProgramId], references: [id], onDelete: Restrict)
@@ -493,10 +526,13 @@ model Verification {
 }
 
 model Jwks {
-  id         String   @id
-  publicKey  String   @map("public_key") @db.Text
-  privateKey String   @map("private_key") @db.Text
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id         String    @id
+  publicKey  String    @map("public_key") @db.Text
+  privateKey String    @map("private_key") @db.Text
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(3)
+  alg        String?   @db.VarChar(20)
+  crv        String?   @db.VarChar(20)
 
   @@map("jwks")
 }

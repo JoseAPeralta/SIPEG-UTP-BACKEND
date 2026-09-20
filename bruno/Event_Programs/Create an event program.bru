@@ -1,0 +1,338 @@
+meta {
+  name: Create an event program
+  type: http
+  seq: 1
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "",
+    "description": "",
+    "label": "",
+    "bannerUrl": "",
+    "startDate": "",
+    "endDate": "",
+    "organizationalUnitId": ""
+  }
+}
+
+docs {
+  Creates a non-default event program in DRAFT status for an active organizational unit. Requires the program:create permission; without a scope, only ADMIN users are authorized.
+}
+
+example {
+  name: 201 Response
+  description: Event program created successfully.
+
+  request: {
+    url: {{baseUrl}}/api/v1/event-programs
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "label": "",
+        "bannerUrl": "",
+        "startDate": "",
+        "endDate": "",
+        "organizationalUnitId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 201
+      text: Created
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "data": {
+            "id": "",
+            "name": "",
+            "description": "",
+            "label": "",
+            "bannerUrl": "",
+            "isDefault": false,
+            "status": "DRAFT",
+            "startDate": "",
+            "endDate": "",
+            "organizationalUnit": {
+              "id": "",
+              "name": "",
+              "type": "FACULTY"
+            }
+          }
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 400 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/event-programs
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "label": "",
+        "bannerUrl": "",
+        "startDate": "",
+        "endDate": "",
+        "organizationalUnitId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 400
+      text: Bad Request
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 401 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/event-programs
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "label": "",
+        "bannerUrl": "",
+        "startDate": "",
+        "endDate": "",
+        "organizationalUnitId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 401
+      text: Unauthorized
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 403 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/event-programs
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "label": "",
+        "bannerUrl": "",
+        "startDate": "",
+        "endDate": "",
+        "organizationalUnitId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 403
+      text: Forbidden
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 404 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/event-programs
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "label": "",
+        "bannerUrl": "",
+        "startDate": "",
+        "endDate": "",
+        "organizationalUnitId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 404
+      text: Not Found
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
+
+example {
+  name: 500 Response
+  description: Error response.
+
+  request: {
+    url: {{baseUrl}}/api/v1/event-programs
+    method: POST
+    mode: json
+    body:json: {
+      {
+        "name": "",
+        "description": "",
+        "label": "",
+        "bannerUrl": "",
+        "startDate": "",
+        "endDate": "",
+        "organizationalUnitId": ""
+      }
+    }
+  }
+
+  response: {
+    headers: {
+      Content-Type: application/json
+    }
+
+    status: {
+      code: 500
+      text: Internal Server Error
+    }
+
+    body: {
+      type: json
+      content: '''
+        {
+          "success": false,
+          "message": "",
+          "errors": [
+            {
+              "field": "",
+              "message": ""
+            }
+          ]
+        }
+      '''
+    }
+  }
+}
