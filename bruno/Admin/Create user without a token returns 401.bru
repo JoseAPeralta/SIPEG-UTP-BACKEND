@@ -1,0 +1,30 @@
+meta {
+  name: Create user without a token returns 401
+  type: http
+  seq: 10
+  tags: [
+    Admin
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/users
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{forbiddenUserEmail}}",
+    "password": "SipegCreado2026*",
+    "firstName": "Sin",
+    "lastName": "Token",
+    "identificationNumber": "{{forbiddenUserIdentification}}"
+  }
+}
+
+tests {
+  test("anonymous requests cannot create users", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

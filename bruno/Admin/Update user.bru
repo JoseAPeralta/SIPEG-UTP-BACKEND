@@ -1,0 +1,43 @@
+meta {
+  name: Update user
+  type: http
+  seq: 7
+  tags: [
+    Admin
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/admin/users/{{targetUserId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "globalRole": "USER",
+    "isActive": true
+  }
+}
+
+tests {
+  test("admin update returns the safe administrative DTO", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("User updated successfully.");
+    expect(body.data.id).to.equal(bru.getEnvVar("targetUserId"));
+    expect(body.data.globalRole).to.equal("USER");
+    expect(body.data.isActive).to.equal(true);
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+    expect(body.data).to.not.have.property("name");
+    expect(body.data).to.not.have.property("accounts");
+    expect(body.data).to.not.have.property("password");
+    expect(body.data).to.not.have.property("passwordHash");
+    expect(body.data).to.not.have.property("emailVerified");
+  });
+}
