@@ -7,6 +7,11 @@ import { disconnectPrisma } from './config/prisma.js';
 
 const server = createServer(app);
 
+server.on('error', (error) => {
+  console.error('HTTP server error:', error);
+  process.exit(1);
+});
+
 server.listen(env.PORT, async () => {
   console.log(`SIPEG UTP API listening on port ${env.PORT}`);
   try {
@@ -19,6 +24,8 @@ server.listen(env.PORT, async () => {
 
 const shutdown = (signal: NodeJS.Signals): void => {
   console.log(`${signal} received. Shutting down gracefully.`);
+
+  server.closeIdleConnections();
 
   server.close(async (error) => {
     await disconnectPrisma();
