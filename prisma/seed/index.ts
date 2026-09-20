@@ -15,12 +15,12 @@ export const seedDatabase = async (prisma: PrismaClient, now: Date = new Date())
   resolveDemoPassword();
   const passwordHash = await hashDemoPassword();
 
-  const catalog = await seedOrganizations(prisma);
+  const catalog = await seedOrganizations(prisma, 'sync');
   const users = await seedUsers(prisma, catalog, passwordHash);
   const adminUserId = requireEntry(users, ADMIN_KEY, 'usuario administrador').id;
 
   const speakers = await seedSpeakers(prisma, { users });
-  const classrooms = await seedClassrooms(prisma);
+  const classrooms = await seedClassrooms(prisma, 'sync');
   const additionalPrograms = await seedAdditionalPrograms(prisma, catalog, adminUserId, now);
 
   const activities = await seedActivities(

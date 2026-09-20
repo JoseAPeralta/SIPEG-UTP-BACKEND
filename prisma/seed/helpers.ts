@@ -4,6 +4,16 @@ import { startOfInstitutionalDay } from '../../src/utils/date.js';
 export const SEED_PREFIX = 'seed';
 export const DEFAULT_DEMO_PASSWORD = 'Sipeg2026*UTP';
 
+export type SeedWriteMode = 'sync' | 'ensure';
+
+export interface InitialAdminConfig {
+  email: string;
+  password: string;
+  identificationNumber: string;
+  firstName: string;
+  lastName: string;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const seedId = (...parts: string[]): string => [SEED_PREFIX, ...parts].join('_');
@@ -54,6 +64,42 @@ export const resolveDemoPassword = (): string => {
 };
 
 export const hashDemoPassword = async (): Promise<string> => hashPassword(resolveDemoPassword());
+
+export const readInitialAdminConfig = (
+  env: NodeJS.ProcessEnv = process.env,
+): InitialAdminConfig | null => {
+  const email = env['SEED_ADMIN_EMAIL']?.trim();
+  const password = env['SEED_ADMIN_PASSWORD'];
+  const identificationNumber = env['SEED_ADMIN_IDENTIFICATION_NUMBER']?.trim();
+  const firstName = env['SEED_ADMIN_FIRST_NAME']?.trim() || 'Administrador';
+  const lastName = env['SEED_ADMIN_LAST_NAME']?.trim() || 'SIPEG';
+
+  const provided = [email, password, identificationNumber].filter(
+    (value): value is string => value !== undefined && value.length > 0,
+  );
+
+  if (provided.length === 0) {
+    return null;
+  }
+
+  if (!email || !password || !identificationNumber) {
+    throw new Error(
+      'SEED_ADMIN_EMAIL, SEED_ADMIN_PASSWORD and SEED_ADMIN_IDENTIFICATION_NUMBER must be set together to bootstrap the initial ADMIN.',
+    );
+  }
+
+  if (password.length < 12 || password.length > 128) {
+    throw new Error('SEED_ADMIN_PASSWORD must be between 12 and 128 characters.');
+  }
+
+  return {
+    email: email.toLowerCase(),
+    password,
+    identificationNumber,
+    firstName,
+    lastName,
+  };
+};
 
 export const logStep = (message: string): void => {
   console.log(`[seed] ${message}`);

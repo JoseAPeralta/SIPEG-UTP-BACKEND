@@ -143,12 +143,11 @@ model Career {
   name        String   @db.VarChar(150)
   code        String   @unique @db.VarChar(20)
   description String?  @db.Text
-  isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  unitId String             @map("unit_id")
-  unit   OrganizationalUnit @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  unitId String?             @map("unit_id")
+  unit   OrganizationalUnit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
   users User[]
 
