@@ -1,0 +1,54 @@
+meta {
+  name: Create a classroom
+  type: http
+  seq: 6
+  tags: [
+    Classrooms
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classrooms
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "{{newClassroomName}}",
+    "type": "CLASSROOM",
+    "capacity": 30,
+    "building": "Edificio TMP",
+    "floor": 1,
+    "isActive": true
+  }
+}
+
+script:pre-request {
+  bru.setVar("newClassroomName", "Aula TMP " + Date.now());
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.id) {
+    bru.setVar("newClassroomId", body.data.id);
+  }
+}
+
+tests {
+  test("ADMIN creates a classroom", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.message).to.equal("Classroom created successfully.");
+    expect(body.data.name).to.equal(bru.getVar("newClassroomName"));
+    expect(body.data.isActive).to.equal(true);
+    expect(body.data.amenities).to.be.an("array");
+    expect(body.data.availability).to.be.an("array");
+    expect(JSON.stringify(body)).to.not.include("$argon2");
+  });
+}

@@ -1,0 +1,28 @@
+meta {
+  name: Create a classroom without a token returns 401
+  type: http
+  seq: 9
+  tags: [
+    Classrooms
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classrooms
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Aula sin token",
+    "type": "CLASSROOM",
+    "capacity": 20
+  }
+}
+
+tests {
+  test("creating a classroom requires authentication", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

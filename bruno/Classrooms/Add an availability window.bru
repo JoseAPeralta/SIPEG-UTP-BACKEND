@@ -1,0 +1,55 @@
+meta {
+  name: Add an availability window
+  type: http
+  seq: 14
+  tags: [
+    Classrooms
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/classrooms/{{newClassroomId}}/availability
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "dayOfWeek": 1,
+    "startTime": "08:00",
+    "endTime": "10:00",
+    "period": "Matutino"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+  const slots = body?.data?.availability ?? [];
+  const created = slots.find(function (slot) {
+    return slot.dayOfWeek === 1 && slot.startTime === "08:00" && slot.endTime === "10:00";
+  });
+
+  if (created) {
+    bru.setVar("availabilityId", created.id);
+  }
+}
+
+tests {
+  test("ADMIN adds a weekly availability window", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.message).to.equal("Classroom availability added successfully.");
+    expect(body.data.availability).to.be.an("array");
+
+    const created = body.data.availability.find(function (slot) {
+      return slot.dayOfWeek === 1 && slot.startTime === "08:00" && slot.endTime === "10:00";
+    });
+
+    expect(created).to.exist;
+    expect(created.period).to.equal("Matutino");
+  });
+}

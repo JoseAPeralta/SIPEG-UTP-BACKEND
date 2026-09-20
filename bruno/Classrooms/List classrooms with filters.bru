@@ -1,0 +1,36 @@
+meta {
+  name: List classrooms with filters
+  type: http
+  seq: 4
+  tags: [
+    Classrooms
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classrooms?page=1&limit=10&type=LABORATORY&minCapacity=25&amenity=Proyector
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 10
+  type: LABORATORY
+  minCapacity: 25
+  amenity: Proyector
+}
+
+tests {
+  test("applies type, capacity and amenity filters", function () {
+    expect(res.getStatus()).to.equal(200);
+    const items = res.getBody().data.items;
+    expect(items).to.be.an("array");
+
+    items.forEach(function (item) {
+      expect(item.type).to.equal("LABORATORY");
+      expect(item.capacity).to.be.at.least(25);
+      expect(item.amenities).to.include("Proyector");
+    });
+  });
+}

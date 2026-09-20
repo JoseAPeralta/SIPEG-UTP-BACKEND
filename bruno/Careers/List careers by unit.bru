@@ -1,0 +1,36 @@
+meta {
+  name: List careers by unit
+  type: http
+  seq: 4
+  tags: [
+    Careers
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/careers?unitId={{unitId}}&limit=50
+  body: none
+  auth: none
+}
+
+params:query {
+  unitId: {{unitId}}
+  limit: 50
+}
+
+tests {
+  test("unit filter returns the faculty careers plus the global ones", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.data.items).to.be.an("array");
+    expect(body.data.items.length).to.be.greaterThan(0);
+
+    const globalCareers = body.data.items.filter((item) => item.unit === null);
+    const facultyCareers = body.data.items.filter((item) => item.unit !== null);
+
+    expect(globalCareers.some((item) => item.code === "OTROS")).to.equal(true);
+    for (const item of facultyCareers) {
+      expect(item.unit.code).to.equal("FIC");
+    }
+  });
+}

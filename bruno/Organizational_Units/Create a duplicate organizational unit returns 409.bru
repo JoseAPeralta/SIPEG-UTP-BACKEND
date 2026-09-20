@@ -1,0 +1,35 @@
+meta {
+  name: Create a duplicate organizational unit returns 409
+  type: http
+  seq: 8
+  tags: [
+    Organizational_Units
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/organizational-units
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Facultad de Ingenieria Civil Duplicada",
+    "code": "fic",
+    "type": "FACULTY"
+  }
+}
+
+tests {
+  test("duplicated codes are case-insensitive and produce 409", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Organizational unit code already exists.");
+  });
+}

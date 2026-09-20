@@ -1,0 +1,34 @@
+meta {
+  name: Manage careers as USER returns 403
+  type: http
+  seq: 11
+  tags: [
+    Careers
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/careers
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{regularToken}}
+}
+
+body:json {
+  {
+    "name": "Carrera sin permiso",
+    "code": "TMP-B2-DENIED"
+  }
+}
+
+tests {
+  test("regular users cannot manage the career catalog", function () {
+    expect(res.getStatus()).to.equal(403);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Insufficient privileges for this resource.");
+  });
+}

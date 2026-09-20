@@ -103,7 +103,9 @@ La contraseña no vive en `users`: Better Auth la almacena en `accounts.password
 
 #### `organizational_units` y `careers`
 
-Ambos catálogos contienen `id`, `name`, `code (UQ)`, `description?`, `is_active`, `created_at` y `updated_at`. `organizational_units` agrega `type (UnitType)` y `head_id (FK?)` opcional hacia `users` para registrar al encargado. `careers` agrega `unit_id (FK)`.
+`organizational_units` contiene `id`, `name`, `code (UQ)`, `description?`, `type (UnitType)`, `head_id (FK?)` opcional hacia `users` para registrar al encargado, `is_active`, `created_at` y `updated_at`.
+
+`careers` contiene `id`, `name`, `code (UQ)`, `description?`, `unit_id (FK?)` opcional, `created_at` y `updated_at`. No usa `is_active`: el catálogo no se mantiene al día. Una carrera con `unit_id` nulo es global (`Otros`) y puede seleccionarse desde cualquier unidad; si el usuario elige la facultad "Otro" (`unit_id` nulo en `users`), la carrera queda forzada a `Otros`.
 
 #### `event_programs`
 
@@ -294,11 +296,11 @@ Cada decisión se presenta como decisión, justificación y validación.
 
 ### D14. Desactivación de catálogos
 
-**Decisión:** usuarios, unidades organizativas, carreras y aulas usan `is_active`.
+**Decisión:** usuarios, unidades organizativas y aulas usan `is_active`. Las carreras no: el catálogo es estable y no se mantiene al día.
 
-**Justificación:** son entidades referenciadas por información histórica y no deben desaparecer por una operación administrativa ordinaria.
+**Justificación:** usuarios, unidades y aulas son entidades referenciadas por información histórica y no deben desaparecer por una operación administrativa ordinaria. Las carreras se referencian solo desde `users` (`ON DELETE SET NULL`) y la opción global `Otros` cubre los casos no listados sin exigir mantenimiento del catálogo.
 
-**Validación:** los listados operativos filtran entidades inactivas sin alterar datos pasados. La reactivación de una unidad y de su programa predeterminado se realiza en una única transacción.
+**Validación:** los listados operativos filtran entidades inactivas sin alterar datos pasados. La reactivación de una unidad y de su programa predeterminado se realiza en una única transacción. Una carrera solo puede eliminarse físicamente si no tiene usuarios asociados; si los tiene, la operación falla con 409.
 
 ### D15. Semántica temporal
 

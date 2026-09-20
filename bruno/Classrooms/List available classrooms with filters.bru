@@ -1,0 +1,37 @@
+meta {
+  name: List available classrooms with filters
+  type: http
+  seq: 18
+  tags: [
+    Classrooms
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classrooms/available?date=2026-09-21&startTime=08:00&endTime=09:00&type=LABORATORY&minCapacity=25&amenity=Proyector
+  body: none
+  auth: none
+}
+
+params:query {
+  date: 2026-09-21
+  startTime: 08:00
+  endTime: 09:00
+  type: LABORATORY
+  minCapacity: 25
+  amenity: Proyector
+}
+
+tests {
+  test("applies type, capacity and amenity filters to availability", function () {
+    expect(res.getStatus()).to.equal(200);
+    const items = res.getBody().data;
+    expect(items).to.be.an("array");
+
+    items.forEach(function (classroom) {
+      expect(classroom.type).to.equal("LABORATORY");
+      expect(classroom.capacity).to.be.at.least(25);
+      expect(classroom.amenities).to.include("Proyector");
+    });
+  });
+}

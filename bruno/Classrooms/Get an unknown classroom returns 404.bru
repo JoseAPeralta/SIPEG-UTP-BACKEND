@@ -1,0 +1,21 @@
+meta {
+  name: Get an unknown classroom returns 404
+  type: http
+  seq: 10
+  tags: [
+    Classrooms
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/classrooms/{{unknownClassroomId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("unknown classrooms produce a 404", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().message).to.equal("Classroom not found.");
+  });
+}
