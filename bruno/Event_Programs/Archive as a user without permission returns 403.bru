@@ -1,0 +1,23 @@
+meta {
+  name: Archive as a user without permission returns 403
+  type: http
+  seq: 20
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/archive
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+tests {
+  test("program:archive is required", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

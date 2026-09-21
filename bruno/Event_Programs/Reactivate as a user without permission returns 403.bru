@@ -1,0 +1,23 @@
+meta {
+  name: Reactivate as a user without permission returns 403
+  type: http
+  seq: 28
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/reactivate
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+tests {
+  test("program:reactivate is required", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

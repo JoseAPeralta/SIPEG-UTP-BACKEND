@@ -18,9 +18,10 @@ params:query {
   limit: 20
   organizationalUnitId: seed_unit_fisc
   ~unitType: SUBDIRECTORATE
+  ~status: ALL
   ~q:
 }
 
 docs {
-  Public. Returns ACTIVE event programs ordered by name. Supports filters by organizational unit, unit type and a name/label search term.
+  Public. Returns ACTIVE event programs ordered by name. The status filter is honored only for ADMIN users; other callers always receive ACTIVE programs.
 }

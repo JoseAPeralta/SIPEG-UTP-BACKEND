@@ -1,0 +1,19 @@
+meta {
+  name: Archive without a token returns 401
+  type: http
+  seq: 18
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/archive
+  auth: none
+}
+
+tests {
+  test("archive requires authentication", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

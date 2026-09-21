@@ -1,0 +1,36 @@
+meta {
+  name: Get an event program with an admin token shows the breakdown
+  type: http
+  seq: 6
+  tags: [
+    Event_Programs
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{eventProgramId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("authorized callers receive the total and the per-status breakdown", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    const count = body.data.activityCount;
+    expect(count.visible).to.be.a("number");
+    expect(count.total).to.be.a("number");
+    expect(count.total).to.be.at.least(count.visible);
+    for (const status of ["DRAFT", "SCHEDULED", "ONGOING", "COMPLETED", "CANCELLED"]) {
+      expect(count.byStatus[status]).to.be.a("number");
+    }
+    expect(count.visible).to.equal(
+      count.byStatus.SCHEDULED + count.byStatus.ONGOING + count.byStatus.COMPLETED,
+    );
+  });
+}

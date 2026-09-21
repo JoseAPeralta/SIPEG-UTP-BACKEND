@@ -1,0 +1,36 @@
+meta {
+  name: List event programs by status as admin
+  type: http
+  seq: 29
+  tags: [
+    Event_Programs
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs?page=1&limit=50&status=DRAFT
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  page: 1
+  limit: 50
+  status: DRAFT
+}
+
+tests {
+  test("admin status filter returns only DRAFT programs", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.total).to.be.above(0);
+    body.data.items.forEach(function (program) {
+      expect(program.status).to.equal("DRAFT");
+    });
+  });
+}

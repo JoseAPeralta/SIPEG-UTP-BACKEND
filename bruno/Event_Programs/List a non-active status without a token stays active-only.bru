@@ -1,0 +1,30 @@
+meta {
+  name: List a non-active status without a token stays active-only
+  type: http
+  seq: 30
+  tags: [
+    Event_Programs
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs?limit=50&status=ARCHIVED
+  body: none
+  auth: none
+}
+
+params:query {
+  limit: 50
+  status: ARCHIVED
+}
+
+tests {
+  test("anonymous callers always receive ACTIVE programs", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.data.total).to.be.above(0);
+    body.data.items.forEach(function (program) {
+      expect(program.status).to.equal("ACTIVE");
+    });
+  });
+}

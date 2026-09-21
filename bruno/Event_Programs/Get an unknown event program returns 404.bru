@@ -1,0 +1,23 @@
+meta {
+  name: Get an unknown event program returns 404
+  type: http
+  seq: 7
+  tags: [
+    Event_Programs
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{unknownProgramId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("unknown event programs return 404", function () {
+    expect(res.getStatus()).to.equal(404);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Event program not found.");
+  });
+}

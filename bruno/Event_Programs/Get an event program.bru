@@ -1,0 +1,30 @@
+meta {
+  name: Get an event program
+  type: http
+  seq: 5
+  tags: [
+    Event_Programs
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{eventProgramId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("anonymous callers receive the public activity count", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Event program retrieved successfully.");
+    expect(body.data.id).to.equal(bru.getEnvVar("eventProgramId"));
+    expect(body.data.status).to.equal("ACTIVE");
+    expect(body.data.organizationalUnit).to.be.an("object");
+    expect(body.data.activityCount.visible).to.be.a("number");
+    expect(body.data.activityCount.visible).to.be.at.least(1);
+    expect(body.data.activityCount.total).to.equal(undefined);
+    expect(body.data.activityCount.byStatus).to.equal(undefined);
+  });
+}

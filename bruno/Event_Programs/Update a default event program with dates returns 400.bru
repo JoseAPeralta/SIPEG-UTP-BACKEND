@@ -1,0 +1,33 @@
+meta {
+  name: Update a default event program with dates returns 400
+  type: http
+  seq: 10
+  tags: [
+    Event_Programs
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/event-programs/{{defaultProgramId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "endDate": "2026-12-31"
+  }
+}
+
+tests {
+  test("default event programs cannot receive dates", function () {
+    expect(res.getStatus()).to.equal(400);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Default event programs cannot have start or end dates.");
+  });
+}

@@ -1,0 +1,26 @@
+meta {
+  name: Get an event program with an invalid token returns 401
+  type: http
+  seq: 9
+  tags: [
+    Event_Programs
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{eventProgramId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: invalid-token
+}
+
+tests {
+  test("an invalid bearer token is rejected fail-closed", function () {
+    expect(res.getStatus()).to.equal(401);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+  });
+}
