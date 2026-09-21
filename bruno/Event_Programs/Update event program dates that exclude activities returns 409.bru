@@ -1,0 +1,33 @@
+meta {
+  name: Update event program dates that exclude activities returns 409
+  type: http
+  seq: 14
+  tags: [
+    Event_Programs
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/event-programs/{{eventProgramId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "startDate": "2026-10-06"
+  }
+}
+
+tests {
+  test("dates cannot exclude existing activities", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Event program dates cannot exclude existing activities.");
+  });
+}

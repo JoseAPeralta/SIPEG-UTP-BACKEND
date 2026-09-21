@@ -1,0 +1,24 @@
+meta {
+  name: Archive the prepared program
+  type: http
+  seq: 22
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{reactivateProgramId}}/archive
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the prepared program is archived", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().data.status).to.equal("ARCHIVED");
+  });
+}

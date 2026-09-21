@@ -1,0 +1,27 @@
+meta {
+  name: Archive an already archived event program returns 200
+  type: http
+  seq: 15
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/archive
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("archiving an archived program is idempotent", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Event program archived successfully.");
+    expect(body.data.status).to.equal("ARCHIVED");
+  });
+}

@@ -1,0 +1,43 @@
+meta {
+  name: Prepare a program for reactivation
+  type: http
+  seq: 21
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "TMP-F4.4 programa reactivable",
+    "description": "Programa temporal creado por la coleccion Bruno.",
+    "startDate": "2026-12-01",
+    "endDate": "2026-12-05",
+    "organizationalUnitId": "seed_unit_fic"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.id) {
+    bru.setVar("reactivateProgramId", body.data.id);
+  }
+}
+
+tests {
+  test("prepares a draft program for reactivation", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().data.status).to.equal("DRAFT");
+  });
+}

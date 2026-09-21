@@ -1,0 +1,27 @@
+meta {
+  name: Reactivate the prepared program
+  type: http
+  seq: 23
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{reactivateProgramId}}/reactivate
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("reactivating an archived program returns it to ACTIVE", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Event program reactivated successfully.");
+    expect(body.data.status).to.equal("ACTIVE");
+  });
+}
