@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-import type { EventProgramDetail, PaginatedEventPrograms } from './event-programs.types.js';
+import type {
+  EventProgramDetail,
+  EventProgramPublicDetail,
+  PaginatedEventPrograms,
+} from './event-programs.types.js';
 
 const datePattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -20,6 +24,18 @@ const institutionalDateSchema = z
   .regex(datePattern, 'Date must be in YYYY-MM-DD format.')
   .refine(isValidCalendarDate, 'Date must be a valid calendar date.');
 
+const eventProgramIdSchema = z
+  .string()
+  .trim()
+  .min(1, 'Event program id is required.')
+  .max(100, 'Event program id cannot exceed 100 characters.');
+
+export const eventProgramParamsSchema = z.object({
+  params: z.object({ id: eventProgramIdSchema }),
+});
+
+export type EventProgramParams = z.infer<typeof eventProgramParamsSchema>['params'];
+
 export const listEventProgramsQuerySchema = z.object({
   query: z
     .object({
@@ -36,6 +52,12 @@ export const listEventProgramsQuerySchema = z.object({
         .default(20),
       organizationalUnitId: z.string().trim().min(1, 'Organizational unit is invalid.').optional(),
       unitType: z.enum(['FACULTY', 'SUBDIRECTORATE'], 'Unit type is invalid.').optional(),
+      status: z
+        .enum(
+          ['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'ARCHIVED', 'ALL'],
+          'Status is invalid.',
+        )
+        .optional(),
       q: z
         .string()
         .trim()
@@ -77,9 +99,7 @@ export const createEventProgramSchema = z.object({
 export type CreateEventProgramBody = z.infer<typeof createEventProgramSchema>['body'];
 
 export const updateEventProgramSchema = z.object({
-  params: z.object({
-    id: z.string().trim().min(1, 'Event program id is required.'),
-  }),
+  params: z.object({ id: eventProgramIdSchema }),
   body: z
     .object({
       name: z
@@ -97,6 +117,9 @@ export const updateEventProgramSchema = z.object({
       bannerUrl: z.string().url('Banner URL must be a valid URL.').max(500).nullish(),
       startDate: institutionalDateSchema.optional(),
       endDate: institutionalDateSchema.optional(),
+      status: z
+        .literal('ACTIVE', 'Only the ACTIVE status can be set through this endpoint.')
+        .optional(),
     })
     .strict()
     .refine((value) => Object.keys(value).length > 0, {
@@ -121,23 +144,53 @@ const eventProgramOrganizationalUnitSchema = z
     description: 'Organizational unit that owns the event program.',
   });
 
-export const eventProgramDetailSchema = z
+const eventProgramDetailShape = {
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  label: z.string().nullable(),
+  bannerUrl: z.string().nullable(),
+  isDefault: z.boolean(),
+  status: z.enum(['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'ARCHIVED']),
+  startDate: z.string().nullable().meta({ description: 'Start date in YYYY-MM-DD format.' }),
+  endDate: z.string().nullable().meta({ description: 'End date in YYYY-MM-DD format.' }),
+  organizationalUnit: eventProgramOrganizationalUnitSchema,
+};
+
+export const eventProgramDetailSchema = z.object(eventProgramDetailShape).meta({
+  id: 'EventProgramDetail',
+  description: 'Event program detail returned by the event program endpoints.',
+}) satisfies z.ZodType<EventProgramDetail>;
+
+const eventProgramActivityCountSchema = z
   .object({
-    id: z.string(),
-    name: z.string(),
-    description: z.string().nullable(),
-    label: z.string().nullable(),
-    bannerUrl: z.string().nullable(),
-    isDefault: z.boolean(),
-    status: z.enum(['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'ARCHIVED']),
-    startDate: z.string().nullable().meta({ description: 'Start date in YYYY-MM-DD format.' }),
-    endDate: z.string().nullable().meta({ description: 'End date in YYYY-MM-DD format.' }),
-    organizationalUnit: eventProgramOrganizationalUnitSchema,
+    visible: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative().optional(),
+    byStatus: z
+      .object({
+        DRAFT: z.number().int().nonnegative(),
+        SCHEDULED: z.number().int().nonnegative(),
+        ONGOING: z.number().int().nonnegative(),
+        COMPLETED: z.number().int().nonnegative(),
+        CANCELLED: z.number().int().nonnegative(),
+      })
+      .optional(),
   })
   .meta({
-    id: 'EventProgramDetail',
-    description: 'Event program detail returned by the event program endpoints.',
-  }) satisfies z.ZodType<EventProgramDetail>;
+    id: 'EventProgramActivityCount',
+    description:
+      'Activity count for an event program. Anonymous callers only receive the public visible count; authorized callers also receive the total and the per-status breakdown.',
+  });
+
+export const eventProgramPublicDetailSchema = z
+  .object({
+    ...eventProgramDetailShape,
+    activityCount: eventProgramActivityCountSchema,
+  })
+  .meta({
+    id: 'EventProgramPublicDetail',
+    description: 'Public event program detail including activity counts.',
+  }) satisfies z.ZodType<EventProgramPublicDetail>;
 
 export const paginatedEventProgramsSchema = z
   .object({

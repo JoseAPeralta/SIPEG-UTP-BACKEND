@@ -1,12 +1,19 @@
 import { getPrismaClient } from '../../config/prisma.js';
-import type { ProgramStatus, UnitType } from '../../generated/prisma/enums.js';
+import type { ActivityStatus, ProgramStatus, UnitType } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { hasPermission } from '../authorization/authorization.service.js';
+import { PERMISSIONS } from '../authorization/permissions.js';
 import type {
   CreateEventProgramBody,
   ListEventProgramsQuery,
   UpdateEventProgramBody,
 } from './event-programs.schemas.js';
-import type { EventProgramDetail, PaginatedEventPrograms } from './event-programs.types.js';
+import type {
+  EventProgramActivityCount,
+  EventProgramDetail,
+  EventProgramPublicDetail,
+  PaginatedEventPrograms,
+} from './event-programs.types.js';
 
 const eventProgramDetailSelect = {
   id: true,
@@ -19,6 +26,11 @@ const eventProgramDetailSelect = {
   startDate: true,
   endDate: true,
   organizationalUnit: { select: { id: true, name: true, type: true } },
+} as const;
+
+const eventProgramLifecycleSelect = {
+  ...eventProgramDetailSelect,
+  organizationalUnit: { select: { id: true, name: true, type: true, isActive: true } },
 } as const;
 
 interface EventProgramDetailRecord {
@@ -50,12 +62,51 @@ const toEventProgramDetail = (record: EventProgramDetailRecord): EventProgramDet
   organizationalUnit: record.organizationalUnit,
 });
 
+const PUBLIC_ACTIVITY_STATUSES = ['SCHEDULED', 'ONGOING', 'COMPLETED'] as const;
+const ACTIVITY_STATUSES = ['DRAFT', 'SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED'] as const;
+
+const countEventProgramActivities = async (
+  eventProgramId: string,
+  includeBreakdown: boolean,
+): Promise<EventProgramActivityCount> => {
+  const prisma = getPrismaClient();
+  const groups = await prisma.activity.groupBy({
+    by: ['status'],
+    where: { eventProgramId },
+    _count: { _all: true },
+  });
+
+  const byStatus = Object.fromEntries(ACTIVITY_STATUSES.map((status) => [status, 0])) as Record<
+    ActivityStatus,
+    number
+  >;
+
+  for (const group of groups) {
+    byStatus[group.status] = group._count._all;
+  }
+
+  const visible = PUBLIC_ACTIVITY_STATUSES.reduce((total, status) => total + byStatus[status], 0);
+
+  if (!includeBreakdown) {
+    return { visible };
+  }
+
+  return {
+    visible,
+    total: ACTIVITY_STATUSES.reduce((total, status) => total + byStatus[status], 0),
+    byStatus,
+  };
+};
+
 export const listEventPrograms = async (
   query: ListEventProgramsQuery,
+  viewer: Express.AuthenticatedUser | null = null,
 ): Promise<PaginatedEventPrograms> => {
   const prisma = getPrismaClient();
+  const requestedStatus = viewer?.globalRole === 'ADMIN' ? query.status : undefined;
+  const status = requestedStatus ?? 'ACTIVE';
   const where = {
-    status: 'ACTIVE' as const,
+    ...(status === 'ALL' ? {} : { status }),
     ...(query.organizationalUnitId ? { organizationalUnitId: query.organizationalUnitId } : {}),
     ...(query.unitType ? { organizationalUnit: { type: query.unitType } } : {}),
     ...(query.q
@@ -86,6 +137,30 @@ export const listEventPrograms = async (
     limit: query.limit,
     total,
     totalPages: total === 0 ? 0 : Math.ceil(total / query.limit),
+  };
+};
+
+export const getEventProgramById = async (
+  id: string,
+  viewer: Express.AuthenticatedUser | null = null,
+): Promise<EventProgramPublicDetail> => {
+  const prisma = getPrismaClient();
+  const record = await prisma.eventProgram.findUnique({
+    where: { id },
+    select: eventProgramDetailSelect,
+  });
+
+  if (!record || record.status !== 'ACTIVE') {
+    throw new ApiError(404, 'Event program not found.');
+  }
+
+  const includeBreakdown = viewer
+    ? await hasPermission(viewer, PERMISSIONS.PROGRAM_READ, { eventProgramId: id })
+    : false;
+
+  return {
+    ...toEventProgramDetail(record),
+    activityCount: await countEventProgramActivities(id, includeBreakdown),
   };
 };
 
@@ -136,7 +211,7 @@ export const updateEventProgram = async (
 
   const program = await prisma.eventProgram.findUnique({
     where: { id },
-    select: { id: true, status: true, startDate: true, endDate: true },
+    select: { id: true, status: true, isDefault: true, startDate: true, endDate: true },
   });
 
   if (!program) {
@@ -144,6 +219,11 @@ export const updateEventProgram = async (
   }
   if (program.status === 'ARCHIVED') {
     throw new ApiError(409, 'Archived event programs cannot be modified.');
+  }
+
+  const touchesDates = input.startDate !== undefined || input.endDate !== undefined;
+  if (program.isDefault && touchesDates) {
+    throw new ApiError(400, 'Default event programs cannot have start or end dates.');
   }
 
   const startDate =
@@ -157,6 +237,23 @@ export const updateEventProgram = async (
     throw new ApiError(400, 'End date must be on or after start date.');
   }
 
+  if (input.status === 'ACTIVE' && program.status !== 'DRAFT') {
+    throw new ApiError(409, 'Only draft event programs can be activated.');
+  }
+
+  if (!program.isDefault && touchesDates && startDate && endDate) {
+    const excludedActivities = await prisma.activity.count({
+      where: {
+        eventProgramId: program.id,
+        OR: [{ date: { lt: startDate } }, { date: { gt: endDate } }],
+      },
+    });
+
+    if (excludedActivities > 0) {
+      throw new ApiError(409, 'Event program dates cannot exclude existing activities.');
+    }
+  }
+
   const data = {
     ...(input.name !== undefined ? { name: input.name } : {}),
     ...(input.description !== undefined ? { description: input.description } : {}),
@@ -164,11 +261,88 @@ export const updateEventProgram = async (
     ...(input.bannerUrl !== undefined ? { bannerUrl: input.bannerUrl } : {}),
     ...(input.startDate !== undefined ? { startDate } : {}),
     ...(input.endDate !== undefined ? { endDate } : {}),
+    ...(input.status !== undefined ? { status: input.status } : {}),
   };
 
   const record = await prisma.eventProgram.update({
     where: { id: program.id },
     data,
+    select: eventProgramDetailSelect,
+  });
+
+  return toEventProgramDetail(record);
+};
+
+export const archiveEventProgram = async (id: string): Promise<EventProgramDetail> => {
+  const prisma = getPrismaClient();
+  const program = await prisma.eventProgram.findUnique({
+    where: { id },
+    select: eventProgramLifecycleSelect,
+  });
+
+  if (!program) {
+    throw new ApiError(404, 'Event program not found.');
+  }
+
+  if (program.status === 'ARCHIVED') {
+    return toEventProgramDetail(program);
+  }
+
+  if (program.isDefault && program.organizationalUnit.isActive) {
+    throw new ApiError(
+      409,
+      'A default event program cannot be archived while its organizational unit is active.',
+    );
+  }
+
+  if (!program.isDefault) {
+    const blockingActivities = await prisma.activity.count({
+      where: { eventProgramId: program.id, status: { in: ['SCHEDULED', 'ONGOING'] } },
+    });
+
+    if (blockingActivities > 0) {
+      throw new ApiError(
+        409,
+        'An event program with scheduled or ongoing activities cannot be archived.',
+      );
+    }
+  }
+
+  const record = await prisma.eventProgram.update({
+    where: { id: program.id },
+    data: { status: 'ARCHIVED', archivedAt: new Date() },
+    select: eventProgramDetailSelect,
+  });
+
+  return toEventProgramDetail(record);
+};
+
+export const reactivateEventProgram = async (id: string): Promise<EventProgramDetail> => {
+  const prisma = getPrismaClient();
+  const program = await prisma.eventProgram.findUnique({
+    where: { id },
+    select: eventProgramLifecycleSelect,
+  });
+
+  if (!program) {
+    throw new ApiError(404, 'Event program not found.');
+  }
+
+  if (program.isDefault) {
+    throw new ApiError(409, 'Only additional event programs can be reactivated.');
+  }
+
+  if (program.status !== 'ARCHIVED') {
+    throw new ApiError(409, 'Only archived event programs can be reactivated.');
+  }
+
+  if (!program.startDate || !program.endDate || program.endDate < program.startDate) {
+    throw new ApiError(400, 'Event program dates are invalid.');
+  }
+
+  const record = await prisma.eventProgram.update({
+    where: { id: program.id },
+    data: { status: 'ACTIVE', archivedAt: null },
     select: eventProgramDetailSelect,
   });
 

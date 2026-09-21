@@ -9,16 +9,26 @@ import type {
   UpdateEventProgramBody,
 } from './event-programs.schemas.js';
 import {
+  archiveEventProgram as archiveEventProgramService,
   createEventProgram as createEventProgramService,
+  getEventProgramById as getEventProgramByIdService,
   listEventPrograms as listEventProgramsService,
+  reactivateEventProgram as reactivateEventProgramService,
   updateEventProgram as updateEventProgramService,
 } from './event-programs.service.js';
 
 export const getEventPrograms: RequestHandler = asyncHandler(async (req, res) => {
   const query = req.query as unknown as ListEventProgramsQuery;
-  const result = await listEventProgramsService(query);
+  const result = await listEventProgramsService(query, req.user ?? null);
 
   res.status(200).json(successResponse('Event programs retrieved successfully.', result));
+});
+
+export const getEventProgram: RequestHandler = asyncHandler(async (req, res) => {
+  const { id } = req.params as { id: string };
+  const result = await getEventProgramByIdService(id, req.user ?? null);
+
+  res.status(200).json(successResponse('Event program retrieved successfully.', result));
 });
 
 export const createEventProgram: RequestHandler = asyncHandler(async (req, res) => {
@@ -35,4 +45,18 @@ export const updateEventProgram: RequestHandler = asyncHandler(async (req, res) 
   const result = await updateEventProgramService(id, body);
 
   res.status(200).json(successResponse('Event program updated successfully.', result));
+});
+
+export const archiveEventProgram: RequestHandler = asyncHandler(async (req, res) => {
+  const { id } = req.params as { id: string };
+  const result = await archiveEventProgramService(id);
+
+  res.status(200).json(successResponse('Event program archived successfully.', result));
+});
+
+export const reactivateEventProgram: RequestHandler = asyncHandler(async (req, res) => {
+  const { id } = req.params as { id: string };
+  const result = await reactivateEventProgramService(id);
+
+  res.status(200).json(successResponse('Event program reactivated successfully.', result));
 });
