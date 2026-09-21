@@ -1,0 +1,32 @@
+meta {
+  name: Grant a permission to an unknown collaborator returns 404
+  type: http
+  seq: 37
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "user-does-not-exist",
+    "permission": "report:export"
+  }
+}
+
+tests {
+  test("A grant to a missing collaboration responds 404", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().message).to.equal("Collaborator not found.");
+  });
+}

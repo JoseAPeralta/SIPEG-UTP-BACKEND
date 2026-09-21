@@ -1,0 +1,41 @@
+meta {
+  name: Grant a permission beyond the delegator window returns 403
+  type: http
+  seq: 43
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+script:pre-request {
+  const from = new Date();
+  const until = new Date(from.getTime() + 90 * 24 * 60 * 60 * 1000);
+  bru.setVar("overGrantFrom", from.toISOString());
+  bru.setVar("overGrantUntil", until.toISOString());
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "permission": "permission:grant",
+    "validFrom": "{{overGrantFrom}}",
+    "validUntil": "{{overGrantUntil}}"
+  }
+}
+
+tests {
+  test("A grant window wider than the delegator envelope is rejected", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().message).to.equal("Grant window exceeds the delegator grant.");
+  });
+}

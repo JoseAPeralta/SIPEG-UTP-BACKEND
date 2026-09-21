@@ -1,0 +1,25 @@
+meta {
+  name: Delete a collaborator
+  type: http
+  seq: 26
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators/{{collaboratorUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("ADMIN removes the collaborator with 204", function () {
+    expect(res.getStatus()).to.equal(204);
+    expect(res.getBody()).to.be.empty;
+  });
+}

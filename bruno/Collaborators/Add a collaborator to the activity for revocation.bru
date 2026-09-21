@@ -1,0 +1,32 @@
+meta {
+  name: Add a collaborator to the activity for revocation
+  type: http
+  seq: 58
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities/{{collaboratorsActivityId}}/collaborators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("ADMIN prepares an activity collaborator for the revoke flow", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().data.userId).to.equal(bru.getVar("collaboratorUserId"));
+  });
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Revoke the last delegation permission returns 409
+  type: http
+  seq: 57
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions/permission:grant?userId=seed_user_org-fisc
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("The scope must keep a collaborator able to delegate", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().message).to.equal(
+      "Cannot revoke the last delegation permission in this scope.",
+    );
+  });
+}

@@ -41,6 +41,8 @@ tests {
     });
     expect(grant).to.not.equal(undefined);
     expect(grant.source).to.equal("OVERRIDE");
+    expect(grant.origin).to.equal("LOCAL");
+    expect(grant.effective).to.equal(true);
     const serialized = JSON.stringify(body);
     expect(serialized).to.not.include("grantedById");
     expect(serialized).to.not.include("grantedAt");

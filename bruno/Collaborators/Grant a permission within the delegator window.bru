@@ -1,0 +1,47 @@
+meta {
+  name: Grant a permission within the delegator window
+  type: http
+  seq: 41
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+script:pre-request {
+  const from = new Date();
+  const until = new Date(from.getTime() + 7 * 24 * 60 * 60 * 1000);
+  bru.setVar("headGrantFrom", from.toISOString());
+  bru.setVar("headGrantUntil", until.toISOString());
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "permission": "permission:grant",
+    "validFrom": "{{headGrantFrom}}",
+    "validUntil": "{{headGrantUntil}}"
+  }
+}
+
+tests {
+  test("A time-bounded delegator grants inside its own envelope", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    const granted = body.data.permissions.find((entry) => entry.name === "permission:grant");
+    expect(granted).to.be.an("object");
+    expect(granted.source).to.equal("OVERRIDE");
+    expect(granted.validFrom).to.equal(bru.getVar("headGrantFrom"));
+    expect(granted.validUntil).to.equal(bru.getVar("headGrantUntil"));
+  });
+}

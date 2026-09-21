@@ -1,0 +1,25 @@
+meta {
+  name: Get my permissions for an unknown program returns 404
+  type: http
+  seq: 5
+  tags: [
+    My_Permissions
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/permissions?scope=program&id={{unknownProgramId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("an unknown program responds 404", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().success).to.equal(false);
+  });
+}
