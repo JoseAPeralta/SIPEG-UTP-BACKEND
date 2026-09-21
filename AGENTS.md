@@ -292,8 +292,10 @@ For errors:
 - Invariante de subconjunto simetrico: otorgar, revocar y asignar rol exigen que el conjunto actuado este contenido en los permisos efectivos del actor en el mismo scope. `permission:grant` se puede delegar si el actor lo posee.
 - Atenuacion temporal: la ventana otorgada debe quedar dentro del envelope del actor para ese permiso; un envelope acotado prohibe grants sin limite.
 - No ampliacion de scope: un permiso de actividad no permite gestionar el programa padre.
-- Todo grant registra `grantedById` y `grantedAt`. No exponer estos campos internos innecesariamente.
+- Todo grant registra `grantedById` y `grantedAt` como auditoría interna; no se exponen en ninguna respuesta HTTP.
 - El catalogo se puebla con `pnpm prisma:seed:base` en produccion y `pnpm prisma:seed` en desarrollo (ambos idempotentes).
+- `GET /api/v1/users/me/permissions?scope=program|activity&id=` expone los permisos efectivos propios con su envelope temporal y `origin` (`LOCAL`/`INHERITED`/`BOTH`).
+- Los listados de colaboradores exponen permisos efectivos con `origin` (`LOCAL`/`INHERITED`/`BOTH`), envelope fusionado y `effective: true`; los grants vencidos o futuros se omiten y `source` refleja la clase del grant activo (`OVERRIDE` local manda sobre `ROLE_DEFAULT`). Las respuestas de mutacion mantienen el `Collaborator` con grants locales.
 
 - Passwords: 12-128 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
 - **No devolver** password hashes, hashes Argon2, tokens internos, ni `name` (campo interno de Better Auth).
@@ -416,7 +418,7 @@ For errors:
 - Keep the default flag and owning organizational unit immutable for default event programs.
 - Allow only site administrators to create additional event programs.
 - Associate each event program with exactly one organizational unit.
-- Default event programs do not require start or end dates; additional programs include name, dates, custom label, and banner.
+- Default event programs do not require start or end dates; additional programs include name and dates, with optional custom label and banner. A DRAFT program is published by setting `status: ACTIVE` through `PATCH /event-programs/:id`.
 - Add collaborators and permissions to event programs.
 - Event-program collaborators and permissions are inherited by their activities by default.
 - Create activities only inside an existing event program.
