@@ -15,19 +15,37 @@ const expectedOperations = [
   'POST /api/v1/auth/change-password',
   'GET /api/v1/users/me',
   'PATCH /api/v1/users/me',
+  'GET /api/v1/users/me/permissions',
   'GET /api/v1/admin/users',
   'POST /api/v1/admin/users',
   'GET /api/v1/admin/users/{id}',
   'PATCH /api/v1/admin/users/{id}',
   'GET /api/v1/activities',
+  'GET /api/v1/activities/{id}',
+  'PATCH /api/v1/activities/{id}',
   'POST /api/v1/activities',
+  'POST /api/v1/activities/{id}/cancel',
   'GET /api/v1/activities/{id}/collaborators',
   'POST /api/v1/activities/{id}/collaborators',
+  'PATCH /api/v1/activities/{id}/collaborators/{userId}',
+  'DELETE /api/v1/activities/{id}/collaborators/{userId}',
+  'POST /api/v1/activities/{id}/permissions',
+  'DELETE /api/v1/activities/{id}/permissions/{permission}',
+  'DELETE /api/v1/event-programs',
+  'DELETE /api/v1/event-programs/{id}',
   'GET /api/v1/event-programs',
+  'GET /api/v1/event-programs/{id}',
   'POST /api/v1/event-programs',
   'PATCH /api/v1/event-programs/{id}',
+  'GET /api/v1/event-programs/{id}/activities',
+  'POST /api/v1/event-programs/{id}/archive',
+  'POST /api/v1/event-programs/{id}/reactivate',
   'GET /api/v1/event-programs/{id}/collaborators',
   'POST /api/v1/event-programs/{id}/collaborators',
+  'PATCH /api/v1/event-programs/{id}/collaborators/{userId}',
+  'DELETE /api/v1/event-programs/{id}/collaborators/{userId}',
+  'POST /api/v1/event-programs/{id}/permissions',
+  'DELETE /api/v1/event-programs/{id}/permissions/{permission}',
   'GET /api/v1/organizational-units',
   'POST /api/v1/organizational-units',
   'GET /api/v1/organizational-units/{id}',
@@ -100,6 +118,50 @@ describe('openApiDocument', () => {
     expect(openApiDocument.components?.schemas).toHaveProperty('ActivityDetail');
   });
 
+  it('documents the public activity detail with a path param and its failures', () => {
+    const operation = openApiDocument.paths?.['/api/v1/activities/{id}']?.get;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+    const detail = openApiDocument.components?.schemas?.['ActivityDetail'] as
+      { properties?: Record<string, unknown> } | undefined;
+
+    expect(operation?.security).toBeUndefined();
+    expect(names).toContain('id');
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(detail?.properties).toHaveProperty('enrolledCount');
+    expect(detail?.properties).toHaveProperty('checkedInCount');
+  });
+
+  it('documents the activity update with bearer security and its conflicts', () => {
+    const operation = openApiDocument.paths?.['/api/v1/activities/{id}']?.patch;
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(operation?.responses?.['409']).toBeDefined();
+  });
+
+  it('documents the activity cancellation with bearer security and its conflicts', () => {
+    const operation = openApiDocument.paths?.['/api/v1/activities/{id}/cancel']?.post;
+    const detail = openApiDocument.components?.schemas?.['ActivityDetail'] as
+      { properties?: Record<string, unknown> } | undefined;
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(operation?.responses?.['409']).toBeDefined();
+    expect(detail?.properties).toHaveProperty('cancelReason');
+  });
+
   it('marks event program creation with bearer security and a 201 response', () => {
     const operation = openApiDocument.paths?.['/api/v1/event-programs']?.post;
 
@@ -112,26 +174,149 @@ describe('openApiDocument', () => {
     const operation = openApiDocument.paths?.['/api/v1/event-programs/{id}']?.patch;
     const parameters = operation?.parameters ?? [];
     const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+    const body = operation?.requestBody as
+      | {
+          content?: {
+            'application/json'?: { schema?: { properties?: Record<string, unknown> } };
+          };
+        }
+      | undefined;
 
     expect(operation?.security).toEqual([{ bearerAuth: [] }]);
     expect(names).toContain('id');
     expect(operation?.responses?.['200']).toBeDefined();
     expect(operation?.responses?.['409']).toBeDefined();
+    expect(body?.content?.['application/json']?.schema?.properties).toHaveProperty('status');
+  });
+
+  it('documents event program archiving with bearer security and conflict responses', () => {
+    const operation = openApiDocument.paths?.['/api/v1/event-programs/{id}/archive']?.post;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(names).toContain('id');
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(operation?.responses?.['409']).toBeDefined();
+  });
+
+  it('documents event program reactivation with bearer security and conflict responses', () => {
+    const operation = openApiDocument.paths?.['/api/v1/event-programs/{id}/reactivate']?.post;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(names).toContain('id');
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(operation?.responses?.['409']).toBeDefined();
+  });
+
+  it('documents that physical deletion of event programs is not allowed', () => {
+    const collectionDelete = openApiDocument.paths?.['/api/v1/event-programs']?.delete;
+    const itemDelete = openApiDocument.paths?.['/api/v1/event-programs/{id}']?.delete;
+
+    expect(collectionDelete?.responses?.['405']).toBeDefined();
+    expect(collectionDelete?.security).toBeUndefined();
+    expect(itemDelete?.responses?.['405']).toBeDefined();
+    expect(itemDelete?.security).toBeUndefined();
+    const parameters = itemDelete?.parameters ?? [];
+    expect(parameters.some((parameter) => 'name' in parameter && parameter.name === 'id')).toBe(
+      true,
+    );
   });
 
   it('documents collaborator delegation with bearer security and conflict responses', () => {
     const programPost = openApiDocument.paths?.['/api/v1/event-programs/{id}/collaborators']?.post;
     const programGet = openApiDocument.paths?.['/api/v1/event-programs/{id}/collaborators']?.get;
     const activityGet = openApiDocument.paths?.['/api/v1/activities/{id}/collaborators']?.get;
+    const programPatch =
+      openApiDocument.paths?.['/api/v1/event-programs/{id}/collaborators/{userId}']?.patch;
+    const patchParameters = programPatch?.parameters ?? [];
+    const patchNames = patchParameters.map((parameter) =>
+      'name' in parameter ? parameter.name : undefined,
+    );
+    const programDelete =
+      openApiDocument.paths?.['/api/v1/event-programs/{id}/collaborators/{userId}']?.delete;
+    const deleteParameters = programDelete?.parameters ?? [];
+    const deleteNames = deleteParameters.map((parameter) =>
+      'name' in parameter ? parameter.name : undefined,
+    );
 
     expect(programPost?.security).toEqual([{ bearerAuth: [] }]);
     expect(programPost?.responses?.['201']).toBeDefined();
     expect(programPost?.responses?.['409']).toBeDefined();
     expect(programGet?.security).toEqual([{ bearerAuth: [] }]);
     expect(activityGet?.security).toEqual([{ bearerAuth: [] }]);
+    expect(programPatch?.security).toEqual([{ bearerAuth: [] }]);
+    expect(programPatch?.responses?.['200']).toBeDefined();
+    expect(programPatch?.responses?.['409']).toBeDefined();
+    expect(patchNames).toContain('id');
+    expect(patchNames).toContain('userId');
+    expect(programDelete?.security).toEqual([{ bearerAuth: [] }]);
+    expect(programDelete?.responses?.['204']).toBeDefined();
+    expect(programDelete?.responses?.['409']).toBeDefined();
+    expect(deleteNames).toContain('id');
+    expect(deleteNames).toContain('userId');
     expect(openApiDocument.components?.schemas).toHaveProperty('Collaborator');
     expect(openApiDocument.components?.schemas).toHaveProperty('CollaboratorPermission');
     expect(openApiDocument.components?.schemas).toHaveProperty('CollaboratorList');
+  });
+
+  it('documents permission grants with bearer security and the collaborator contract', () => {
+    const programPost = openApiDocument.paths?.['/api/v1/event-programs/{id}/permissions']?.post;
+    const activityPost = openApiDocument.paths?.['/api/v1/activities/{id}/permissions']?.post;
+    const parameters = programPost?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(programPost?.security).toEqual([{ bearerAuth: [] }]);
+    expect(programPost?.responses?.['200']).toBeDefined();
+    expect(programPost?.responses?.['403']).toBeDefined();
+    expect(programPost?.responses?.['409']).toBeDefined();
+    expect(names).toContain('id');
+    expect(activityPost?.security).toEqual([{ bearerAuth: [] }]);
+    expect(activityPost?.responses?.['200']).toBeDefined();
+    expect(openApiDocument.components?.schemas).toHaveProperty('Collaborator');
+  });
+
+  it('documents permission revocation with bearer security and its conflicts', () => {
+    const programDelete =
+      openApiDocument.paths?.['/api/v1/event-programs/{id}/permissions/{permission}']?.delete;
+    const activityDelete =
+      openApiDocument.paths?.['/api/v1/activities/{id}/permissions/{permission}']?.delete;
+    const parameters = programDelete?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(programDelete?.security).toEqual([{ bearerAuth: [] }]);
+    expect(programDelete?.responses?.['204']).toBeDefined();
+    expect(programDelete?.responses?.['403']).toBeDefined();
+    expect(programDelete?.responses?.['404']).toBeDefined();
+    expect(programDelete?.responses?.['409']).toBeDefined();
+    expect(names).toContain('id');
+    expect(names).toContain('permission');
+    expect(names).toContain('userId');
+    expect(activityDelete?.security).toEqual([{ bearerAuth: [] }]);
+    expect(activityDelete?.responses?.['204']).toBeDefined();
+  });
+
+  it('documents the public event program detail with an optional bearer token', () => {
+    const operation = openApiDocument.paths?.['/api/v1/event-programs/{id}']?.get;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(operation?.security).toBeUndefined();
+    expect(names).toContain('id');
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(openApiDocument.components?.schemas).toHaveProperty('EventProgramPublicDetail');
+    expect(openApiDocument.components?.schemas).toHaveProperty('EventProgramActivityCount');
   });
 
   it('documents rate limiting on the limited auth operations', () => {
@@ -193,9 +378,40 @@ describe('openApiDocument', () => {
     const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
 
     expect(names).toEqual(
-      expect.arrayContaining(['page', 'limit', 'organizationalUnitId', 'unitType', 'q']),
+      expect.arrayContaining(['page', 'limit', 'organizationalUnitId', 'unitType', 'q', 'status']),
     );
     expect(openApiDocument.components?.schemas).toHaveProperty('PaginatedEventPrograms');
+  });
+
+  it('documents the admin-only status filter on the event program list', () => {
+    const operation = openApiDocument.paths?.['/api/v1/event-programs']?.get;
+    const parameters = operation?.parameters ?? [];
+    const statusParameter = parameters.find(
+      (parameter) => 'name' in parameter && parameter.name === 'status',
+    );
+
+    expect(statusParameter).toBeDefined();
+    expect(operation?.security).toBeUndefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+  });
+
+  it('documents the event program activity listing', () => {
+    const operation = openApiDocument.paths?.['/api/v1/event-programs/{id}/activities']?.get;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(operation?.security).toBeUndefined();
+    expect(names).toEqual(
+      expect.arrayContaining(['id', 'page', 'limit', 'status', 'type', 'q', 'dateFrom', 'dateTo']),
+    );
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(openApiDocument.components?.schemas).toHaveProperty('EventProgramActivityItem');
+    expect(openApiDocument.components?.schemas).toHaveProperty('PaginatedEventProgramActivities');
   });
 
   it('marks the admin user list with bearer security and a paginated response', () => {
@@ -436,5 +652,42 @@ describe('openApiDocument', () => {
     expect(availableNames).toEqual(
       expect.arrayContaining(['date', 'startTime', 'endTime', 'minCapacity', 'type', 'amenity']),
     );
+  });
+
+  it('documents own permissions with bearer security, query params and envelopes', () => {
+    const operation = openApiDocument.paths?.['/api/v1/users/me/permissions']?.get;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+    const schema = openApiDocument.components?.schemas?.['OwnPermissions'] as
+      { properties?: Record<string, unknown> } | undefined;
+    const ownPermission = openApiDocument.components?.schemas?.['OwnPermission'] as
+      { properties?: Record<string, unknown> } | undefined;
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(names).toEqual(expect.arrayContaining(['scope', 'id']));
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(schema?.properties).toHaveProperty('permissions');
+    expect(ownPermission?.properties).toHaveProperty('origin');
+    expect(openApiDocument.components?.schemas).toHaveProperty('OwnPermission');
+  });
+
+  it('documents collaborator list provenance and effective permissions', () => {
+    const programList = openApiDocument.paths?.['/api/v1/event-programs/{id}/collaborators']?.get;
+    const listSchema = openApiDocument.components?.schemas?.['CollaboratorList'] as
+      { properties?: Record<string, unknown> } | undefined;
+    const listDetail = openApiDocument.components?.schemas?.['CollaboratorListDetail'] as
+      { properties?: Record<string, unknown> } | undefined;
+    const listPermission = openApiDocument.components?.schemas?.['CollaboratorListPermission'] as
+      { properties?: Record<string, unknown> } | undefined;
+
+    expect(programList?.responses?.['200']).toBeDefined();
+    expect(listSchema?.properties).toHaveProperty('items');
+    expect(listDetail?.properties).toHaveProperty('permissions');
+    expect(listPermission?.properties).toHaveProperty('origin');
+    expect(listPermission?.properties).toHaveProperty('effective');
+    expect(listPermission?.properties).toHaveProperty('source');
   });
 });
