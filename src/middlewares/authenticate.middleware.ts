@@ -4,7 +4,7 @@ import { getPrismaClient } from '../config/prisma.js';
 import { ApiError } from '../utils/ApiError.js';
 import { getJwtVerifier } from '../utils/jwt-verifier.js';
 
-const extractBearerToken = (header: string | undefined): string => {
+export const extractBearerToken = (header: string | undefined): string => {
   if (!header) {
     throw new ApiError(401, 'Authorization header is required.');
   }
@@ -15,7 +15,7 @@ const extractBearerToken = (header: string | undefined): string => {
   return token;
 };
 
-const loadActiveUser = async (userId: string): Promise<Express.AuthenticatedUser> => {
+export const loadActiveUser = async (userId: string): Promise<Express.AuthenticatedUser> => {
   const prisma = getPrismaClient();
   const user = await prisma.user.findUnique({
     where: { id: userId },
