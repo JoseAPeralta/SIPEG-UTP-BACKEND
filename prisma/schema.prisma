@@ -198,18 +198,19 @@ model EventProgram {
 }
 
 model Activity {
-  id          String         @id @default(cuid())
-  name        String         @db.VarChar(200)
-  description String?        @db.Text
-  type        ActivityType
-  date        DateTime       @db.Date
-  startTime   DateTime       @map("start_time") @db.Time(3)
-  endTime     DateTime       @map("end_time") @db.Time(3)
-  maxCapacity Int?           @map("max_capacity")
-  bannerUrl   String?        @map("banner_url") @db.VarChar(500)
-  status      ActivityStatus @default(DRAFT)
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id           String         @id @default(cuid())
+  name         String         @db.VarChar(200)
+  description  String?        @db.Text
+  type         ActivityType
+  date         DateTime       @db.Date
+  startTime    DateTime       @map("start_time") @db.Time(3)
+  endTime      DateTime       @map("end_time") @db.Time(3)
+  maxCapacity  Int?           @map("max_capacity")
+  bannerUrl    String?        @map("banner_url") @db.VarChar(500)
+  status       ActivityStatus @default(DRAFT)
+  cancelReason String?        @map("cancel_reason") @db.VarChar(500)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   eventProgramId String       @map("event_program_id")
   eventProgram   EventProgram @relation(fields: [eventProgramId], references: [id], onDelete: Restrict)

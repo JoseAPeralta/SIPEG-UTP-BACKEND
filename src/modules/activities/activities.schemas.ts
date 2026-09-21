@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
-import type { ActivityDetail, ActivityListItem, PaginatedActivities } from './activities.types.js';
+import type {
+  ActivityDetail,
+  ActivityListItem,
+  EventProgramActivityItem,
+  PaginatedActivities,
+  PaginatedEventProgramActivities,
+} from './activities.types.js';
 
 export const listActivitiesQuerySchema = z.object({
   query: z
@@ -21,6 +27,36 @@ export const listActivitiesQuerySchema = z.object({
 });
 
 export type ListActivitiesQuery = z.infer<typeof listActivitiesQuerySchema>['query'];
+
+export const activityParamsSchema = z.object({
+  params: z.object({
+    id: z
+      .string()
+      .trim()
+      .min(1, 'Activity id is required.')
+      .max(100, 'Activity id cannot exceed 100 characters.'),
+  }),
+});
+
+export type ActivityParams = z.infer<typeof activityParamsSchema>['params'];
+
+export const cancelActivityBodySchema = z
+  .object({
+    reason: z
+      .string()
+      .trim()
+      .min(1, 'Reason cannot be empty.')
+      .max(500, 'Reason cannot exceed 500 characters.')
+      .optional(),
+  })
+  .strict();
+
+export const cancelActivitySchema = z.object({
+  params: activityParamsSchema.shape.params,
+  body: cancelActivityBodySchema.optional().default({}),
+});
+
+export type CancelActivityBody = z.infer<typeof cancelActivityBodySchema>;
 
 const activitySpeakerSummarySchema = z
   .object({ id: z.string(), firstName: z.string(), lastName: z.string() })
@@ -86,26 +122,51 @@ const activityOrganizationalUnitSchema = z
     description: 'Organizational unit of the event program.',
   });
 
-export const activityListItemSchema = z
+const activityListItemShape = {
+  id: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER']),
+  date: z.string().meta({ description: 'Institutional date in YYYY-MM-DD format.' }),
+  startTime: z.string().meta({ description: 'Institutional start time in HH:mm format.' }),
+  endTime: z.string().meta({ description: 'Institutional end time in HH:mm format.' }),
+  capacity: z.number().int().nullable(),
+  bannerUrl: z.string().nullable(),
+  speakers: z.array(activitySpeakerSummarySchema),
+  classroom: activityClassroomSummarySchema.nullable(),
+  eventProgram: activityProgramSummarySchema,
+  organizationalUnit: activityOrganizationalUnitSchema,
+};
+
+export const activityListItemSchema = z.object(activityListItemShape).meta({
+  id: 'ActivityListItem',
+  description: 'Activity as returned by the upcoming activities listing.',
+}) satisfies z.ZodType<ActivityListItem>;
+
+export const eventProgramActivityItemSchema = z
   .object({
-    id: z.string(),
-    name: z.string(),
-    description: z.string().nullable(),
-    type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER']),
-    date: z.string().meta({ description: 'Institutional date in YYYY-MM-DD format.' }),
-    startTime: z.string().meta({ description: 'Institutional start time in HH:mm format.' }),
-    endTime: z.string().meta({ description: 'Institutional end time in HH:mm format.' }),
-    capacity: z.number().int().nullable(),
-    bannerUrl: z.string().nullable(),
-    speakers: z.array(activitySpeakerSummarySchema),
-    classroom: activityClassroomSummarySchema.nullable(),
-    eventProgram: activityProgramSummarySchema,
-    organizationalUnit: activityOrganizationalUnitSchema,
+    ...activityListItemShape,
+    status: z.enum(['DRAFT', 'SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED']).meta({
+      description: 'Activity lifecycle status.',
+    }),
   })
   .meta({
-    id: 'ActivityListItem',
-    description: 'Activity as returned by the upcoming activities listing.',
-  }) satisfies z.ZodType<ActivityListItem>;
+    id: 'EventProgramActivityItem',
+    description: 'Activity of an event program including its lifecycle status.',
+  }) satisfies z.ZodType<EventProgramActivityItem>;
+
+export const paginatedEventProgramActivitiesSchema = z
+  .object({
+    items: z.array(eventProgramActivityItemSchema),
+    page: z.number().int(),
+    limit: z.number().int(),
+    total: z.number().int(),
+    totalPages: z.number().int(),
+  })
+  .meta({
+    id: 'PaginatedEventProgramActivities',
+    description: 'Paginated list of event program activities.',
+  }) satisfies z.ZodType<PaginatedEventProgramActivities>;
 
 export const paginatedActivitiesSchema = z
   .object({
@@ -133,6 +194,75 @@ const isValidCalendarDate = (value: string): boolean => {
     date.getUTCDate() === day
   );
 };
+
+const programActivityStatuses = [
+  'DRAFT',
+  'SCHEDULED',
+  'ONGOING',
+  'COMPLETED',
+  'CANCELLED',
+  'ALL',
+] as const;
+
+export const eventProgramActivitiesQuerySchema = z
+  .object({
+    page: z.coerce
+      .number('Page must be a number.')
+      .int('Page must be an integer.')
+      .min(1, 'Page must be at least 1.')
+      .default(1),
+    limit: z.coerce
+      .number('Limit must be a number.')
+      .int('Limit must be an integer.')
+      .min(1, 'Limit must be at least 1.')
+      .max(50, 'Limit cannot exceed 50.')
+      .default(20),
+    status: z.enum(programActivityStatuses, 'Status is invalid.').optional(),
+    type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER'], 'Type is invalid.').optional(),
+    q: z
+      .string()
+      .trim()
+      .min(1, 'Search term cannot be empty.')
+      .max(200, 'Search term cannot exceed 200 characters.')
+      .optional(),
+    dateFrom: z
+      .string()
+      .regex(datePattern, 'Date from must be in YYYY-MM-DD format.')
+      .refine(isValidCalendarDate, 'Date from must be a valid calendar date.')
+      .optional(),
+    dateTo: z
+      .string()
+      .regex(datePattern, 'Date to must be in YYYY-MM-DD format.')
+      .refine(isValidCalendarDate, 'Date to must be a valid calendar date.')
+      .optional(),
+  })
+  .strict();
+
+export const listEventProgramActivitiesQuerySchema = eventProgramActivitiesQuerySchema.refine(
+  (value) => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo,
+  { message: 'dateFrom cannot be after dateTo.', path: ['dateTo'] },
+);
+
+export const eventProgramActivitiesParamsSchema = z.object({
+  params: z.object({
+    id: z
+      .string()
+      .trim()
+      .min(1, 'Event program id is required.')
+      .max(100, 'Event program id cannot exceed 100 characters.'),
+  }),
+});
+
+export type EventProgramActivitiesParams = z.infer<
+  typeof eventProgramActivitiesParamsSchema
+>['params'];
+
+export const listEventProgramActivitiesSchema = z.object({
+  params: eventProgramActivitiesParamsSchema.shape.params,
+  query: listEventProgramActivitiesQuerySchema,
+});
+
+export type ListEventProgramActivitiesQuery = z.infer<typeof eventProgramActivitiesQuerySchema>;
 
 export const createActivitySchema = z.object({
   body: z
@@ -183,6 +313,66 @@ export const createActivitySchema = z.object({
 
 export type CreateActivityBody = z.infer<typeof createActivitySchema>['body'];
 
+export const updateActivitySchema = z.object({
+  params: activityParamsSchema.shape.params,
+  body: z
+    .object({
+      name: z
+        .string()
+        .trim()
+        .min(1, 'Name is required.')
+        .max(200, 'Name cannot exceed 200 characters.')
+        .optional(),
+      description: z
+        .string()
+        .trim()
+        .max(2000, 'Description cannot exceed 2000 characters.')
+        .nullish(),
+      type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER'], 'Type is invalid.').optional(),
+      date: z
+        .string()
+        .regex(datePattern, 'Date must be in YYYY-MM-DD format.')
+        .refine(isValidCalendarDate, 'Date must be a valid calendar date.')
+        .optional(),
+      startTime: z.string().regex(timePattern, 'Start time must be in HH:mm format.').optional(),
+      endTime: z.string().regex(timePattern, 'End time must be in HH:mm format.').optional(),
+      maxCapacity: z
+        .number('Capacity must be a number.')
+        .int('Capacity must be an integer.')
+        .positive('Capacity must be greater than 0.')
+        .max(100000, 'Capacity is too large.')
+        .nullish(),
+      bannerUrl: z.string().url('Banner URL must be a valid URL.').max(500).nullish(),
+      classroomId: z
+        .string()
+        .trim()
+        .min(1, 'Classroom identifier is invalid.')
+        .max(100, 'Classroom identifier cannot exceed 100 characters.')
+        .nullish(),
+      status: z.enum(['DRAFT', 'SCHEDULED'], 'Status is invalid.').optional(),
+      speakers: z
+        .array(activitySpeakerInputSchema)
+        .max(10, 'No more than 10 speakers are allowed.')
+        .refine(uniqueSpeakerEmails, 'Speaker emails must be unique.')
+        .optional(),
+      equipment: z
+        .array(z.string().trim().min(1, 'Equipment name cannot be empty.').max(255))
+        .max(20, 'No more than 20 equipment items are allowed.')
+        .refine((items) => new Set(items).size === items.length, 'Equipment items must be unique.')
+        .optional(),
+    })
+    .strict()
+    .refine((value) => Object.keys(value).length > 0, {
+      message: 'At least one field must be provided.',
+    })
+    .refine((value) => !value.startTime || !value.endTime || value.endTime > value.startTime, {
+      message: 'End time must be after start time.',
+      path: ['endTime'],
+    }),
+});
+
+export type UpdateActivityBody = z.infer<typeof updateActivitySchema>['body'];
+
 export const activityDetailSchema = z
   .object({
     id: z.string(),
@@ -197,7 +387,17 @@ export const activityDetailSchema = z
     status: z.enum(['DRAFT', 'SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED']).meta({
       description: 'Activity lifecycle status.',
     }),
+    cancelReason: z
+      .string()
+      .nullable()
+      .meta({ description: 'Reason recorded when the activity was cancelled; null otherwise.' }),
     equipment: z.array(z.string()).meta({ description: 'Required equipment names.' }),
+    enrolledCount: z.number().int().nonnegative().meta({
+      description: 'Registered attendees of the activity.',
+    }),
+    checkedInCount: z.number().int().nonnegative().meta({
+      description: 'Registered attendees who completed check-in.',
+    }),
     speakers: z.array(activitySpeakerSummarySchema),
     classroom: activityClassroomSummarySchema.nullable(),
     eventProgram: activityProgramSummarySchema,
@@ -205,5 +405,6 @@ export const activityDetailSchema = z
   })
   .meta({
     id: 'ActivityDetail',
-    description: 'Activity detail returned after creation. Never exposes check-in codes.',
+    description:
+      'Activity detail with speakers, classroom, equipment, program and attendance counts. Never exposes check-in codes.',
   }) satisfies z.ZodType<ActivityDetail>;
