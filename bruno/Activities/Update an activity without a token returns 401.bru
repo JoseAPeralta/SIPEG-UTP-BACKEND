@@ -1,0 +1,27 @@
+meta {
+  name: Update an activity without a token returns 401
+  type: http
+  seq: 14
+  tags: [
+    Activities
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Sin token"
+  }
+}
+
+tests {
+  test("updating without a token is rejected", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

@@ -1,0 +1,30 @@
+meta {
+  name: Get a draft activity as admin
+  type: http
+  seq: 6
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("an admin can read a draft activity", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.id).to.equal(bru.getVar("draftActivityId"));
+    expect(body.data.status).to.equal("DRAFT");
+    expect(body.data.enrolledCount).to.equal(0);
+    expect(body.data.checkedInCount).to.equal(0);
+  });
+}

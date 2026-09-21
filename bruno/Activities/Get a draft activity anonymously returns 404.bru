@@ -1,0 +1,21 @@
+meta {
+  name: Get a draft activity anonymously returns 404
+  type: http
+  seq: 5
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("anonymous callers cannot see a draft activity", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().message).to.equal("Activity not found.");
+  });
+}

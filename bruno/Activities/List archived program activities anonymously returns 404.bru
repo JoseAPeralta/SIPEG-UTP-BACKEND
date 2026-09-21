@@ -1,0 +1,21 @@
+meta {
+  name: List archived program activities anonymously returns 404
+  type: http
+  seq: 19
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/activities
+  body: none
+  auth: none
+}
+
+tests {
+  test("anonymous callers cannot list non active programs", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

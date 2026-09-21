@@ -1,0 +1,35 @@
+meta {
+  name: List program activities anonymously
+  type: http
+  seq: 17
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{defaultProgramId}}/activities?page=1&limit=20
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 20
+}
+
+docs {
+  Public. Returns SCHEDULED, ONGOING and COMPLETED activities of the program. DRAFT and CANCELLED are hidden.
+}
+
+tests {
+  test("anonymous listing returns only public statuses", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    const publicStatuses = ["SCHEDULED", "ONGOING", "COMPLETED"];
+    body.data.items.forEach(function (activity) {
+      expect(publicStatuses).to.include(activity.status);
+    });
+  });
+}

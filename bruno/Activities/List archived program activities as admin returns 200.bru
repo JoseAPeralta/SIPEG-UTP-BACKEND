@@ -1,0 +1,29 @@
+meta {
+  name: List archived program activities as admin returns 200
+  type: http
+  seq: 20
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/activities?status=ALL
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  status: ALL
+}
+
+tests {
+  test("admin callers can list non active programs", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().success).to.equal(true);
+  });
+}

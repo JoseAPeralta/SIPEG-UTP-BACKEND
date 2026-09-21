@@ -1,0 +1,21 @@
+meta {
+  name: Get an unknown activity returns 404
+  type: http
+  seq: 7
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities/{{unknownActivityId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("unknown activities return 404", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().message).to.equal("Activity not found.");
+  });
+}

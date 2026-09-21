@@ -1,0 +1,31 @@
+meta {
+  name: Cancel an activity as a user without permission returns 403
+  type: http
+  seq: 21
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}/cancel
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+body:json {
+  {
+    "reason": "Sin permiso"
+  }
+}
+
+tests {
+  test("a user without activity:cancel is rejected", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().success).to.equal(false);
+  });
+}
