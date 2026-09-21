@@ -1,0 +1,33 @@
+meta {
+  name: Cancel an already cancelled activity returns 200
+  type: http
+  seq: 18
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}/cancel
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "reason": "Otro motivo distinto"
+  }
+}
+
+tests {
+  test("re-cancelling is idempotent and preserves the original reason", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.data.status).to.equal("CANCELLED");
+    expect(body.data.cancelReason).to.equal("Reprogramada por disponibilidad del ponente");
+  });
+}

@@ -1,0 +1,33 @@
+meta {
+  name: Cancel a completed activity returns 409
+  type: http
+  seq: 19
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities/{{seedActivityId}}/cancel
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "reason": "Tarde"
+  }
+}
+
+tests {
+  test("a completed activity cannot be cancelled", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Completed activities cannot be cancelled.");
+  });
+}

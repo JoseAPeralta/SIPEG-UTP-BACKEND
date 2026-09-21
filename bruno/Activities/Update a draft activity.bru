@@ -1,0 +1,41 @@
+meta {
+  name: Update a draft activity
+  type: http
+  seq: 10
+  tags: [
+    Activities
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Actividad temporal fase 5.2",
+    "description": "Actualizada por la coleccion Bruno.",
+    "maxCapacity": 45,
+    "equipment": ["Proyector", "Pizarra"]
+  }
+}
+
+tests {
+  test("an admin updates the draft activity", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Activity updated successfully.");
+    expect(body.data.id).to.equal(bru.getVar("draftActivityId"));
+    expect(body.data.name).to.equal("Actividad temporal fase 5.2");
+    expect(body.data.capacity).to.equal(45);
+    expect(body.data.equipment).to.deep.equal(["Pizarra", "Proyector"]);
+    expect(body.data.status).to.equal("DRAFT");
+  });
+}

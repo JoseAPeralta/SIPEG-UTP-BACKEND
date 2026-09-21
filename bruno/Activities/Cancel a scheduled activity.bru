@@ -1,0 +1,37 @@
+meta {
+  name: Cancel a scheduled activity
+  type: http
+  seq: 17
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}/cancel
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "reason": "  Reprogramada por disponibilidad del ponente  "
+  }
+}
+
+tests {
+  test("cancelling records the trimmed reason", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.id).to.equal(bru.getVar("draftActivityId"));
+    expect(body.data.status).to.equal("CANCELLED");
+    expect(body.data.cancelReason).to.equal("Reprogramada por disponibilidad del ponente");
+    expect(body.data.enrolledCount).to.be.a("number");
+    expect(body.data.checkedInCount).to.be.a("number");
+  });
+}

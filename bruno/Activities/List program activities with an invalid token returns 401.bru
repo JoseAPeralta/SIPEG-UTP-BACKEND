@@ -1,0 +1,25 @@
+meta {
+  name: List program activities with an invalid token returns 401
+  type: http
+  seq: 22
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{defaultProgramId}}/activities
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer invalid-token
+}
+
+tests {
+  test("invalid bearer tokens are rejected", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

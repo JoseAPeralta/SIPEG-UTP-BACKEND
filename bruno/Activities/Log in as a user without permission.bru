@@ -1,0 +1,36 @@
+meta {
+  name: Log in as a user without permission
+  type: http
+  seq: 9
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{userEmail}}",
+    "password": "{{userPassword}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.accessToken) {
+    bru.setVar("userToken", body.data.accessToken);
+  }
+}
+
+tests {
+  test("user login returns an access token", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().data.accessToken).to.be.a("string");
+  });
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Get an activity
+  type: http
+  seq: 4
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities/{{seedActivityId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("public detail returns speakers, equipment and counts", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Activity retrieved successfully.");
+    expect(body.data.id).to.equal(bru.getEnvVar("seedActivityId"));
+    expect(body.data.status).to.equal("COMPLETED");
+    expect(body.data.speakers).to.be.an("array");
+    expect(body.data.equipment).to.be.an("array");
+    expect(body.data.eventProgram).to.have.property("id");
+    expect(body.data.enrolledCount).to.equal(6);
+    expect(body.data.checkedInCount).to.equal(4);
+    expect(body.data).to.not.have.property("attendance");
+  });
+}
