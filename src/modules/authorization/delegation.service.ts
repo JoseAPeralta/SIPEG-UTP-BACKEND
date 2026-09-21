@@ -5,11 +5,18 @@ import type {
   ProgramStatus,
 } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { getPermissionEnvelopes, resolveScope } from './authorization.service.js';
+import {
+  getPermissionEnvelopes,
+  isGrantActive,
+  resolvePermissionEntries,
+  resolveScope,
+  type ScopedGrantRecord,
+} from './authorization.service.js';
 import type {
   AuthorizationScope,
   CollaboratorDetail,
   CollaboratorList,
+  CollaboratorListDetail,
   GrantEnvelope,
   ResolvedScope,
 } from './authorization.types.js';
@@ -83,6 +90,8 @@ const collaboratorSelect = {
   userId: true,
   role: true,
   createdAt: true,
+  eventProgramId: true,
+  activityId: true,
   user: { select: { firstName: true, lastName: true, email: true } },
   permissions: {
     select: {
@@ -98,6 +107,8 @@ interface CollaboratorRecord {
   userId: string;
   role: CollaborationRole;
   createdAt: Date;
+  eventProgramId: string | null;
+  activityId: string | null;
   user: { firstName: string; lastName: string; email: string };
   permissions: {
     source: PermissionGrantSource;
@@ -124,6 +135,60 @@ const toCollaboratorDetail = (record: CollaboratorRecord): CollaboratorDetail =>
       validUntil: row.validUntil ? row.validUntil.toISOString() : null,
     })),
 });
+
+const toCollaboratorListDetail = (
+  record: CollaboratorRecord,
+  resolved: ResolvedScope,
+  inherited: readonly ScopedGrantRecord[],
+  now: Date,
+): CollaboratorListDetail => {
+  const localGrants: ScopedGrantRecord[] = record.permissions.map((row) => ({
+    validFrom: row.validFrom,
+    validUntil: row.validUntil,
+    permission: row.permission,
+    eventProgramId: record.eventProgramId,
+    activityId: record.activityId,
+    source: row.source,
+  }));
+
+  const entries = resolvePermissionEntries(resolved, [...localGrants, ...inherited], now);
+
+  return {
+    userId: record.userId,
+    firstName: record.user.firstName,
+    lastName: record.user.lastName,
+    email: record.user.email,
+    role: record.role,
+    createdAt: record.createdAt.toISOString(),
+    permissions: [...entries.entries()]
+      .sort(([first], [second]) => first.localeCompare(second))
+      .map(([name, entry]) => ({
+        name,
+        source:
+          entry.origin === 'INHERITED'
+            ? (entry.inheritedSource ?? entry.localSource ?? 'ROLE_DEFAULT')
+            : (entry.localSource ?? entry.inheritedSource ?? 'ROLE_DEFAULT'),
+        origin: entry.origin,
+        validFrom: entry.envelope.validFrom ? entry.envelope.validFrom.toISOString() : null,
+        validUntil: entry.envelope.validUntil ? entry.envelope.validUntil.toISOString() : null,
+        effective: true,
+      })),
+  };
+};
+
+const collaboratorListSelect = {
+  userId: true,
+  eventProgramId: true,
+  activityId: true,
+  permissions: {
+    select: {
+      source: true,
+      validFrom: true,
+      validUntil: true,
+      permission: { select: { name: true } },
+    },
+  },
+} as const;
 
 const loadScopeProgram = async (
   resolved: ResolvedScope,
@@ -180,13 +245,47 @@ export const listCollaborators = async (
   const resolved = await resolveScope(scope);
   await loadScopeProgram(resolved);
 
-  const records = await getPrismaClient().collaboration.findMany({
-    where: scopeWhere(resolved),
-    orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
-    select: collaboratorSelect,
-  });
+  const prisma = getPrismaClient();
+  const scopeFilter = resolved.activityId
+    ? { activityId: resolved.activityId }
+    : { eventProgramId: resolved.eventProgramId };
 
-  return { items: records.map(toCollaboratorDetail) };
+  const [records, programRecords] = await Promise.all([
+    prisma.collaboration.findMany({
+      where: scopeFilter,
+      orderBy: [{ createdAt: 'asc' }, { userId: 'asc' }],
+      select: collaboratorSelect,
+    }),
+    prisma.collaboration.findMany({
+      where: { eventProgramId: resolved.eventProgramId },
+      select: collaboratorListSelect,
+    }),
+  ]);
+
+  const inheritedByUser = new Map<string, ScopedGrantRecord[]>();
+
+  for (const collaboration of programRecords) {
+    const grants = inheritedByUser.get(collaboration.userId) ?? [];
+
+    for (const row of collaboration.permissions) {
+      grants.push({
+        validFrom: row.validFrom,
+        validUntil: row.validUntil,
+        permission: row.permission,
+        eventProgramId: collaboration.eventProgramId,
+        activityId: collaboration.activityId,
+        source: row.source,
+      });
+    }
+
+    inheritedByUser.set(collaboration.userId, grants);
+  }
+
+  return {
+    items: records.map((record) =>
+      toCollaboratorListDetail(record, resolved, inheritedByUser.get(record.userId) ?? [], now),
+    ),
+  };
 };
 
 export const addCollaborator = async (
@@ -260,25 +359,43 @@ export const updateCollaboratorRole = async (
   targetUserId: string,
   role: CollaborationRole,
   now: Date = new Date(),
-): Promise<void> => {
+): Promise<CollaboratorDetail> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
   assertRoleWithinEnvelopes(role, envelopes);
 
   const resolved = await resolveScope(scope);
+  const program = await loadScopeProgram(resolved);
+
+  if (program.status === 'ARCHIVED') {
+    throw new ApiError(409, 'Archived event programs cannot be modified.');
+  }
+
   const prisma = getPrismaClient();
 
   const collaboration = await prisma.collaboration.findFirst({
     where: { userId: targetUserId, ...scopeWhere(resolved) },
-    select: { id: true },
+    select: {
+      id: true,
+      permissions: {
+        where: { source: 'ROLE_DEFAULT' },
+        select: { permission: { select: { name: true } } },
+      },
+    },
   });
 
   if (!collaboration) {
     throw new ApiError(404, 'Collaborator not found.');
   }
 
+  for (const row of collaboration.permissions) {
+    if (!envelopes.has(row.permission.name as PermissionName)) {
+      throw new ApiError(403, 'Cannot remove a collaborator with permissions you do not hold.');
+    }
+  }
+
   const permissionIds = await loadPermissionIds(ROLE_DEFAULTS[role]);
 
-  await prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx) => {
     await tx.collaboration.update({
       where: { id: collaboration.id },
       data: { role },
@@ -296,7 +413,61 @@ export const updateCollaboratorRole = async (
         grantedById: actor.id,
       })),
     });
+
+    return tx.collaboration.findUniqueOrThrow({
+      where: { id: collaboration.id },
+      select: collaboratorSelect,
+    });
   });
+
+  return toCollaboratorDetail(updated);
+};
+
+interface DelegableRecord {
+  user: { globalRole: 'USER' | 'ADMIN'; isActive: boolean };
+  permissions: {
+    validFrom: Date | null;
+    validUntil: Date | null;
+    permission: { name: string };
+  }[];
+}
+
+const canDelegate = (record: DelegableRecord, now: Date): boolean =>
+  record.user.isActive &&
+  (record.user.globalRole === 'ADMIN' ||
+    record.permissions.some(
+      (row) => row.permission.name === PERMISSIONS.PERMISSION_GRANT && isGrantActive(row, now),
+    ));
+
+const assertScopeKeepsDelegator = async (
+  resolved: ResolvedScope,
+  targetUserId: string,
+  now: Date,
+): Promise<void> => {
+  const scopeFilter = resolved.activityId
+    ? { OR: [{ activityId: resolved.activityId }, { eventProgramId: resolved.eventProgramId }] }
+    : { eventProgramId: resolved.eventProgramId };
+
+  const remaining = await getPrismaClient().collaboration.findMany({
+    where: { ...scopeFilter, userId: { not: targetUserId } },
+    select: {
+      user: { select: { globalRole: true, isActive: true } },
+      permissions: {
+        where: { permission: { name: PERMISSIONS.PERMISSION_GRANT } },
+        select: { validFrom: true, validUntil: true },
+      },
+    },
+  });
+
+  const hasDelegator = remaining.some(
+    (item) =>
+      item.user.isActive &&
+      (item.user.globalRole === 'ADMIN' || item.permissions.some((row) => isGrantActive(row, now))),
+  );
+
+  if (!hasDelegator) {
+    throw new ApiError(409, 'Cannot remove the last collaborator able to delegate in this scope.');
+  }
 };
 
 export const removeCollaborator = async (
@@ -306,14 +477,28 @@ export const removeCollaborator = async (
   now: Date = new Date(),
 ): Promise<void> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
+
   const resolved = await resolveScope(scope);
+  const program = await loadScopeProgram(resolved);
+
+  if (program.status === 'ARCHIVED') {
+    throw new ApiError(409, 'Archived event programs cannot be modified.');
+  }
+
   const prisma = getPrismaClient();
 
   const collaboration = await prisma.collaboration.findFirst({
     where: { userId: targetUserId, ...scopeWhere(resolved) },
     select: {
       id: true,
-      permissions: { select: { permission: { select: { name: true } } } },
+      user: { select: { globalRole: true, isActive: true } },
+      permissions: {
+        select: {
+          validFrom: true,
+          validUntil: true,
+          permission: { select: { name: true } },
+        },
+      },
     },
   });
 
@@ -327,6 +512,10 @@ export const removeCollaborator = async (
     }
   }
 
+  if (canDelegate(collaboration, now)) {
+    await assertScopeKeepsDelegator(resolved, targetUserId, now);
+  }
+
   await prisma.collaboration.delete({ where: { id: collaboration.id } });
 };
 
@@ -337,7 +526,7 @@ export const grantPermission = async (
   permission: PermissionName,
   window: GrantWindowInput = {},
   now: Date = new Date(),
-): Promise<void> => {
+): Promise<CollaboratorDetail> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
   const validFrom = window.validFrom ?? null;
   const validUntil = window.validUntil ?? null;
@@ -346,6 +535,12 @@ export const grantPermission = async (
   assertWindowWithinEnvelope(envelopes.get(permission), validFrom, validUntil);
 
   const resolved = await resolveScope(scope);
+  const program = await loadScopeProgram(resolved);
+
+  if (program.status === 'ARCHIVED') {
+    throw new ApiError(409, 'Archived event programs cannot be modified.');
+  }
+
   const prisma = getPrismaClient();
 
   const collaboration = await prisma.collaboration.findFirst({
@@ -359,30 +554,85 @@ export const grantPermission = async (
 
   const permissionId = await loadPermissionId(permission);
 
-  await prisma.collaborationPermission.upsert({
-    where: {
-      collaborationId_permissionId: {
+  return prisma.$transaction(async (tx) => {
+    await tx.collaborationPermission.upsert({
+      where: {
+        collaborationId_permissionId: {
+          collaborationId: collaboration.id,
+          permissionId,
+        },
+      },
+      update: {
+        source: 'OVERRIDE',
+        validFrom,
+        validUntil,
+        grantedById: actor.id,
+        grantedAt: now,
+      },
+      create: {
         collaborationId: collaboration.id,
         permissionId,
+        source: 'OVERRIDE',
+        validFrom,
+        validUntil,
+        grantedById: actor.id,
+        grantedAt: now,
+      },
+    });
+
+    const updated = await tx.collaboration.findUniqueOrThrow({
+      where: { id: collaboration.id },
+      select: collaboratorSelect,
+    });
+
+    return toCollaboratorDetail(updated);
+  });
+};
+
+const assertRevokeKeepsDelegator = async (
+  resolved: ResolvedScope,
+  targetUserId: string,
+  now: Date,
+): Promise<void> => {
+  const scopeFilter = resolved.activityId
+    ? { OR: [{ activityId: resolved.activityId }, { eventProgramId: resolved.eventProgramId }] }
+    : { eventProgramId: resolved.eventProgramId };
+
+  const collaborations = await getPrismaClient().collaboration.findMany({
+    where: scopeFilter,
+    select: {
+      userId: true,
+      eventProgramId: true,
+      activityId: true,
+      user: { select: { globalRole: true, isActive: true } },
+      permissions: {
+        where: { permission: { name: PERMISSIONS.PERMISSION_GRANT } },
+        select: {
+          validFrom: true,
+          validUntil: true,
+          permission: { select: { name: true } },
+        },
       },
     },
-    update: {
-      source: 'OVERRIDE',
-      validFrom,
-      validUntil,
-      grantedById: actor.id,
-      grantedAt: now,
-    },
-    create: {
-      collaborationId: collaboration.id,
-      permissionId,
-      source: 'OVERRIDE',
-      validFrom,
-      validUntil,
-      grantedById: actor.id,
-      grantedAt: now,
-    },
   });
+
+  const isRevokedCollaboration = (record: {
+    userId: string;
+    eventProgramId: string | null;
+    activityId: string | null;
+  }): boolean =>
+    record.userId === targetUserId &&
+    (resolved.activityId
+      ? record.activityId === resolved.activityId
+      : record.eventProgramId === resolved.eventProgramId);
+
+  const hasDelegator = collaborations.some(
+    (record) => !isRevokedCollaboration(record) && canDelegate(record, now),
+  );
+
+  if (!hasDelegator) {
+    throw new ApiError(409, 'Cannot revoke the last delegation permission in this scope.');
+  }
 };
 
 export const revokePermission = async (
@@ -399,18 +649,58 @@ export const revokePermission = async (
   }
 
   const resolved = await resolveScope(scope);
+  const program = await loadScopeProgram(resolved);
+
+  if (program.status === 'ARCHIVED') {
+    throw new ApiError(409, 'Archived event programs cannot be modified.');
+  }
+
   const prisma = getPrismaClient();
+  const permissionId = await loadPermissionId(permission);
 
   const collaboration = await prisma.collaboration.findFirst({
     where: { userId: targetUserId, ...scopeWhere(resolved) },
-    select: { id: true },
+    select: {
+      id: true,
+      user: { select: { globalRole: true, isActive: true } },
+      permissions: {
+        where: { permissionId },
+        select: {
+          validFrom: true,
+          validUntil: true,
+          permission: { select: { name: true } },
+        },
+      },
+    },
   });
 
-  if (!collaboration) {
-    throw new ApiError(404, 'Collaborator not found.');
+  if (!collaboration || collaboration.permissions.length === 0) {
+    if (resolved.activityId) {
+      const inherited = await prisma.collaboration.findFirst({
+        where: { userId: targetUserId, eventProgramId: resolved.eventProgramId },
+        select: {
+          permissions: {
+            where: { permissionId },
+            select: { validFrom: true, validUntil: true },
+          },
+        },
+      });
+
+      if (inherited?.permissions.some((row) => isGrantActive(row, now))) {
+        throw new ApiError(409, 'Cannot revoke a permission inherited from the event program.');
+      }
+    }
+
+    if (!collaboration) {
+      throw new ApiError(404, 'Collaborator not found.');
+    }
+
+    throw new ApiError(404, 'Permission grant not found.');
   }
 
-  const permissionId = await loadPermissionId(permission);
+  if (permission === PERMISSIONS.PERMISSION_GRANT && canDelegate(collaboration, now)) {
+    await assertRevokeKeepsDelegator(resolved, targetUserId, now);
+  }
 
   const result = await prisma.collaborationPermission.deleteMany({
     where: { collaborationId: collaboration.id, permissionId },
