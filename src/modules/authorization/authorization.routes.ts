@@ -8,8 +8,25 @@ import {
   addEventProgramCollaborator,
   getActivityCollaborators,
   getEventProgramCollaborators,
+  getOwnPermissions,
+  grantActivityPermission,
+  grantEventProgramPermission,
+  removeActivityCollaborator,
+  removeEventProgramCollaborator,
+  revokeActivityPermission,
+  revokeEventProgramPermission,
+  updateActivityCollaboratorRole,
+  updateEventProgramCollaboratorRole,
 } from './authorization.controller.js';
-import { addCollaboratorSchema, collaboratorParamsSchema } from './authorization.schemas.js';
+import {
+  addCollaboratorSchema,
+  collaboratorParamsSchema,
+  collaboratorUserParamsSchema,
+  grantPermissionSchema,
+  ownPermissionsQuerySchema,
+  revokePermissionSchema,
+  updateCollaboratorRoleSchema,
+} from './authorization.schemas.js';
 import { PERMISSIONS } from './permissions.js';
 
 const eventProgramScope: ScopeResolver = (req) => {
@@ -42,6 +59,22 @@ authorizationRoutes.post(
   addEventProgramCollaborator,
 );
 
+authorizationRoutes.patch(
+  '/event-programs/:id/collaborators/:userId',
+  authenticate,
+  requirePermission(PERMISSIONS.PERMISSION_GRANT, eventProgramScope),
+  validate(updateCollaboratorRoleSchema),
+  updateEventProgramCollaboratorRole,
+);
+
+authorizationRoutes.delete(
+  '/event-programs/:id/collaborators/:userId',
+  authenticate,
+  requirePermission(PERMISSIONS.PERMISSION_GRANT, eventProgramScope),
+  validate(collaboratorUserParamsSchema),
+  removeEventProgramCollaborator,
+);
+
 authorizationRoutes.get(
   '/activities/:id/collaborators',
   authenticate,
@@ -56,4 +89,59 @@ authorizationRoutes.post(
   requirePermission(PERMISSIONS.PERMISSION_GRANT, activityScope),
   validate(addCollaboratorSchema),
   addActivityCollaborator,
+);
+
+authorizationRoutes.patch(
+  '/activities/:id/collaborators/:userId',
+  authenticate,
+  requirePermission(PERMISSIONS.PERMISSION_GRANT, activityScope),
+  validate(updateCollaboratorRoleSchema),
+  updateActivityCollaboratorRole,
+);
+
+authorizationRoutes.delete(
+  '/activities/:id/collaborators/:userId',
+  authenticate,
+  requirePermission(PERMISSIONS.PERMISSION_GRANT, activityScope),
+  validate(collaboratorUserParamsSchema),
+  removeActivityCollaborator,
+);
+
+authorizationRoutes.post(
+  '/event-programs/:id/permissions',
+  authenticate,
+  requirePermission(PERMISSIONS.PERMISSION_GRANT, eventProgramScope),
+  validate(grantPermissionSchema),
+  grantEventProgramPermission,
+);
+
+authorizationRoutes.post(
+  '/activities/:id/permissions',
+  authenticate,
+  requirePermission(PERMISSIONS.PERMISSION_GRANT, activityScope),
+  validate(grantPermissionSchema),
+  grantActivityPermission,
+);
+
+authorizationRoutes.delete(
+  '/event-programs/:id/permissions/:permission',
+  authenticate,
+  requirePermission(PERMISSIONS.PERMISSION_GRANT, eventProgramScope),
+  validate(revokePermissionSchema),
+  revokeEventProgramPermission,
+);
+
+authorizationRoutes.delete(
+  '/activities/:id/permissions/:permission',
+  authenticate,
+  requirePermission(PERMISSIONS.PERMISSION_GRANT, activityScope),
+  validate(revokePermissionSchema),
+  revokeActivityPermission,
+);
+
+authorizationRoutes.get(
+  '/users/me/permissions',
+  authenticate,
+  validate(ownPermissionsQuerySchema),
+  getOwnPermissions,
 );

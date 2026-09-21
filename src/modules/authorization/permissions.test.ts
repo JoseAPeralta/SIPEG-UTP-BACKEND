@@ -28,6 +28,14 @@ describe('permission catalog', () => {
     }
   });
 
+  it('keeps program:reactivate out of every role default', () => {
+    expect(PERMISSIONS.PROGRAM_REACTIVATE).toBe('program:reactivate');
+
+    for (const defaults of Object.values(ROLE_DEFAULTS)) {
+      expect(defaults).not.toContain(PERMISSIONS.PROGRAM_REACTIVATE);
+    }
+  });
+
   it('escalates role defaults monotonically', () => {
     const viewer = new Set(ROLE_DEFAULTS.VIEWER);
     const editor = new Set(ROLE_DEFAULTS.EDITOR);
