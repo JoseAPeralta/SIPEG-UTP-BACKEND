@@ -1,7 +1,7 @@
 meta {
   name: Register duplicate email returns 409
   type: http
-  seq: 20
+  seq: 10
   tags: [
     Auth
   ]
@@ -29,7 +29,7 @@ tests {
   test("duplicate email returns 409", function () {
     expect(res.getStatus()).to.equal(409);
   });
-
+  
   test("duplicate email response does not leak hashes", function () {
     expect(JSON.stringify(res.getBody())).to.not.include("$argon2");
   });

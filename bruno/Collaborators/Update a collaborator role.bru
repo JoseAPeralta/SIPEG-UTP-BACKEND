@@ -1,0 +1,43 @@
+meta {
+  name: Update a collaborator role
+  type: http
+  seq: 17
+  tags: [
+    Collaborators
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators/{{collaboratorUserId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "role": "EDITOR"
+  }
+}
+
+tests {
+  test("ADMIN changes the role and regenerates ROLE_DEFAULT grants", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Collaborator role updated successfully.");
+    expect(body.data.userId).to.equal(bru.getVar("collaboratorUserId"));
+    expect(body.data.role).to.equal("EDITOR");
+    expect(body.data.permissions).to.be.an("array");
+    expect(body.data.permissions.length).to.be.at.least(11);
+    for (const permission of body.data.permissions) {
+      expect(permission.source).to.equal("ROLE_DEFAULT");
+    }
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("grantedById");
+    expect(serialized).to.not.include("grantedAt");
+  });
+}

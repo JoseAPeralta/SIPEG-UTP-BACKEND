@@ -1,0 +1,25 @@
+meta {
+  name: Revoke an activity permission
+  type: http
+  seq: 59
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{collaboratorsActivityId}}/permissions/activity:read?userId={{collaboratorUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("ADMIN revokes a local activity permission with 204", function () {
+    expect(res.getStatus()).to.equal(204);
+    expect(res.getBody()).to.be.empty;
+  });
+}

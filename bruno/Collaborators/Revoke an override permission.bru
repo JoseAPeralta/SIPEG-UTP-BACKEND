@@ -1,0 +1,25 @@
+meta {
+  name: Revoke an override permission
+  type: http
+  seq: 50
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions/report:export?userId={{collaboratorUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("ADMIN revokes a local OVERRIDE permission with 204", function () {
+    expect(res.getStatus()).to.equal(204);
+    expect(res.getBody()).to.be.empty;
+  });
+}

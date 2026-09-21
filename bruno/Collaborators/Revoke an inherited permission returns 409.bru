@@ -1,0 +1,27 @@
+meta {
+  name: Revoke an inherited permission returns 409
+  type: http
+  seq: 56
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{collaboratorsActivityId}}/permissions/report:export?userId=seed_user_org-fisc
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("A program grant cannot be revoked from an activity", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().message).to.equal(
+      "Cannot revoke a permission inherited from the event program.",
+    );
+  });
+}

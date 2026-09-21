@@ -1,7 +1,7 @@
 meta {
   name: Register a new user
   type: http
-  seq: 2
+  seq: 4
   tags: [
     Auth
   ]
@@ -25,6 +25,13 @@ body:json {
   }
 }
 
+vars:pre-request {
+  newUserEmail: test@utp.ac.pa
+  newUserLastName: Prueba
+  newUserFirstName: Prueba
+  newUserIdentification: 8-000-0000
+}
+
 script:pre-request {
   const suffix = bru.interpolate("{{$randomInt}}");
   bru.setVar("newUserFirstName", "Prueba");
@@ -37,7 +44,7 @@ tests {
   test("register returns 201", function () {
     expect(res.getStatus()).to.equal(201);
   });
-
+  
   test("register returns only the new user id", function () {
     const body = res.getBody();
     expect(body.success).to.equal(true);
@@ -50,7 +57,7 @@ tests {
 example {
   name: 201 Response
   description: Registration successful. An email verification is sent.
-
+  
   request: {
     url: {{baseUrl}}/api/v1/auth/register
     method: POST
@@ -67,17 +74,17 @@ example {
       }
     }
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 201
       text: Created
     }
-
+  
     body: {
       type: json
       content: '''
@@ -96,7 +103,7 @@ example {
 example {
   name: 400 Response
   description: Error response.
-
+  
   request: {
     url: {{baseUrl}}/api/v1/auth/register
     method: POST
@@ -113,17 +120,17 @@ example {
       }
     }
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 400
       text: Bad Request
     }
-
+  
     body: {
       type: json
       content: '''
@@ -145,7 +152,7 @@ example {
 example {
   name: 409 Response
   description: Error response.
-
+  
   request: {
     url: {{baseUrl}}/api/v1/auth/register
     method: POST
@@ -162,17 +169,17 @@ example {
       }
     }
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 409
       text: Conflict
     }
-
+  
     body: {
       type: json
       content: '''
@@ -194,7 +201,7 @@ example {
 example {
   name: 429 Response
   description: Error response.
-
+  
   request: {
     url: {{baseUrl}}/api/v1/auth/register
     method: POST
@@ -211,17 +218,17 @@ example {
       }
     }
   }
-
+  
   response: {
     headers: {
       Content-Type: application/json
     }
-
+  
     status: {
       code: 429
       text: Too Many Requests
     }
-
+  
     body: {
       type: json
       content: '''

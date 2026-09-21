@@ -1,0 +1,37 @@
+meta {
+  name: Get my permissions in an activity
+  type: http
+  seq: 3
+  tags: [
+    My_Permissions
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/permissions?scope=activity&id={{collaboratorsActivityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the head inherits unbounded ORGANIZER defaults in the activity scope", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.data.scope).to.eql({ type: "activity", id: "seed_activity_fisc-charla-ia" });
+    const checkin = body.data.permissions.find((entry) => entry.name === "attendance:checkin");
+    expect(checkin).to.be.an("object");
+    expect(checkin.origin).to.equal("INHERITED");
+    expect(checkin.validFrom).to.equal(null);
+    expect(checkin.validUntil).to.equal(null);
+  });
+
+  test("the response does not expose delegation audit fields", function () {
+    const serialized = JSON.stringify(res.getBody());
+    expect(serialized).to.not.include("grantedById");
+    expect(serialized).to.not.include("grantedAt");
+  });
+}

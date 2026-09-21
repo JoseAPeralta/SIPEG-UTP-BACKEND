@@ -1,0 +1,25 @@
+meta {
+  name: Revoke the same permission returns 404
+  type: http
+  seq: 51
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions/report:export?userId={{collaboratorUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("A missing local grant cannot be revoked twice", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().message).to.equal("Permission grant not found.");
+  });
+}

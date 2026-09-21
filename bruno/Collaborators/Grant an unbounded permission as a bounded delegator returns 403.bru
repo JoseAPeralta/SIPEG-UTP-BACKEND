@@ -1,0 +1,32 @@
+meta {
+  name: Grant an unbounded permission as a bounded delegator returns 403
+  type: http
+  seq: 42
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "permission": "permission:grant"
+  }
+}
+
+tests {
+  test("A bounded delegator cannot create unbounded grants", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().message).to.equal("Grant window starts before the delegator grant.");
+  });
+}

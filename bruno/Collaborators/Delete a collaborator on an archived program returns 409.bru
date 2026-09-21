@@ -1,0 +1,27 @@
+meta {
+  name: Delete a collaborator on an archived program returns 409
+  type: http
+  seq: 29
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/collaborators/{{collaboratorUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("archived event programs cannot remove collaborators", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Archived event programs cannot be modified.");
+  });
+}

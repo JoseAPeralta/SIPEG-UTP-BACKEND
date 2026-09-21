@@ -1,0 +1,25 @@
+meta {
+  name: Get my permissions with an invalid scope returns 400
+  type: http
+  seq: 4
+  tags: [
+    My_Permissions
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/permissions?scope=team&id={{collaboratorsProgramId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("an invalid scope is rejected before the service", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

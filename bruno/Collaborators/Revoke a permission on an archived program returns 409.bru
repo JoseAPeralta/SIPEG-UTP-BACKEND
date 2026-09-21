@@ -1,0 +1,25 @@
+meta {
+  name: Revoke a permission on an archived program returns 409
+  type: http
+  seq: 55
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/permissions/report:view?userId={{collaboratorUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("An archived event program cannot revoke grants", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().message).to.equal("Archived event programs cannot be modified.");
+  });
+}

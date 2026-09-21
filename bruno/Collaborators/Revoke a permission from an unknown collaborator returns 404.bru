@@ -1,0 +1,25 @@
+meta {
+  name: Revoke a permission from an unknown collaborator returns 404
+  type: http
+  seq: 53
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions/report:view?userId={{unknownUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("Revoking requires a local collaborator in the scope", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().message).to.equal("Collaborator not found.");
+  });
+}

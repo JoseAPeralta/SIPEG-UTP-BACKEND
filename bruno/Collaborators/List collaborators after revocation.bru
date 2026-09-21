@@ -1,0 +1,30 @@
+meta {
+  name: List collaborators after revocation
+  type: http
+  seq: 48
+  tags: [
+    Collaborators
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("The revoked grant no longer appears in the local permissions", function () {
+    expect(res.getStatus()).to.equal(200);
+    const collaborator = res
+      .getBody()
+      .data.items.find((item) => item.userId === bru.getVar("collaboratorUserId"));
+    expect(collaborator).to.be.an("object");
+    const revoked = collaborator.permissions.find((entry) => entry.name === "report:view");
+    expect(revoked).to.equal(undefined);
+  });
+}

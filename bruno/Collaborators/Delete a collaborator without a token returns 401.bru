@@ -1,0 +1,21 @@
+meta {
+  name: Delete a collaborator without a token returns 401
+  type: http
+  seq: 28
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators/{{collaboratorUserId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("anonymous requests cannot delete collaborators", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

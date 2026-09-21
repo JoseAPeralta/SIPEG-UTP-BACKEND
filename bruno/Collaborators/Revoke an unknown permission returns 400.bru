@@ -1,0 +1,25 @@
+meta {
+  name: Revoke an unknown permission returns 400
+  type: http
+  seq: 52
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions/nope:nope?userId={{collaboratorUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("The permission path parameter is validated against the catalog", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().message).to.equal("Validation error.");
+  });
+}

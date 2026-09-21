@@ -1,0 +1,45 @@
+meta {
+  name: Grant the same permission with a new window
+  type: http
+  seq: 35
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+script:pre-request {
+  const from = new Date();
+  const until = new Date(from.getTime() + 15 * 24 * 60 * 60 * 1000);
+  bru.setVar("regrantFrom", from.toISOString());
+  bru.setVar("regrantUntil", until.toISOString());
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "permission": "report:export",
+    "validFrom": "{{regrantFrom}}",
+    "validUntil": "{{regrantUntil}}"
+  }
+}
+
+tests {
+  test("Re-granting the same permission replaces the window without duplicating", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    const matches = body.data.permissions.filter((entry) => entry.name === "report:export");
+    expect(matches.length).to.equal(1);
+    expect(matches[0].source).to.equal("OVERRIDE");
+    expect(matches[0].validUntil).to.equal(bru.getVar("regrantUntil"));
+  });
+}
