@@ -1,11 +1,33 @@
 import { getPrismaClient } from '../../config/prisma.js';
 import type { ActivityStatus, ActivityType } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { startOfInstitutionalDay } from '../../utils/date.js';
-import type { CreateActivityBody, ListActivitiesQuery } from './activities.schemas.js';
-import type { ActivityDetail, ActivityListItem, PaginatedActivities } from './activities.types.js';
+import { getInstitutionalDayOfWeek, startOfInstitutionalDay } from '../../utils/date.js';
+import { getEffectivePermissions } from '../authorization/authorization.service.js';
+import { PERMISSIONS } from '../authorization/permissions.js';
+import type {
+  CreateActivityBody,
+  ListActivitiesQuery,
+  ListEventProgramActivitiesQuery,
+  UpdateActivityBody,
+} from './activities.schemas.js';
+import type {
+  ActivityDetail,
+  ActivityListItem,
+  EventProgramActivityItem,
+  PaginatedActivities,
+  PaginatedEventProgramActivities,
+} from './activities.types.js';
 
 const UPCOMING_STATUSES = ['SCHEDULED', 'ONGOING'] as const;
+
+const PROGRAM_PUBLIC_ACTIVITY_STATUSES: ActivityStatus[] = ['SCHEDULED', 'ONGOING', 'COMPLETED'];
+const ALL_ACTIVITY_STATUSES: ActivityStatus[] = [
+  'DRAFT',
+  'SCHEDULED',
+  'ONGOING',
+  'COMPLETED',
+  'CANCELLED',
+];
 
 const activitySelect = {
   id: true,
@@ -97,19 +119,129 @@ const toActivityListItem = (record: ActivityRecord): ActivityListItem => {
 const activityDetailSelect = {
   ...activitySelect,
   status: true,
+  cancelReason: true,
   equipment: { select: { name: true }, orderBy: { name: 'asc' } },
+} as const;
+
+const activityDetailWithCountSelect = {
+  ...activityDetailSelect,
+  eventProgram: {
+    select: { ...activityDetailSelect.eventProgram.select, status: true },
+  },
+  _count: { select: { attendance: true } },
 } as const;
 
 interface ActivityDetailRecord extends ActivityRecord {
   status: ActivityStatus;
+  cancelReason: string | null;
   equipment: { name: string }[];
 }
 
-const toActivityDetail = (record: ActivityDetailRecord): ActivityDetail => ({
+const toActivityDetail = (
+  record: ActivityDetailRecord,
+  enrolledCount: number,
+  checkedInCount: number,
+): ActivityDetail => ({
   ...toActivityListItem(record),
   status: record.status,
+  cancelReason: record.cancelReason,
   equipment: record.equipment.map((item) => item.name),
+  enrolledCount,
+  checkedInCount,
 });
+
+const programActivitySelect = {
+  ...activitySelect,
+  status: true,
+} as const;
+
+interface ProgramActivityRecord extends ActivityRecord {
+  status: ActivityStatus;
+}
+
+const toProgramActivityItem = (record: ProgramActivityRecord): EventProgramActivityItem => ({
+  ...toActivityListItem(record),
+  status: record.status,
+});
+
+const RESERVING_STATUSES: ActivityStatus[] = ['SCHEDULED', 'ONGOING'];
+
+const parseActivityDate = (value: string): Date => new Date(`${value}T00:00:00.000Z`);
+
+const parseActivityTime = (value: string): Date => new Date(`1970-01-01T${value}:00.000Z`);
+
+const isExclusionViolation = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown; message?: unknown; meta?: { code?: unknown } };
+
+  return (
+    candidate.code === '23P01' ||
+    candidate.meta?.code === '23P01' ||
+    (typeof candidate.message === 'string' &&
+      candidate.message.includes('activities_classroom_no_overlap'))
+  );
+};
+
+const assertActivityScheduleIsAvailable = async (input: {
+  activityId: string;
+  classroomId: string;
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  maxCapacity: number | null;
+}): Promise<void> => {
+  const prisma = getPrismaClient();
+
+  const classroom = await prisma.classroom.findUnique({
+    where: { id: input.classroomId },
+    select: { id: true, isActive: true, capacity: true },
+  });
+
+  if (!classroom) {
+    throw new ApiError(404, 'Classroom not found.');
+  }
+  if (!classroom.isActive) {
+    throw new ApiError(400, 'Classroom is not active.');
+  }
+  if (input.maxCapacity !== null && classroom.capacity < input.maxCapacity) {
+    throw new ApiError(400, 'Classroom capacity is below the activity capacity.');
+  }
+
+  const dateKey = input.date.toISOString().slice(0, 10);
+
+  const window = await prisma.classroomAvailability.findFirst({
+    where: {
+      classroomId: input.classroomId,
+      dayOfWeek: getInstitutionalDayOfWeek(dateKey),
+      startTime: { lte: input.startTime },
+      endTime: { gte: input.endTime },
+    },
+    select: { id: true },
+  });
+
+  if (!window) {
+    throw new ApiError(409, 'Classroom is not available in the requested time window.');
+  }
+
+  const overlapping = await prisma.activity.findFirst({
+    where: {
+      id: { not: input.activityId },
+      classroomId: input.classroomId,
+      date: input.date,
+      status: { in: [...RESERVING_STATUSES] },
+      startTime: { lt: input.endTime },
+      endTime: { gt: input.startTime },
+    },
+    select: { id: true },
+  });
+
+  if (overlapping) {
+    throw new ApiError(409, 'Classroom is already reserved for an overlapping activity.');
+  }
+};
 
 export const listUpcomingActivities = async (
   query: ListActivitiesQuery,
@@ -143,6 +275,163 @@ export const listUpcomingActivities = async (
     total,
     totalPages: total === 0 ? 0 : Math.ceil(total / query.limit),
   };
+};
+
+export const listEventProgramActivities = async (
+  eventProgramId: string,
+  query: ListEventProgramActivitiesQuery,
+  viewer: Express.AuthenticatedUser | null = null,
+): Promise<PaginatedEventProgramActivities> => {
+  const prisma = getPrismaClient();
+
+  const program = await prisma.eventProgram.findUnique({
+    where: { id: eventProgramId },
+    select: { id: true, status: true },
+  });
+
+  if (!program) {
+    throw new ApiError(404, 'Event program not found.');
+  }
+
+  const canRead = viewer
+    ? viewer.globalRole === 'ADMIN' ||
+      (await getEffectivePermissions(viewer, { eventProgramId })).has(PERMISSIONS.ACTIVITY_READ)
+    : false;
+
+  if (!canRead && program.status !== 'ACTIVE') {
+    throw new ApiError(404, 'Event program not found.');
+  }
+
+  const statuses = canRead
+    ? query.status && query.status !== 'ALL'
+      ? [query.status]
+      : ALL_ACTIVITY_STATUSES
+    : PROGRAM_PUBLIC_ACTIVITY_STATUSES;
+
+  const dateFilter =
+    query.dateFrom || query.dateTo
+      ? {
+          ...(query.dateFrom ? { gte: parseActivityDate(query.dateFrom) } : {}),
+          ...(query.dateTo ? { lte: parseActivityDate(query.dateTo) } : {}),
+        }
+      : undefined;
+
+  const where = {
+    eventProgramId,
+    status: { in: statuses },
+    ...(query.type ? { type: query.type } : {}),
+    ...(query.q
+      ? {
+          OR: [
+            { name: { contains: query.q, mode: 'insensitive' as const } },
+            { description: { contains: query.q, mode: 'insensitive' as const } },
+          ],
+        }
+      : {}),
+    ...(dateFilter ? { date: dateFilter } : {}),
+  };
+
+  const skip = (query.page - 1) * query.limit;
+
+  const [records, total] = await Promise.all([
+    prisma.activity.findMany({
+      where,
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
+      skip,
+      take: query.limit,
+      select: programActivitySelect,
+    }),
+    prisma.activity.count({ where }),
+  ]);
+
+  return {
+    items: records.map((record) => toProgramActivityItem(record)),
+    page: query.page,
+    limit: query.limit,
+    total,
+    totalPages: total === 0 ? 0 : Math.ceil(total / query.limit),
+  };
+};
+
+export const getActivityById = async (
+  id: string,
+  viewer?: Express.AuthenticatedUser,
+): Promise<ActivityDetail> => {
+  const prisma = getPrismaClient();
+
+  const record = await prisma.activity.findUnique({
+    where: { id },
+    select: activityDetailWithCountSelect,
+  });
+
+  if (!record) {
+    throw new ApiError(404, 'Activity not found.');
+  }
+
+  if (!viewer || viewer.globalRole !== 'ADMIN') {
+    const canRead = viewer
+      ? (await getEffectivePermissions(viewer, { activityId: id })).has(PERMISSIONS.ACTIVITY_READ)
+      : false;
+
+    if (!canRead && (record.status === 'DRAFT' || record.eventProgram.status !== 'ACTIVE')) {
+      throw new ApiError(404, 'Activity not found.');
+    }
+  }
+
+  const checkedInCount = await prisma.attendance.count({
+    where: { activityId: id, checkedInAt: { not: null } },
+  });
+
+  return toActivityDetail(record, record._count.attendance, checkedInCount);
+};
+
+type SpeakerInput = NonNullable<CreateActivityBody['speakers']>[number];
+
+const buildSpeakerCreates = async (speakers: SpeakerInput[]) => {
+  const prisma = getPrismaClient();
+  const emails = speakers
+    .map((speaker) => speaker.email)
+    .filter((email): email is string => typeof email === 'string');
+
+  const usersByEmail = emails.length
+    ? await prisma.user.findMany({
+        where: { email: { in: emails } },
+        select: { id: true, email: true },
+      })
+    : [];
+
+  const userIdByEmail = new Map(
+    usersByEmail.map((user) => [user.email.toLowerCase(), user.id] as const),
+  );
+
+  return speakers.map((speaker) =>
+    speaker.email
+      ? {
+          speaker: {
+            connectOrCreate: {
+              where: { email: speaker.email },
+              create: {
+                firstName: speaker.firstName,
+                lastName: speaker.lastName,
+                email: speaker.email,
+                organization: speaker.organization ?? null,
+                userId: userIdByEmail.get(speaker.email) ?? null,
+              },
+            },
+          },
+        }
+      : {
+          speaker: {
+            create: {
+              firstName: speaker.firstName,
+              lastName: speaker.lastName,
+              email: null,
+              organization: speaker.organization ?? null,
+              userId: null,
+            },
+          },
+        },
+  );
 };
 
 export const createActivity = async (input: CreateActivityBody): Promise<ActivityDetail> => {
@@ -186,21 +475,6 @@ export const createActivity = async (input: CreateActivityBody): Promise<Activit
     }
   }
 
-  const speakerEmails = (input.speakers ?? [])
-    .map((speaker) => speaker.email)
-    .filter((email): email is string => typeof email === 'string');
-
-  const usersByEmail = speakerEmails.length
-    ? await prisma.user.findMany({
-        where: { email: { in: speakerEmails } },
-        select: { id: true, email: true },
-      })
-    : [];
-
-  const userIdByEmail = new Map(
-    usersByEmail.map((user) => [user.email.toLowerCase(), user.id] as const),
-  );
-
   const startTime = new Date(`1970-01-01T${input.startTime}:00.000Z`);
   const endTime = new Date(`1970-01-01T${input.endTime}:00.000Z`);
 
@@ -218,38 +492,7 @@ export const createActivity = async (input: CreateActivityBody): Promise<Activit
       eventProgramId: program.id,
       classroomId: input.classroomId ?? null,
       ...(input.speakers?.length
-        ? {
-            speakers: {
-              create: input.speakers.map((speaker) =>
-                speaker.email
-                  ? {
-                      speaker: {
-                        connectOrCreate: {
-                          where: { email: speaker.email },
-                          create: {
-                            firstName: speaker.firstName,
-                            lastName: speaker.lastName,
-                            email: speaker.email,
-                            organization: speaker.organization ?? null,
-                            userId: userIdByEmail.get(speaker.email) ?? null,
-                          },
-                        },
-                      },
-                    }
-                  : {
-                      speaker: {
-                        create: {
-                          firstName: speaker.firstName,
-                          lastName: speaker.lastName,
-                          email: null,
-                          organization: speaker.organization ?? null,
-                          userId: null,
-                        },
-                      },
-                    },
-              ),
-            },
-          }
+        ? { speakers: { create: await buildSpeakerCreates(input.speakers) } }
         : {}),
       ...(input.equipment?.length
         ? {
@@ -265,5 +508,201 @@ export const createActivity = async (input: CreateActivityBody): Promise<Activit
     select: activityDetailSelect,
   });
 
-  return toActivityDetail(record);
+  return toActivityDetail(record, 0, 0);
+};
+
+export const updateActivity = async (
+  id: string,
+  input: UpdateActivityBody,
+): Promise<ActivityDetail> => {
+  const prisma = getPrismaClient();
+
+  const current = await prisma.activity.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      classroomId: true,
+      maxCapacity: true,
+      eventProgram: {
+        select: {
+          id: true,
+          status: true,
+          isDefault: true,
+          startDate: true,
+          endDate: true,
+        },
+      },
+    },
+  });
+
+  if (!current) {
+    throw new ApiError(404, 'Activity not found.');
+  }
+  if (current.status === 'COMPLETED' || current.status === 'CANCELLED') {
+    throw new ApiError(409, 'Completed or cancelled activities cannot be modified.');
+  }
+  if (current.eventProgram.status !== 'ACTIVE') {
+    throw new ApiError(409, 'Event programs must be active to modify their activities.');
+  }
+
+  const status = input.status ?? current.status;
+
+  if (input.status !== undefined && input.status !== current.status) {
+    const allowed =
+      (current.status === 'DRAFT' && input.status === 'SCHEDULED') ||
+      (current.status === 'SCHEDULED' && input.status === 'DRAFT');
+
+    if (!allowed) {
+      throw new ApiError(400, 'Activity status transition is not allowed.');
+    }
+  }
+
+  const date = input.date !== undefined ? parseActivityDate(input.date) : current.date;
+  const startTime =
+    input.startTime !== undefined ? parseActivityTime(input.startTime) : current.startTime;
+  const endTime = input.endTime !== undefined ? parseActivityTime(input.endTime) : current.endTime;
+
+  if (endTime <= startTime) {
+    throw new ApiError(400, 'End time must be after start time.');
+  }
+
+  if (
+    input.date !== undefined &&
+    !current.eventProgram.isDefault &&
+    ((current.eventProgram.startDate && date < current.eventProgram.startDate) ||
+      (current.eventProgram.endDate && date > current.eventProgram.endDate))
+  ) {
+    throw new ApiError(400, 'Activity date must be within the event program date range.');
+  }
+
+  const classroomId =
+    input.classroomId !== undefined ? (input.classroomId ?? null) : current.classroomId;
+  const maxCapacity =
+    input.maxCapacity !== undefined ? (input.maxCapacity ?? null) : current.maxCapacity;
+  const statusChanged = input.status !== undefined && input.status !== current.status;
+  const scheduleChanged =
+    input.date !== undefined || input.startTime !== undefined || input.endTime !== undefined;
+  const classroomChanged = input.classroomId !== undefined;
+  const capacityChanged = input.maxCapacity !== undefined;
+  const requiresBooking =
+    RESERVING_STATUSES.includes(status) &&
+    (statusChanged || scheduleChanged || classroomChanged || capacityChanged) &&
+    classroomId !== null;
+
+  if (requiresBooking && classroomId) {
+    await assertActivityScheduleIsAvailable({
+      activityId: id,
+      classroomId,
+      date,
+      startTime,
+      endTime,
+      maxCapacity,
+    });
+  } else if (classroomChanged && classroomId) {
+    const classroom = await prisma.classroom.findUnique({
+      where: { id: classroomId },
+      select: { id: true, isActive: true },
+    });
+
+    if (!classroom) {
+      throw new ApiError(404, 'Classroom not found.');
+    }
+    if (!classroom.isActive) {
+      throw new ApiError(400, 'Classroom is not active.');
+    }
+  }
+
+  const data = {
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.type !== undefined ? { type: input.type } : {}),
+    ...(input.date !== undefined ? { date } : {}),
+    ...(input.startTime !== undefined ? { startTime } : {}),
+    ...(input.endTime !== undefined ? { endTime } : {}),
+    ...(input.maxCapacity !== undefined ? { maxCapacity } : {}),
+    ...(input.bannerUrl !== undefined ? { bannerUrl: input.bannerUrl } : {}),
+    ...(input.classroomId !== undefined ? { classroomId } : {}),
+    ...(status !== current.status ? { status } : {}),
+    ...(input.equipment !== undefined
+      ? {
+          equipment:
+            input.equipment.length > 0
+              ? {
+                  deleteMany: {},
+                  createMany: {
+                    data: input.equipment.map((name) => ({ name })),
+                    skipDuplicates: true,
+                  },
+                }
+              : { deleteMany: {} },
+        }
+      : {}),
+    ...(input.speakers !== undefined
+      ? {
+          speakers:
+            input.speakers.length > 0
+              ? { deleteMany: {}, create: await buildSpeakerCreates(input.speakers) }
+              : { deleteMany: {} },
+        }
+      : {}),
+  };
+
+  const record = await prisma.activity
+    .update({
+      where: { id },
+      data,
+      select: activityDetailWithCountSelect,
+    })
+    .catch((error: unknown) => {
+      if (isExclusionViolation(error)) {
+        throw new ApiError(409, 'Classroom is already reserved for an overlapping activity.');
+      }
+      throw error;
+    });
+
+  const checkedInCount = await prisma.attendance.count({
+    where: { activityId: id, checkedInAt: { not: null } },
+  });
+
+  return toActivityDetail(record, record._count.attendance, checkedInCount);
+};
+
+export const cancelActivity = async (id: string, reason?: string): Promise<ActivityDetail> => {
+  const prisma = getPrismaClient();
+
+  const current = await prisma.activity.findUnique({
+    where: { id },
+    select: activityDetailWithCountSelect,
+  });
+
+  if (!current) {
+    throw new ApiError(404, 'Activity not found.');
+  }
+  if (current.status === 'COMPLETED') {
+    throw new ApiError(409, 'Completed activities cannot be cancelled.');
+  }
+
+  let record = current;
+
+  if (current.status !== 'CANCELLED') {
+    if (current.eventProgram.status !== 'ACTIVE') {
+      throw new ApiError(409, 'Event programs must be active to cancel their activities.');
+    }
+
+    record = await prisma.activity.update({
+      where: { id },
+      data: { status: 'CANCELLED', cancelReason: reason ?? null },
+      select: activityDetailWithCountSelect,
+    });
+  }
+
+  const checkedInCount = await prisma.attendance.count({
+    where: { activityId: id, checkedInAt: { not: null } },
+  });
+
+  return toActivityDetail(record, record._count.attendance, checkedInCount);
 };
