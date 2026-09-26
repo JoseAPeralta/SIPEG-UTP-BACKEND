@@ -27,6 +27,10 @@ services:
       NODE_ENV: development
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-sipeg}:${POSTGRES_PASSWORD:-sipeg_password}@db:5432/${POSTGRES_DB:-sipeg_utp}?schema=public
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-9}
+      DATABASE_POOL_CONNECTION_TIMEOUT_MS: ${DATABASE_POOL_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_POOL_IDLE_TIMEOUT_MS: ${DATABASE_POOL_IDLE_TIMEOUT_MS:-30000}
+      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-4}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
@@ -39,6 +43,10 @@ services:
       MAIL_PORT: 1025
       MAIL_SECURE: 'false'
       MAIL_FROM: ${MAIL_FROM:-SIPEG UTP <no-reply@sipeg.local>}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: ${LOG_PRETTY:-true}
+      LOG_SERVICE_NAME: ${LOG_SERVICE_NAME:-sipeg-utp-backend}
+      APP_VERSION: ${APP_VERSION:-1.0.0}
     ports:
       - '${PORT:-3000}:3000'
     volumes:
