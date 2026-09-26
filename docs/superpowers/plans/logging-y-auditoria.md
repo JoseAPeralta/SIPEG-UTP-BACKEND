@@ -162,7 +162,7 @@ Grafana Alloy, Loki, Grafana.
 - `src/app.ts`
 - `src/types/express.d.ts`
 
-- [ ] **T2.1. Escribir tests primero (TDD).**
+- [x] **T2.1. Escribir tests primero (TDD).** (commit `64db03d`)
       Casos:
   - Sin header genera un UUID y responde `X-Request-ID`.
   - Con header UUID válido lo reutiliza.
@@ -172,7 +172,7 @@ Grafana Alloy, Loki, Grafana.
   - Marca rutas no reconocidas como `unmatched`.
   - Excluye health checks exitosos.
   - Registra requests abortados.
-- [ ] **T2.2. Implementar `requestLogger` antes de Helmet y CORS en `src/app.ts`.**
+- [x] **T2.2. Implementar `requestLogger` antes de Helmet y CORS en `src/app.ts`.** (commit `47e6f86`)
       Insertar como primera middleware después de `app.set('trust proxy', 1)` y antes
       de `app.use(helmet(...))` para cubrir también `/api/auth/*`. Debe:
   - Generar/reutilizar `requestId` con validación UUID.
@@ -180,14 +180,16 @@ Grafana Alloy, Loki, Grafana.
   - Responder `X-Request-ID` siempre.
   - Al finalizar, emitir `logType: 'access'` con `event: 'http.request.completed'`.
   - Nivel: 2xx/3xx/4xx esperado `info`, 429 `warn`, 5xx `error`.
-- [ ] **T2.3. Exponer `X-Request-ID` en CORS si el frontend lo necesita.**
+- [x] **T2.3. Exponer `X-Request-ID` en CORS si el frontend lo necesita.** (commit `8a3ffb5`)
       Añadir `exposedHeaders: ['X-Request-ID']` a la configuración de `cors` en
       `src/app.ts`. Si el contrato OpenAPI/bruno lo requiere, documentarlo.
-- [ ] **T2.4. Tipar `req.id` en `src/types/express.d.ts`.**
+- [x] **T2.4. Tipar `req.id` en `src/types/express.d.ts`.** (commit `8a3ffb5`)
       Agregar `id?: string` a `Express.Request`. No duplicar el `requestId` global.
-- [ ] **T2.5. Verificar.**
+- [x] **T2.5. Verificar.**
       `pnpm test src/middlewares/requestLogger.middleware.test.ts`
       `pnpm run typecheck`
+      Verificado 2026-09-26: 17/17 tests del middleware, suite completa
+      1052/1052, typecheck/lint/build en verde.
 
 ---
 
