@@ -23,7 +23,7 @@ function createReqRes(options?: MockRequestOptions) {
   const req = {
     headers,
     method: options?.method ?? 'GET',
-    path: options?.path ?? '/api/v1/health',
+    path: options?.path ?? '/api/v1/users',
     baseUrl: options?.baseUrl ?? '',
     route: options?.route,
   };
@@ -122,9 +122,9 @@ describe('routeTemplate', () => {
 describe('requestLogger middleware', () => {
   const readAccessLogs = (writeSpy: ReturnType<typeof vi.spyOn>) =>
     writeSpy.mock.calls
-      .map((call) => call[0])
-      .filter((chunk) => typeof chunk === 'string' && chunk.includes('"logType":"access"'))
-      .map((chunk) => JSON.parse(chunk as string) as Record<string, unknown>);
+      .map((call: unknown[]) => call[0])
+      .filter((chunk: unknown): chunk is string => typeof chunk === 'string' && chunk.includes('"logType":"access"'))
+      .map((chunk: string) => JSON.parse(chunk) as Record<string, unknown>);
 
   afterEach(() => {
     vi.restoreAllMocks();

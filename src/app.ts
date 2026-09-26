@@ -10,6 +10,7 @@ import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { notFoundHandler } from './middlewares/notFound.middleware.js';
 import { apiRoutes } from './routes.js';
+import { requestLogger } from './middlewares/requestLogger.middleware.js';
 import { ApiError } from './utils/ApiError.js';
 
 const allowedOrigins = [
@@ -24,6 +25,8 @@ const docsEnabled = env.DOCS_ENABLED ?? env.NODE_ENV !== 'production';
 export const app = express();
 
 app.set('trust proxy', 1);
+
+app.use(requestLogger);
 
 app.use(
   helmet({
@@ -47,9 +50,11 @@ app.use(
       callback(new ApiError(403, 'CORS origin is not allowed.'));
     },
     credentials: true,
+    exposedHeaders: ['X-Request-ID'],
   }),
 );
 
+app.post('/api/auth/sign-up/email', notFoundHandler);
 app.all('/api/auth/*splat', toNodeHandler(auth));
 
 app.use(express.json({ limit: '1mb' }));

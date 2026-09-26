@@ -18,6 +18,7 @@ declare global {
     }
 
     interface Request {
+      id?: string;
       user?: AuthenticatedUser;
       authorization?: RequestAuthorization;
     }
