@@ -1,4 +1,4 @@
-import { pino } from 'pino';
+import pino, { stdSerializers, stdTimeFunctions } from 'pino';
 import type { Logger, LoggerOptions } from 'pino';
 
 import { env } from './env.js';
@@ -8,9 +8,9 @@ export interface CreateLoggerOptions {
   environment: string;
   serviceName: string;
   version: string;
-  pseudonymizationKey?: string;
-  pretty?: boolean;
-  stream?: NodeJS.WritableStream;
+  pseudonymizationKey?: string | undefined;
+  pretty?: boolean | undefined;
+  stream?: NodeJS.WritableStream | undefined;
 }
 
 const REDACT_PATHS = [
@@ -31,7 +31,7 @@ const REDACT_PATHS = [
 export async function createLogger(options: CreateLoggerOptions): Promise<Logger> {
   const loggerOptions: LoggerOptions = {
     level: options.level,
-    timestamp: pino.stdTimeFunctions.isoTime,
+    timestamp: stdTimeFunctions.isoTime,
     base: {
       service: options.serviceName,
       version: options.version,
@@ -42,8 +42,8 @@ export async function createLogger(options: CreateLoggerOptions): Promise<Logger
       censor: '[Redacted]',
     },
     serializers: {
-      err: (error: unknown) => {
-        const serialized = pino.stdSerializers.err(error);
+      err: (error: Error) => {
+        const serialized = stdSerializers.err(error);
         if (options.environment === 'production') {
           return { type: serialized.type };
         }
@@ -56,10 +56,8 @@ export async function createLogger(options: CreateLoggerOptions): Promise<Logger
 
   if (options.pretty && options.environment !== 'production') {
     const { default: prettyFactory } = await import('pino-pretty');
-    return pino(
-      { ...loggerOptions, transport: { target: 'pino-pretty', options: { translateTime: 'SYS:standard' } } },
-      stream,
-    );
+    const prettyStream = prettyFactory({ translateTime: 'SYS:standard' });
+    return pino(loggerOptions, prettyStream);
   }
 
   return pino(loggerOptions, stream);
