@@ -14,6 +14,9 @@ const envSchema = z
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     PORT: z.coerce.number().int().positive().default(3000),
     DATABASE_URL: optionalNonEmptyString,
+    DATABASE_POOL_MAX: z.coerce.number().int().positive().max(100).default(9),
+    DATABASE_POOL_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+    DATABASE_POOL_IDLE_TIMEOUT_MS: z.coerce.number().int().nonnegative().default(30_000),
     CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
     AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 chars.'),
     AUTH_URL: z.string().url().default('http://localhost:3000'),
@@ -40,6 +43,16 @@ const envSchema = z
       .transform((value) => value === 'true')
       .optional(),
     LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
+    LOG_PRETTY: z
+      .enum(['true', 'false'])
+      .transform((value) => value === 'true')
+      .optional(),
+    LOG_PSEUDONYMIZATION_KEY: z
+      .string()
+      .min(32, 'LOG_PSEUDONYMIZATION_KEY must be at least 32 chars.')
+      .optional(),
+    LOG_SERVICE_NAME: z.string().min(1).default('sipeg-utp-backend'),
+    APP_VERSION: z.string().min(1).default('1.0.0'),
   })
   .superRefine((value, context) => {
     const corsOrigins = value.CORS_ORIGIN.split(',').map((origin) => origin.trim());
@@ -73,6 +86,14 @@ const envSchema = z
         code: 'custom',
         path: ['MAIL_USER'],
         message: 'MAIL_USER and MAIL_PASSWORD must be provided together.',
+      });
+    }
+
+    if (value.NODE_ENV === 'production' && !value.LOG_PSEUDONYMIZATION_KEY) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LOG_PSEUDONYMIZATION_KEY'],
+        message: 'LOG_PSEUDONYMIZATION_KEY is required in production.',
       });
     }
   });
