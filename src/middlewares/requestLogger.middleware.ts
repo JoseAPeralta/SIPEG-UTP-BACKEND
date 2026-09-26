@@ -1,4 +1,4 @@
-import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 
 import { createChildLogger } from '../config/logger.js';
