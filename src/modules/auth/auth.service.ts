@@ -6,7 +6,9 @@ import { SignJWT, importJWK } from 'jose';
 import { env } from '../../config/env.js';
 import { auth } from '../../lib/auth.js';
 import { getPrismaClient } from '../../config/prisma.js';
+import { logger } from '../../config/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
+import { pseudonymize } from '../../utils/pseudonymize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { parseTtlToMilliseconds } from '../../utils/ttl.js';
 import type {
@@ -136,6 +138,10 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       isActive: user.isActive,
     });
     const refreshExpiresAt = await fetchSessionExpiry(result.token);
+    logger.info(
+      { event: 'auth.login.succeeded', actorPseudonym: pseudonymize(user.id) },
+      'auth.login.succeeded',
+    );
     return {
       accessToken,
       accessTokenExpiresAt: new Date(Date.now() + parseTtlToMilliseconds(env.AUTH_TOKEN_TTL)),
@@ -143,6 +149,10 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       refreshTokenExpiresAt: refreshExpiresAt,
     };
   } catch (error) {
+    logger.warn(
+      { event: 'auth.login.failed', actorPseudonym: pseudonymize(body.email.trim().toLowerCase()) },
+      'auth.login.failed',
+    );
     throwBetterAuthError(error);
     throw new Error('Failed to login.', { cause: error });
   }
@@ -307,6 +317,11 @@ export const changePassword = async (userId: string, body: ChangePasswordBody): 
       where: { userId, token: { not: body.refreshToken } },
     });
   });
+
+  logger.info(
+    { event: 'auth.password.changed', actorPseudonym: pseudonymize(userId) },
+    'auth.password.changed',
+  );
 };
 
 export const logoutUser = async (_body: LogoutBody): Promise<void> => {
@@ -315,6 +330,7 @@ export const logoutUser = async (_body: LogoutBody): Promise<void> => {
     await prisma.session.deleteMany({
       where: { token: _body.refreshToken },
     });
+    logger.info({ event: 'auth.session.revoked' }, 'auth.session.revoked');
   } catch (error) {
     throwBetterAuthError(error);
   }
