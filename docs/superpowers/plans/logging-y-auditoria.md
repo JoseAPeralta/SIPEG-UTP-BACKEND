@@ -209,33 +209,37 @@ Grafana Alloy, Loki, Grafana.
 - `src/server.test.ts` (o dividir el bootstrap de `server.ts` en funciones
   testeables si es necesario)
 
-- [ ] **T3.1. Escribir tests primero para `errorHandler`.**
+- [x] **T3.1. Escribir tests primero para `errorHandler`.** (commit `409d173`)
       Casos:
   - `ApiError` operativo responde su `statusCode` y **no** emite log `error`.
   - Error inesperado responde 500 genérico y emite **un solo** log `error`.
   - El log incluye `requestId` pero no `stack` en producción.
   - El body de la respuesta no filtra detalles internos.
-- [ ] **T3.2. Instrumentar `error.middleware.ts`.**
+- [x] **T3.2. Instrumentar `error.middleware.ts`.** (commit `f805905`)
   - Importar `logger` y `getLogContext`.
   - Registrar errores no operativos con `event: 'http.error.unexpected'`.
   - Serializar el error de forma segura; no duplicar logs que ya emite un
     servicio que lo relanza.
-- [ ] **T3.3. Reemplazar `console.*` en `src/server.ts`.**
+- [x] **T3.3. Reemplazar `console.*` en `src/server.ts`.** (commit `7aea154`)
       Eventos: `app.starting`, `app.listening`, `app.jwks.ready`,
       `app.jwks.failed`, `app.shutdown.signal`, `app.shutdown.forced`,
       `app.shutdown.completed`, `app.fatal`. Mantén el timeout interno de 10 s y
       añade flush acotado del logger antes de `process.exit`.
-- [ ] **T3.4. Manejar `uncaughtException` y `unhandledRejection`.**
+- [x] **T3.4. Manejar `uncaughtException` y `unhandledRejection`.** (commit `7aea154`)
       En `src/server.ts`, registrar `app.fatal` y cerrar de forma ordenada sin
       dejar el proceso colgado.
-- [ ] **T3.5. Adaptar logs de Prisma en `src/config/prisma.ts`.**
+- [x] **T3.5. Adaptar logs de Prisma en `src/config/prisma.ts`.** (commit `21e14bc`)
       Mantener solo `warn`/`error` (nunca `query`), enviándolos al logger común en
       lugar de la salida directa de Prisma. No registrar parámetros de queries.
-- [ ] **T3.6. Reemplazar `console.error` en `src/lib/auth.ts` y `src/modules/users/users.service.ts`.**
+- [x] **T3.6. Reemplazar `console.error` en `src/lib/auth.ts` y `src/modules/users/users.service.ts`.** (commit `a36dbc8`)
       Convertir en `event: 'mail.delivery.failed'` sin destinatario, enlace ni token.
-- [ ] **T3.7. Verificar.**
+- [x] **T3.7. Verificar.**
       `pnpm test src/middlewares/error.middleware.test.ts src/server.test.ts`
       `pnpm run typecheck`
+      Verificado 2026-09-26: 14/14 tests nuevos, suite completa 1066/1066,
+      typecheck/lint en verde, cero `console.*` en los archivos de la fase
+      y smoke test del ciclo de vida completo (starting → listening →
+      jwks.ready → shutdown.signal → shutdown.completed).
 
 ---
 
