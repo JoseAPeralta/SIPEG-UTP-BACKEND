@@ -36,6 +36,7 @@ interface PrismaMock {
 }
 
 const sendVerificationEmailMock = vi.fn();
+const loggerErrorMock = vi.fn();
 
 const createPrismaMock = (): PrismaMock => {
   const prisma: PrismaMock = {
@@ -69,6 +70,9 @@ const loadService = async (prisma: PrismaMock) => {
   }));
   vi.doMock('../../lib/auth.js', () => ({
     auth: { api: { sendVerificationEmail: sendVerificationEmailMock } },
+  }));
+  vi.doMock('../../config/logger.js', () => ({
+    logger: { error: loggerErrorMock },
   }));
 
   return import('./users.service.js');
@@ -124,7 +128,9 @@ describe('users service', () => {
   afterEach(() => {
     vi.doUnmock('../../config/prisma.js');
     vi.doUnmock('../../lib/auth.js');
+    vi.doUnmock('../../config/logger.js');
     sendVerificationEmailMock.mockReset();
+    loggerErrorMock.mockReset();
   });
 
   it('returns the profile of an existing user', async () => {
@@ -521,7 +527,6 @@ describe('users service', () => {
     firstName: 'Ana',
     lastName: 'Gomez',
     identificationNumber: '8-888-1234',
-    globalRole: 'USER' as const,
     isActive: true,
   };
 
@@ -559,6 +564,22 @@ describe('users service', () => {
     expect(accountArgs.data.userId).toBe('user-001');
     expect(accountArgs.data.password.startsWith('$argon2id$')).toBe(true);
     expect(await verifyPassword(accountArgs.data.password, createInput.password)).toBe(true);
+  });
+
+  it('forces USER when an untrusted caller supplies ADMIN', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue(adminUserRecord);
+    const { createUser } = await loadService(prisma);
+
+    await createUser({
+      ...createInput,
+      globalRole: 'ADMIN',
+    } as Parameters<typeof createUser>[0]);
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ globalRole: 'USER' }) }),
+    );
   });
 
   it('normalizes the email and sends the verification email', async () => {
@@ -716,12 +737,10 @@ describe('users service', () => {
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.user.create.mockResolvedValue(adminUserRecord);
     sendVerificationEmailMock.mockRejectedValue(new Error('smtp down'));
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { createUser } = await loadService(prisma);
 
     await expect(createUser(createInput)).resolves.toEqual(adminUserRecord);
-    expect(errorSpy).toHaveBeenCalledWith('Failed to send account verification email.');
-    errorSpy.mockRestore();
+    expect(loggerErrorMock).toHaveBeenCalledWith({ event: 'mail.delivery.failed' }, 'mail.delivery.failed');
   });
 
   it('selects only safe fields for the created user', async () => {
@@ -743,27 +762,24 @@ describe('users service', () => {
     expect(createArgs.select).not.toHaveProperty('emailVerified');
   });
 
-  it('updates role and status and returns the administrative view', async () => {
+  it('promotes an active user and returns the administrative view', async () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
     prisma.user.update.mockResolvedValue({
       ...adminUserRecord,
       globalRole: 'ADMIN',
-      isActive: false,
+      isActive: true,
     });
     const { updateAdminUser } = await loadService(prisma);
 
-    const updated = await updateAdminUser('user-admin', 'user-target', {
-      globalRole: 'ADMIN',
-      isActive: false,
-    });
+    const updated = await updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN' });
 
     expect(updated.globalRole).toBe('ADMIN');
-    expect(updated.isActive).toBe(false);
+    expect(updated.isActive).toBe(true);
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'user-target' },
-        data: { globalRole: 'ADMIN', isActive: false },
+        data: { globalRole: 'ADMIN' },
       }),
     );
   });
@@ -790,6 +806,34 @@ describe('users service', () => {
     await updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN' });
 
     expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects promoting an inactive user even when the request also reactivates it', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ ...updateTargetRecord, isActive: false });
+    const { updateAdminUser } = await loadService(prisma);
+
+    await expect(
+      updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN', isActive: true }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Only active users can be promoted to administrator.',
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects promoting and deactivating a user in the same request', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
+    const { updateAdminUser } = await loadService(prisma);
+
+    await expect(
+      updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN', isActive: false }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Only active users can be promoted to administrator.',
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it('fails when the requested user does not exist', async () => {
