@@ -9,7 +9,6 @@ import {
 } from 'jose';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { logger } from '../config/logger.js';
 import { ApiError } from '../utils/ApiError.js';
 
 const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
