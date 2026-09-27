@@ -1,7 +1,15 @@
 import type { Request, Response } from 'express';
 import { describe, expect, it, vi } from 'vitest';
 
+import { logger } from '../config/logger.js';
 import { ApiError } from '../utils/ApiError.js';
+
+const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
+
+vi.mock('../config/logger.js', () => ({
+  logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
+  createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+}));
 
 const buildReq = (overrides: Partial<Request> = {}): Request =>
   ({ ip: '127.0.0.1', ...overrides }) as unknown as Request;
@@ -22,6 +30,33 @@ describe('rate limit middleware', () => {
     middleware(buildReq(), buildRes(), next);
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(429);
+  });
+
+  it('logs rate_limit.exceeded with the limiter name and no internal key', async () => {
+    vi.resetModules();
+    const expressRateLimit = vi.fn(({ handler }) => handler);
+    vi.doMock('express-rate-limit', () => ({
+      default: expressRateLimit,
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { authRateLimit } = await import('./rateLimit.middleware.js');
+    const middleware = authRateLimit({
+      windowMs: 60_000,
+      max: 1,
+      name: 'login.email',
+    });
+    const next = vi.fn();
+    middleware(
+      buildReq({ body: { email: 'user@example.com' }, ip: '1.2.3.4' }),
+      buildRes(),
+      next,
+    );
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'rate_limit.exceeded', limiter: 'login.email' }),
+      'rate_limit.exceeded',
+    );
+    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('user@example.com');
+    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('1.2.3.4');
   });
 
   it('prefers user id over ip when authenticated', async () => {
@@ -54,5 +89,89 @@ describe('rate limit middleware', () => {
     expect(forgotPasswordRateLimit).not.toBe(resetPasswordRateLimit);
     expect(forgotPasswordRateLimit).not.toBe(emailVerificationRateLimit);
     expect(resetPasswordRateLimit).not.toBe(emailVerificationRateLimit);
+  });
+
+  it('keys email limiters by normalized email and ip', async () => {
+    vi.resetModules();
+    let capturedKey: string | undefined;
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(({ keyGenerator }) => {
+        capturedKey = keyGenerator({
+          body: { email: '  User@Example.COM ' },
+          ip: '::ffff:1.2.3.4',
+        } as unknown as Request);
+        return () => {};
+      }),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { emailAuthRateLimit } = await import('./rateLimit.middleware.js');
+
+    emailAuthRateLimit({ windowMs: 60_000, max: 1 });
+
+    expect(capturedKey).toBe('email:user@example.com|ip:1.2.3.4');
+  });
+
+  it('falls back to the ip key when the body has no email', async () => {
+    vi.resetModules();
+    let capturedKey: string | undefined;
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(({ keyGenerator }) => {
+        capturedKey = keyGenerator({ body: {}, ip: '1.2.3.4' } as unknown as Request);
+        return () => {};
+      }),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { emailAuthRateLimit } = await import('./rateLimit.middleware.js');
+
+    emailAuthRateLimit({ windowMs: 60_000, max: 1 });
+
+    expect(capturedKey).toBe('ip:1.2.3.4');
+  });
+
+  it('prefers the authenticated user id in email limiters', async () => {
+    vi.resetModules();
+    let capturedKey: string | undefined;
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(({ keyGenerator }) => {
+        capturedKey = keyGenerator({
+          body: { email: 'user@example.com' },
+          ip: '1.2.3.4',
+          user: { id: 'user-1' },
+        } as unknown as Request);
+        return () => {};
+      }),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { emailAuthRateLimit } = await import('./rateLimit.middleware.js');
+
+    emailAuthRateLimit({ windowMs: 60_000, max: 1 });
+
+    expect(capturedKey).toBe('user:user-1');
+  });
+
+  it('runs chained limiters in order and stops on the first rejection', async () => {
+    vi.resetModules();
+    const seenMax: number[] = [];
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(
+        ({ limit }) =>
+          (_req: Request, _res: Response, next: (error?: unknown) => void) => {
+            seenMax.push(limit as number);
+            if (limit === 30) {
+              next(new ApiError(429, 'Too many login attempts. Try again in one minute.'));
+              return;
+            }
+            next();
+          },
+      ),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { loginRateLimit } = await import('./rateLimit.middleware.js');
+    const next = vi.fn();
+
+    loginRateLimit(buildReq(), buildRes(), next);
+
+    expect(seenMax).toEqual([30]);
+    expect((next.mock.calls[0]?.[0] as ApiError | undefined)?.statusCode).toBe(429);
   });
 });
