@@ -3,6 +3,8 @@ import type { Request, RequestHandler } from 'express';
 import { getEffectivePermissions } from '../modules/authorization/authorization.service.js';
 import type { AuthorizationScope } from '../modules/authorization/authorization.types.js';
 import { PERMISSION_NAMES, type PermissionName } from '../modules/authorization/permissions.js';
+import { logger } from '../config/logger.js';
+import { pseudonymize } from '../utils/pseudonymize.js';
 import { ApiError } from '../utils/ApiError.js';
 import { requireAuthenticatedUser } from './authenticate.middleware.js';
 
@@ -17,6 +19,15 @@ export const requireRole = (...allowed: GlobalRole[]): RequestHandler => {
     try {
       const user = requireAuthenticatedUser(req);
       if (!allowed.includes(user.globalRole)) {
+        logger.warn(
+          {
+            event: 'authorization.denied',
+            actorPseudonym: pseudonymize(user.id),
+            requiredRole: allowed.join(','),
+            actualRole: user.globalRole,
+          },
+          'authorization.denied',
+        );
         throw new ApiError(403, 'Insufficient privileges for this resource.');
       }
       next();
@@ -36,6 +47,10 @@ export const requireOwnership = (
       const user = requireAuthenticatedUser(req);
       const ownerId = selector(req);
       if (!ownerId || ownerId !== user.id) {
+        logger.warn(
+          { event: 'authorization.denied', actorPseudonym: pseudonymize(user.id) },
+          'authorization.denied',
+        );
         throw new ApiError(403, 'You do not own this resource.');
       }
       next();
@@ -68,6 +83,16 @@ export const requirePermission = (
       req.authorization = { permissions };
 
       if (!permissions.has(permission)) {
+        logger.warn(
+          {
+            event: 'authorization.denied',
+            actorPseudonym: pseudonymize(user.id),
+            requiredPermission: permission,
+            eventProgramId: scope.eventProgramId,
+            activityId: scope.activityId,
+          },
+          'authorization.denied',
+        );
         throw new ApiError(403, 'Insufficient privileges for this resource.');
       }
 

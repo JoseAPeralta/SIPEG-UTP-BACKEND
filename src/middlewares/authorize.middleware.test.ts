@@ -172,8 +172,7 @@ describe('requirePermission middleware', () => {
         event: 'authorization.denied',
         actorPseudonym: expect.any(String),
         requiredPermission: 'activity:update',
-        scopeType: 'eventProgram',
-        scopeId: 'p1',
+        eventProgramId: 'p1',
       }),
       'authorization.denied',
     );
