@@ -269,32 +269,37 @@ Grafana Alloy, Loki, Grafana.
 | `security.cors.denied`  | `app.ts`                       | warn  |
 | `mail.delivery.failed`  | `auth.ts` / `users.service.ts` | error |
 
-- [ ] **T4.1. Implementar utilidad HMAC de pseudonimización.**
+- [x] **T4.1. Implementar utilidad HMAC de pseudonimización.** (commit `f13bcec`)
       Crear función `pseudonymize(value)` usando `LOG_PSEUDONYMIZATION_KEY`. Se usa
       para email (`actorPseudonym`) e IP. No registrar email ni IP en claro en
       eventos de seguridad. Añadir tests.
-- [ ] **T4.2. Escribir tests primero de cada evento.**
+- [x] **T4.2. Escribir tests primero de cada evento.** (commit `eb3d18b`)
       Casos críticos:
   - JWT rechazado no aparece en el log.
   - Login fallido no revela existencia del usuario.
   - Email/IP se pseudonimizan.
   - 403 registra permiso requerido, scope validado y actor, no el payload.
   - 429 registra el nombre del limiter, no su clave interna.
-- [ ] **T4.3. Instrumentar autenticación y autorización.**
+- [x] **T4.3. Instrumentar autenticación y autorización.** (commit `bfa0471`)
       `authenticate` y `authorize` emiten sus eventos sin incluir cabeceras. En
       `requirePermission`/`requireRole`/`requireOwnership` registra el motivo de la
       denegación.
-- [ ] **T4.4. Instrumentar rate limiting.**
+- [x] **T4.4. Instrumentar rate limiting.** (commit `8d2fcd7`)
       El `handler` de `authRateLimit` registra `rate_limit.exceeded` con el nombre
       del limiter. No registrar la clave (que puede contener email/IP).
-- [ ] **T4.5. Instrumentar flujos de auth en `auth.service.ts`.**
+- [x] **T4.5. Instrumentar flujos de auth en `auth.service.ts`.** (commit `916925c`)
       Login, refresh, logout, cambio de contraseña, verificación y reset. Nunca
       registrar tokens ni passwords.
-- [ ] **T4.6. Instrumentar denegación CORS en `app.ts`.**
+- [x] **T4.6. Instrumentar denegación CORS en `app.ts`.** (commit `566d3f1`)
       En el callback `origin` de `cors`, emitir `security.cors.denied` con el origen
       rechazado (es un dato de configuración, no PII).
-- [ ] **T4.7. Verificar.**
+- [x] **T4.7. Verificar.**
       `pnpm test` (foco en middleware y auth) y `pnpm run typecheck`.
+      Verificado 2026-09-26: 1077/1077 tests, typecheck/lint en verde.
+      Los 11 eventos de seguridad están instrumentados y cubren: token
+      inválido, cuenta desautorizada, login exitoso/fallado, cambio de
+      password, revocación de sesión, autorización denegada (rol,
+      permiso, ownership), rate limit, CORS y mail.delivery.failed.
 
 ---
 
