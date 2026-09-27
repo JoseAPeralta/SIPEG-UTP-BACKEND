@@ -1,8 +1,6 @@
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { logger } from './config/logger.js';
-
 const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
 
 vi.mock('./config/logger.js', () => ({

@@ -7,7 +7,6 @@ import {
 } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { logger } from '../../config/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 
 const { loggerInfo, loggerWarn } = vi.hoisted(() => ({ loggerInfo: vi.fn(), loggerWarn: vi.fn() }));
