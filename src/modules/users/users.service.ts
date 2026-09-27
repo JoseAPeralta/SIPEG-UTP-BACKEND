@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { getPrismaClient } from '../../config/prisma.js';
+import { logger } from '../../config/logger.js';
 import { auth } from '../../lib/auth.js';
 import { hashPassword } from '../../lib/password.js';
 import { ApiError } from '../../utils/ApiError.js';
@@ -196,7 +197,7 @@ const sendAccountVerificationEmail = async (email: string): Promise<void> => {
   try {
     await auth.api.sendVerificationEmail({ body: { email } });
   } catch {
-    console.error('Failed to send account verification email.');
+    logger.error({ event: 'mail.delivery.failed' }, 'mail.delivery.failed');
   }
 };
 
@@ -236,7 +237,7 @@ export const createUser = async (input: CreateUserInput): Promise<AdminUserRespo
           identificationNumber: input.identificationNumber,
           email,
           emailVerified: false,
-          globalRole: input.globalRole,
+          globalRole: 'USER',
           isActive: input.isActive,
           unitId: organization.unitId ?? null,
           careerId: organization.careerId ?? null,
@@ -364,6 +365,11 @@ export const updateAdminUser = async (
     if (input.globalRole !== undefined && input.globalRole !== currentUser.globalRole) {
       throw new ApiError(409, 'You cannot change your own role.');
     }
+  }
+
+  const promotesToAdmin = currentUser.globalRole === 'USER' && input.globalRole === 'ADMIN';
+  if (promotesToAdmin && (!currentUser.isActive || input.isActive === false)) {
+    throw new ApiError(409, 'Only active users can be promoted to administrator.');
   }
 
   const data: AdminUserUpdateData = {};

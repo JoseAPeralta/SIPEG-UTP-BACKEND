@@ -3,6 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { jwt } from 'better-auth/plugins';
 
 import { getPrismaClient } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { env } from '../config/env.js';
 import { parseTtlToSeconds } from '../utils/ttl.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../modules/auth/auth.email.js';
@@ -16,7 +17,7 @@ const trustedOrigins = [
 ];
 
 const reportEmailDeliveryFailure = (): void => {
-  console.error('Failed to deliver authentication email.');
+  logger.error({ event: 'mail.delivery.failed' }, 'mail.delivery.failed');
 };
 
 export const auth = betterAuth({
@@ -74,7 +75,7 @@ export const auth = betterAuth({
         required: true,
         input: true,
       },
-      globalRole: { type: 'string', required: false, input: false },
+      globalRole: { type: 'string', required: false, input: false, defaultValue: 'USER' },
       isActive: { type: 'boolean', required: false, input: false },
       unitId: { type: 'string', required: false, input: true },
       careerId: { type: 'string', required: false, input: true },
