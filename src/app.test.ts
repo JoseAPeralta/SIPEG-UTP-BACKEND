@@ -1,6 +1,15 @@
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { logger } from './config/logger.js';
+
+const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
+
+vi.mock('./config/logger.js', () => ({
+  logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
+  createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+}));
+
 const loadApp = async (docsEnabled?: string) => {
   process.env['NODE_ENV'] = 'test';
   process.env['AUTH_SECRET'] = 'a'.repeat(32);
@@ -74,7 +83,7 @@ describe('security middleware', () => {
     delete process.env['DOCS_ENABLED'];
   });
 
-  it('rejects requests from origins outside the allowlist', async () => {
+  it('rejects requests from origins outside the allowlist and logs security.cors.denied', async () => {
     const { app } = await loadApp();
 
     const response = await request(app)
@@ -87,6 +96,10 @@ describe('security middleware', () => {
       message: 'CORS origin is not allowed.',
       errors: [],
     });
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'security.cors.denied', origin: 'https://evil.example' }),
+      'security.cors.denied',
+    );
   });
 
   it('allows requests from the configured origin', async () => {
@@ -109,5 +122,17 @@ describe('security middleware', () => {
     expect(response.headers['referrer-policy']).toBe('no-referrer');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['cross-origin-resource-policy']).toBe('same-site');
+  });
+
+  it('does not expose the native Better Auth email sign-up endpoint', async () => {
+    const { app } = await loadApp();
+
+    const response = await request(app).post('/api/auth/sign-up/email').expect(404);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'Route /api/auth/sign-up/email not found.',
+      errors: [],
+    });
   });
 });

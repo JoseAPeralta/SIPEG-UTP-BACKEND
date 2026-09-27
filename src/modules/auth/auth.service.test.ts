@@ -7,7 +7,15 @@ import {
 } from 'jose';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { logger } from '../../config/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
+
+const { loggerInfo, loggerWarn } = vi.hoisted(() => ({ loggerInfo: vi.fn(), loggerWarn: vi.fn() }));
+
+vi.mock('../../config/logger.js', () => ({
+  logger: { error: vi.fn(), info: loggerInfo, warn: loggerWarn },
+  createChildLogger: vi.fn(() => ({ error: vi.fn(), info: loggerInfo, warn: loggerWarn })),
+}));
 
 interface AuthMock {
   api: {
@@ -71,6 +79,9 @@ const loadService = async (authMock: AuthMock, prismaMock: PrismaMock) => {
       AUTH_TOKEN_TTL: '15m',
       AUTH_PASSWORD_RESET_URL: 'http://localhost:5173/reset-password',
     },
+  }));
+  vi.doMock('../../config/logger.js', () => ({
+    logger: { error: vi.fn(), info: loggerInfo, warn: loggerWarn },
   }));
   return import('./auth.service.js');
 };
@@ -692,6 +703,79 @@ describe('auth service', () => {
     await logoutUser({ refreshToken: 'refresh-1' });
     expect(prismaMock.session.deleteMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { token: 'refresh-1' } }),
+    );
+  });
+
+  it('logs auth.login.succeeded with actorPseudonym on successful login', async () => {
+    authMock.api.signInEmail.mockResolvedValue({
+      token: 'refresh-token',
+      redirect: false,
+      user: { id: 'u-1' },
+    });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u-1',
+      email: 'a@b.com',
+      globalRole: 'USER',
+      unitId: null,
+      careerId: null,
+      isActive: true,
+    });
+    prismaMock.session.findFirst.mockResolvedValue({
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    const { loginWithPassword } = await loadService(authMock, prismaMock);
+    await loginWithPassword({ email: 'a@b.com', password: 'strongpass1234' });
+
+    expect(loggerInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'auth.login.succeeded', actorPseudonym: expect.any(String) }),
+      'auth.login.succeeded',
+    );
+    expect(JSON.stringify(loggerInfo.mock.calls)).not.toContain('a@b.com');
+  });
+
+  it('logs auth.login.failed with actorPseudonym on failed login', async () => {
+    authMock.api.signInEmail.mockRejectedValue(new Error('Invalid credentials.'));
+
+    const { loginWithPassword } = await loadService(authMock, prismaMock);
+    await expect(
+      loginWithPassword({ email: 'a@b.com', password: 'wrong' }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'auth.login.failed', actorPseudonym: expect.any(String) }),
+      'auth.login.failed',
+    );
+    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('a@b.com');
+  });
+
+  it('logs auth.password.changed with actorPseudonym', async () => {
+    const currentHash = await hashPassword('currentpass123');
+    prismaMock.account.findFirst.mockResolvedValue({ id: 'acc-1', password: currentHash });
+    prismaMock.session.findFirst.mockResolvedValue({ id: 'session-current' });
+
+    const { changePassword } = await loadService(authMock, prismaMock);
+    await changePassword('u-1', {
+      currentPassword: 'currentpass123',
+      newPassword: 'newstrongpass12',
+      refreshToken: 'current-token',
+    });
+
+    expect(loggerInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'auth.password.changed', actorPseudonym: expect.any(String) }),
+      'auth.password.changed',
+    );
+  });
+
+  it('logs auth.session.revoked on logout', async () => {
+    prismaMock.session.deleteMany.mockResolvedValue({ count: 1 });
+
+    const { logoutUser } = await loadService(authMock, prismaMock);
+    await logoutUser({ refreshToken: 'refresh-1' });
+
+    expect(loggerInfo).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'auth.session.revoked' }),
+      'auth.session.revoked',
     );
   });
 
