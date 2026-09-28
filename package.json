@@ -38,7 +38,8 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:status": "prisma migrate status",
     "prisma:seed": "prisma db seed",
-    "prisma:seed:base": "tsx prisma/seed.base.ts"
+    "prisma:seed:base": "tsx prisma/seed.base.ts",
+    "prisma:cleanup:dev": "tsx prisma/scripts/cleanup-dev-activities.ts"
   },
   "engines": {
     "node": ">=24.0.0 <25"

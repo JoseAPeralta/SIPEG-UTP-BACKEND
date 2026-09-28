@@ -116,6 +116,28 @@ Luego restaura `backup.sql` en el nuevo volumen antes de levantar la API. El nom
 - `pnpm run prisma:migrate:status`: reporta el estado de las migraciones.
 - `pnpm run prisma:seed`: siembra el catalogo de permisos y los datos de prueba completos (solo desarrollo; idempotente).
 - `pnpm run prisma:seed:base`: siembra el catalogo base de produccion (unidades, programas predeterminados, carreras, aulas y permisos) y el ADMIN inicial; crea solo lo que falta.
+- `pnpm run prisma:cleanup:dev`: purga los residuos de actividades que dejan las corridas de Bruno y las verificaciones. Ver `docs/er-diagram/ER-design-justification.md` seccion 4.4 para por que hace falta deshabilitar triggers.
+
+### Purgar residuos de desarrollo
+
+La regla de retencion prohibe borrar fisicamente una actividad que no sea `DRAFT` de un programa `ACTIVE`, y el trigger `activities_prevent_delete` lo aplica tambien al `DELETE` directo por SQL. Por eso los residuos de una corrida de Bruno (por ejemplo la actividad que los tests de cancelacion dejan en `CANCELLED`) no se pueden limpiar con un `DELETE` normal.
+
+El script simula por defecto y solo borra con `--apply`:
+
+```bash
+pnpm run prisma:cleanup:dev -- --pattern='Actividad temporal%'
+pnpm run prisma:cleanup:dev -- --pattern='Actividad temporal%' --apply
+```
+
+Reglas de seguridad que aplica:
+
+- **Simulacion por defecto.** Sin `--apply` solo imprime el plan, las razones por las que conserva cada actividad y los conteos.
+- **Nunca en produccion.** Se niega a correr con `NODE_ENV=production` salvo `SEED_ALLOW_PRODUCTION=true`, igual que el seed demo.
+- **Nunca por accidente.** Rechaza un patron que no coincide con nada (`no-match`), que dejaria todo lo que coincide retenido (`all-retained`) o que alcanzaria todas las actividades de la base (`pattern-too-broad`).
+- **Nunca con historia.** Conserva cualquier actividad con asistencia o alertas, que es lo que la retencion protege.
+- **Triggers siempre rehabilitados.** El borrado deshabilita `activities_prevent_delete` y `event_programs_prevent_delete` dentro de una transaccion y los vuelve a habilitar en el `finally`, incluso si el borrado falla.
+
+El patron acepta sintaxis `LIKE` de PostgreSQL, con `%` y `_`.
 
 ## API Inicial
 
@@ -335,9 +357,11 @@ Mutacion sensible -> misma transaccion Prisma -> audit_events (PostgreSQL append
 
 - Cada respuesta incluye `X-Request-ID` (UUID aceptado o generado); usalo para
   correlacionar un acceso con su error en Grafana.
-- Etiquetas Loki: `service`, `environment`, `log_type`, `level`, `container`.
-  `requestId`, `actorId`, IDs de recurso, IPs y trace IDs viven en el JSON, nunca
-  como labels.
+- Etiquetas Loki: `service`, `environment`, `log_type`, `level` y `container`
+  (el nombre del servicio Compose). `requestId`, `event`, `route`, `method`,
+  `statusCode`, `actorId`, IDs de recurso, IPs y trace IDs viven en el JSON y en
+  structured metadata, nunca como labels. Los contenedores que no son JSON
+  (por ejemplo `db`) solo llevan `container`.
 - Retencion: 30 dias para access/aplicacion/infraestructura y 90 dias para
   `log_type="security"` (produccion); 7 dias en desarrollo.
 - La API funciona aunque Loki este caido: escribe a stdout y el driver `local`
@@ -352,19 +376,37 @@ Variables de entorno nuevas (ver `.env.example`):
 - `LOG_PSEUDONYMIZATION_KEY` (obligatoria en produccion, minimo 32 caracteres):
   clave HMAC para pseudonimizar email/IP en eventos de seguridad.
 
-Cuando el stack de observabilidad este implementado (fase 9 del plan):
+`compose.observability.yaml` es un overlay: Loki, `docker-socket-proxy` y Alloy
+(falta Grafana, T9.4). Loki y Alloy viven en su propia red `observability` y
+alcanzan los logs por el socket de Docker, no por la red de la aplicacion.
 
 ```bash
+# Desarrollo (retencion de 7 dias):
+LOKI_CONFIG=config.dev.yaml \
+  docker compose -f compose.dev.yaml -f compose.observability.yaml up -d
+
+# Produccion (30 dias, 90 dias para log_type="security"):
 docker compose -f compose.prod.yaml -f compose.observability.yaml --env-file .env.prod up -d
 ```
 
-- Grafana queda en `127.0.0.1` (o detras de un proxy con TLS); Loki y Alloy no
+- `LOKI_CONFIG` elige `observability/loki/config.yaml` (por defecto) o
+  `config.dev.yaml`.
+- El overlay fuerza `LOG_PRETTY=false` en el servicio `api`: `pino-pretty` no es
+  JSON y sin JSON no hay etiquetas. En produccion no cambia nada.
+- Grafana quedara en `127.0.0.1` (o detras de un proxy con TLS); Loki y Alloy no
   publican puertos.
 - En Grafana, la consulta base en Loki es
   `{service="sipeg-utp-backend", environment="production"}` y la busqueda por
-  peticion es `{service="sipeg-utp-backend"} |= "<X-Request-ID>"`.
+  peticion es `{service="sipeg-utp-backend"} |= "<X-Request-ID>"`, o el filtro
+  indexado `| requestId="<X-Request-ID>"` (structured metadata).
 - Acceso al Docker socket mediante `docker-socket-proxy` de solo lectura, nunca
-  montando `/var/run/docker.sock` directamente en Alloy.
+  montando `/var/run/docker.sock` directamente en Alloy. `POST=0` deja pasar solo
+  `GET`/`HEAD`; `NETWORKS=1` es necesario porque Alloy lista redes para resolver
+  los nombres de red de cada contenedor.
+- `docker compose ... down` sobre el proyecto combinado tambien baja la aplicacion
+  y borra sus volumenes: para retirar solo el stack de observabilidad, usa
+  `docker compose -f compose.dev.yaml -f compose.observability.yaml rm -sf loki alloy docker-socket-proxy`
+  (o `stop`).
 
 ### Auditoria
 
