@@ -12,19 +12,31 @@ interface PrismaMock {
     findUnique: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
 }
 
-const createPrismaMock = (): PrismaMock => ({
-  activity: { count: vi.fn(), groupBy: vi.fn() },
-  organizationalUnit: { findUnique: vi.fn() },
-  eventProgram: {
-    count: vi.fn(),
-    create: vi.fn(),
-    findMany: vi.fn(),
-    findUnique: vi.fn(),
-    update: vi.fn(),
-  },
-});
+const createPrismaMock = (): PrismaMock => {
+  const prisma: PrismaMock = {
+    activity: { count: vi.fn(), groupBy: vi.fn() },
+    organizationalUnit: { findUnique: vi.fn() },
+    eventProgram: {
+      count: vi.fn(),
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
+    $transaction: vi.fn(),
+  };
+
+  prisma.$transaction.mockImplementation(
+    async (callback: (client: PrismaMock) => Promise<unknown>) => callback(prisma),
+  );
+
+  return prisma;
+};
 
 const hasPermissionMock = vi.fn();
 
@@ -301,6 +313,54 @@ describe('createEventProgram', () => {
       endDate: '2026-10-16',
     });
   });
+
+  it('writes one creation event inside the transaction', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-001', isActive: true });
+    prisma.eventProgram.create.mockResolvedValue(createdRecord);
+    const { createEventProgram } = await loadService(prisma);
+
+    await createEventProgram(input, 'admin-001', {
+      actorId: 'admin-001',
+      actorType: 'USER',
+      requestId: 'req-020',
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'event_program.created',
+        actorId: 'admin-001',
+        resourceType: 'event_program',
+        resourceId: 'program-001',
+        requestId: 'req-020',
+        changes: {
+          after: {
+            status: 'DRAFT',
+            startDate: '2026-10-12',
+            endDate: '2026-10-16',
+            organizationalUnitId: 'unit-001',
+          },
+        },
+        metadata: { hasLabel: true },
+      }),
+    });
+    expect(prisma.eventProgram.create.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.auditEvent.create.mock.invocationCallOrder[0] as number,
+    );
+  });
+
+  it('does not audit a creation rejected by validation', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-001', isActive: false });
+    const { createEventProgram } = await loadService(prisma);
+
+    await expect(createEventProgram(input, 'admin-001')).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('updateEventProgram', () => {
@@ -315,6 +375,10 @@ describe('updateEventProgram', () => {
     isDefault: false,
     startDate: new Date('2026-10-12T00:00:00.000Z'),
     endDate: new Date('2026-10-16T00:00:00.000Z'),
+    name: 'Congreso de Innovacion',
+    description: null,
+    label: null,
+    bannerUrl: null,
   };
 
   const updatedRecord = {
@@ -491,6 +555,89 @@ describe('updateEventProgram', () => {
     await updateEventProgram('program-001', { name: 'Congreso actualizado' });
 
     expect(prisma.activity.count).not.toHaveBeenCalled();
+  });
+
+  it('writes a single publish audit event when a draft is activated', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ ...storedRecord, status: 'DRAFT' });
+    prisma.eventProgram.update.mockResolvedValue({ ...updatedRecord, status: 'ACTIVE' });
+    const { updateEventProgram } = await loadService(prisma);
+
+    await updateEventProgram(
+      'program-001',
+      { status: 'ACTIVE' },
+      {
+        actorId: 'user-001',
+        actorType: 'USER',
+        requestId: 'req-010',
+      },
+    );
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'event_program.published',
+        actorId: 'user-001',
+        resourceType: 'event_program',
+        resourceId: 'program-001',
+        requestId: 'req-010',
+        changes: { before: { status: 'DRAFT' }, after: { status: 'ACTIVE' } },
+      }),
+    });
+  });
+
+  it('audits a plain field update as an attribute change, not as a publication', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(storedRecord);
+    prisma.eventProgram.update.mockResolvedValue(updatedRecord);
+    const { updateEventProgram } = await loadService(prisma);
+
+    await updateEventProgram('program-001', { name: 'Congreso actualizado' });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'event_program.updated',
+        resourceId: 'program-001',
+        metadata: { changedFields: ['name'] },
+      }),
+    });
+  });
+
+  it('does not audit an update that repeats the stored values', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(storedRecord);
+    prisma.eventProgram.update.mockResolvedValue(updatedRecord);
+    const { updateEventProgram } = await loadService(prisma);
+
+    await updateEventProgram('program-001', { name: storedRecord.name });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit an activation rejected as non-draft', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(storedRecord);
+    const { updateEventProgram } = await loadService(prisma);
+
+    await expect(updateEventProgram('program-001', { status: 'ACTIVE' })).rejects.toMatchObject({
+      statusCode: 409,
+    });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the program when the publish audit insert fails', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ ...storedRecord, status: 'DRAFT' });
+    prisma.eventProgram.update.mockResolvedValue({ ...updatedRecord, status: 'ACTIVE' });
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+    const { updateEventProgram } = await loadService(prisma);
+
+    await expect(updateEventProgram('program-001', { status: 'ACTIVE' })).rejects.toThrow(
+      'audit insert failed',
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -738,6 +885,55 @@ describe('archiveEventProgram', () => {
     expect(prisma.activity.count).not.toHaveBeenCalled();
     expect(prisma.eventProgram.update).not.toHaveBeenCalled();
   });
+
+  it('writes a single archive audit event inside the transaction', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(archivableRecord);
+    prisma.activity.count.mockResolvedValue(0);
+    prisma.eventProgram.update.mockResolvedValue({ ...createdRecord, status: 'ARCHIVED' });
+    const { archiveEventProgram } = await loadService(prisma);
+
+    await archiveEventProgram('program-001', {
+      actorId: 'user-001',
+      actorType: 'USER',
+      requestId: 'req-020',
+    });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'event_program.archived',
+        actorId: 'user-001',
+        resourceType: 'event_program',
+        resourceId: 'program-001',
+        requestId: 'req-020',
+        changes: { before: { status: 'ACTIVE' }, after: { status: 'ARCHIVED' } },
+      }),
+    });
+  });
+
+  it('does not audit an already archived program', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(archivedRecord);
+    const { archiveEventProgram } = await loadService(prisma);
+
+    await archiveEventProgram('program-001');
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit an archive rejected by a blocking activity', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(archivableRecord);
+    prisma.activity.count.mockResolvedValue(2);
+    const { archiveEventProgram } = await loadService(prisma);
+
+    await expect(archiveEventProgram('program-001')).rejects.toMatchObject({
+      statusCode: 409,
+    });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('reactivateEventProgram', () => {
@@ -785,6 +981,43 @@ describe('reactivateEventProgram', () => {
       message: 'Event program not found.',
     });
     expect(prisma.eventProgram.update).not.toHaveBeenCalled();
+  });
+
+  it('writes a single reactivation audit event inside the transaction', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(archivedProgram);
+    prisma.eventProgram.update.mockResolvedValue(reactivatedRecord);
+    const { reactivateEventProgram } = await loadService(prisma);
+
+    await reactivateEventProgram('program-001', {
+      actorId: 'user-001',
+      actorType: 'USER',
+      requestId: 'req-030',
+    });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'event_program.reactivated',
+        actorId: 'user-001',
+        resourceType: 'event_program',
+        resourceId: 'program-001',
+        requestId: 'req-030',
+        changes: { before: { status: 'ARCHIVED' }, after: { status: 'ACTIVE' } },
+      }),
+    });
+  });
+
+  it('does not audit a reactivation rejected as non-archived', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ ...archivedProgram, status: 'ACTIVE' });
+    const { reactivateEventProgram } = await loadService(prisma);
+
+    await expect(reactivateEventProgram('program-001')).rejects.toMatchObject({
+      statusCode: 409,
+    });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
   });
 
   it('rejects default event programs with 409', async () => {

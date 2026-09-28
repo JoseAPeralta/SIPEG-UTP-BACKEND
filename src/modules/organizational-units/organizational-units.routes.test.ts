@@ -20,6 +20,7 @@ interface PrismaMock {
   };
   eventProgram: { create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   activity: { count: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -35,6 +36,7 @@ const createPrismaMock = (): PrismaMock => {
     },
     eventProgram: { create: vi.fn(), update: vi.fn() },
     activity: { count: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
     $transaction: vi.fn(),
   };
 

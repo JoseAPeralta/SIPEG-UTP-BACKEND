@@ -1,5 +1,7 @@
 import { getPrismaClient } from '../../config/prisma.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { writeAuditEvent } from '../audit/audit.service.js';
+import type { AuditContext, AuditEventInput, AuditScalar } from '../audit/audit.types.js';
 import type { ListCareersQuery } from './careers.schemas.js';
 import type {
   CareerSummary,
@@ -85,7 +87,10 @@ export const listCareers = async (query: ListCareersQuery): Promise<PaginatedCar
   };
 };
 
-export const createCareer = async (input: CreateCareerInput): Promise<CareerSummary> => {
+export const createCareer = async (
+  input: CreateCareerInput,
+  auditContext: AuditContext = {},
+): Promise<CareerSummary> => {
   const prisma = getPrismaClient();
 
   if (input.unitId) {
@@ -102,14 +107,28 @@ export const createCareer = async (input: CreateCareerInput): Promise<CareerSumm
   }
 
   try {
-    return await prisma.career.create({
-      data: {
-        name: input.name,
-        code: input.code,
-        description: input.description ?? null,
-        unitId: input.unitId ?? null,
-      },
-      select: careerSelect,
+    return await prisma.$transaction(async (tx) => {
+      const created = await tx.career.create({
+        data: {
+          name: input.name,
+          code: input.code,
+          description: input.description ?? null,
+          unitId: input.unitId ?? null,
+        },
+        select: careerSelect,
+      });
+
+      await writeAuditEvent(tx, {
+        ...auditContext,
+        action: 'career.created',
+        resourceType: 'career',
+        resourceId: created.id,
+        changes: {
+          after: { code: input.code, unitId: input.unitId ?? null },
+        },
+      });
+
+      return created;
     });
   } catch (error) {
     if (isUniqueConstraintViolation(error)) {
@@ -119,14 +138,57 @@ export const createCareer = async (input: CreateCareerInput): Promise<CareerSumm
   }
 };
 
+const CAREER_STRUCTURAL_KEYS = ['code', 'unitId'] as const;
+
+const CAREER_FREE_TEXT_KEYS = ['name', 'description'] as const;
+
+const buildCareerUpdateAuditEvent = (
+  careerId: string,
+  current: { code: string; unitId: string | null; name: string; description: string | null },
+  input: UpdateCareerInput,
+  next: { code: string; unitId: string | null },
+  auditContext: AuditContext,
+): AuditEventInput | null => {
+  const before: Record<string, AuditScalar> = {};
+  const after: Record<string, AuditScalar> = {};
+  const changedFields: string[] = [];
+
+  for (const key of CAREER_STRUCTURAL_KEYS) {
+    if (input[key] !== undefined && input[key] !== current[key]) {
+      before[key] = current[key];
+      after[key] = next[key];
+    }
+  }
+
+  for (const key of CAREER_FREE_TEXT_KEYS) {
+    if (input[key] !== undefined && input[key] !== current[key]) {
+      changedFields.push(key);
+    }
+  }
+
+  if (Object.keys(after).length === 0 && changedFields.length === 0) {
+    return null;
+  }
+
+  return {
+    ...auditContext,
+    action: 'career.updated',
+    resourceType: 'career',
+    resourceId: careerId,
+    ...(Object.keys(after).length > 0 ? { changes: { before, after } } : {}),
+    ...(changedFields.length > 0 ? { metadata: { changedFields } } : {}),
+  };
+};
+
 export const updateCareer = async (
   id: string,
   input: UpdateCareerInput,
+  auditContext: AuditContext = {},
 ): Promise<CareerSummary> => {
   const prisma = getPrismaClient();
   const career = await prisma.career.findUnique({
     where: { id },
-    select: { id: true, code: true, unitId: true },
+    select: { id: true, code: true, unitId: true, name: true, description: true },
   });
 
   if (!career) {
@@ -154,16 +216,31 @@ export const updateCareer = async (
     }
   }
 
+  const next = {
+    code: input.code ?? career.code,
+    unitId: input.unitId !== undefined ? input.unitId : career.unitId,
+  };
+
+  const auditEvent = buildCareerUpdateAuditEvent(id, career, input, next, auditContext);
+
   try {
-    return await prisma.career.update({
-      where: { id: career.id },
-      data: {
-        ...(input.name !== undefined ? { name: input.name } : {}),
-        ...(input.code !== undefined ? { code: input.code } : {}),
-        ...(input.description !== undefined ? { description: input.description } : {}),
-        ...(input.unitId !== undefined ? { unitId: input.unitId } : {}),
-      },
-      select: careerSelect,
+    return await prisma.$transaction(async (tx) => {
+      const updated = await tx.career.update({
+        where: { id: career.id },
+        data: {
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.code !== undefined ? { code: input.code } : {}),
+          ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(input.unitId !== undefined ? { unitId: input.unitId } : {}),
+        },
+        select: careerSelect,
+      });
+
+      if (auditEvent) {
+        await writeAuditEvent(tx, auditEvent);
+      }
+
+      return updated;
     });
   } catch (error) {
     if (isUniqueConstraintViolation(error)) {
@@ -173,11 +250,11 @@ export const updateCareer = async (
   }
 };
 
-export const deleteCareer = async (id: string): Promise<void> => {
+export const deleteCareer = async (id: string, auditContext: AuditContext = {}): Promise<void> => {
   const prisma = getPrismaClient();
   const career = await prisma.career.findUnique({
     where: { id },
-    select: { id: true, code: true },
+    select: { id: true, code: true, unitId: true },
   });
 
   if (!career) {
@@ -195,5 +272,15 @@ export const deleteCareer = async (id: string): Promise<void> => {
     }
 
     await tx.career.delete({ where: { id } });
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'career.deleted',
+      resourceType: 'career',
+      resourceId: id,
+      changes: {
+        before: { code: career.code, unitId: career.unitId },
+      },
+    });
   });
 };

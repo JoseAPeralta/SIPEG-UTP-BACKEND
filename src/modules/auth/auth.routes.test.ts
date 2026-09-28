@@ -140,6 +140,9 @@ const loadApp = async (
       findMany: vi.fn().mockImplementation(() => Promise.resolve(jwksRows)),
       count: vi.fn().mockImplementation(() => Promise.resolve(jwksRows.length)),
     },
+    auditEvent: {
+      create: vi.fn().mockImplementation(() => Promise.resolve({ id: 'audit-001' })),
+    },
     $transaction: vi.fn(),
   };
   prismaMock.$transaction.mockImplementation(
@@ -300,6 +303,44 @@ describe('auth routes', () => {
       .expect(429);
     expect(response.body.success).toBe(false);
     expect(response.body.message).toBe('Too many login attempts. Try again in one minute.');
+  });
+
+  it('POST /login does not block distinct emails behind the same NAT ip', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.signInEmail.mockRejectedValue(
+      new APIError(401, { message: 'Invalid email or password' }),
+    );
+    const app = await loadApp(authMock);
+
+    for (let index = 1; index <= 6; index += 1) {
+      await request(app)
+        .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', '198.51.100.10')
+        .send({ email: `student-${index}@b.com`, password: 'strongpass1234' })
+        .expect(401);
+    }
+  });
+
+  it('POST /login keeps the email+IP bucket independent per origin', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.signInEmail.mockRejectedValue(
+      new APIError(401, { message: 'Invalid email or password' }),
+    );
+    const app = await loadApp(authMock);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app)
+        .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', '198.51.100.20')
+        .send({ email: 'shared@b.com', password: 'strongpass1234' })
+        .expect(401);
+    }
+
+    await request(app)
+      .post('/api/v1/auth/login')
+      .set('X-Forwarded-For', '198.51.100.21')
+      .send({ email: 'shared@b.com', password: 'strongpass1234' })
+      .expect(401);
   });
 
   it('POST /refresh returns 401 when session not found', async () => {
@@ -570,6 +611,26 @@ describe('auth routes', () => {
     expect(JSON.stringify(response.body)).not.toContain('$argon2');
   });
 
+  it('POST /register rejects privilege fields before calling Better Auth', async () => {
+    authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
+    const app = await loadApp(authMock);
+
+    const response = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'new@b.com',
+        password: 'strongpass1234',
+        firstName: 'Nuevo',
+        lastName: 'Usuario',
+        identificationNumber: '8-999-9999',
+        globalRole: 'ADMIN',
+      })
+      .expect(400);
+
+    expect(response.body.message).toBe('Validation error.');
+    expect(authMock.api.signUpEmail).not.toHaveBeenCalled();
+  });
+
   it('POST /register returns 409 on duplicate email', async () => {
     const app = await loadApp(authMock, ({ where }) =>
       where && 'email' in where ? Promise.resolve({ id: 'u-existing' }) : Promise.resolve(null),
@@ -612,7 +673,7 @@ describe('auth routes', () => {
     authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
     const app = await loadApp(authMock);
     const payload = (index: number) => ({
-      email: `rate-limit-${index}@b.com`,
+      email: 'rate-limit@b.com',
       password: 'strongpass1234',
       firstName: 'Nuevo',
       lastName: 'Usuario',
@@ -624,6 +685,36 @@ describe('auth routes', () => {
     }
 
     const response = await request(app).post('/api/v1/auth/register').send(payload(4)).expect(429);
+    expect(response.body.success).toBe(false);
+  });
+
+  it('POST /register allows distinct emails from the same IP until the 30/min IP limit', async () => {
+    authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
+    const app = await loadApp(authMock);
+
+    for (let index = 1; index <= 30; index += 1) {
+      await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          email: `bulk-${index}@b.com`,
+          password: 'strongpass1234',
+          firstName: 'Nuevo',
+          lastName: 'Usuario',
+          identificationNumber: `8-777-${String(index).padStart(4, '0')}`,
+        })
+        .expect(201);
+    }
+
+    const response = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'bulk-31@b.com',
+        password: 'strongpass1234',
+        firstName: 'Nuevo',
+        lastName: 'Usuario',
+        identificationNumber: '8-777-0031',
+      })
+      .expect(429);
     expect(response.body.success).toBe(false);
   });
 
@@ -654,13 +745,13 @@ describe('auth routes', () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await request(app)
         .post('/api/v1/auth/forgot-password')
-        .send({ email: `user-${attempt}@example.com` })
+        .send({ email: 'user@example.com' })
         .expect(200);
     }
 
     const response = await request(app)
       .post('/api/v1/auth/forgot-password')
-      .send({ email: 'user-4@example.com' })
+      .send({ email: 'user@example.com' })
       .expect(429);
     expect(response.body.message).toBe(
       'Too many password reset attempts. Try again in one minute.',
@@ -675,7 +766,7 @@ describe('auth routes', () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await request(app)
         .post('/api/v1/auth/forgot-password')
-        .send({ email: `user-${attempt}@example.com` })
+        .send({ email: 'user@example.com' })
         .expect(200);
     }
 

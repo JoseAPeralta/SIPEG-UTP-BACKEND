@@ -2,6 +2,8 @@ import { getPrismaClient } from '../../config/prisma.js';
 import type { ClassroomType } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { getInstitutionalDayOfWeek } from '../../utils/date.js';
+import { writeAuditEvent } from '../audit/audit.service.js';
+import type { AuditContext, AuditEventInput, AuditScalar } from '../audit/audit.types.js';
 import type { AvailableClassroomsQuery, ListClassroomsQuery } from './classrooms.schemas.js';
 import type {
   AddClassroomAvailabilityInput,
@@ -97,6 +99,69 @@ const assertClassroomExists = async (id: string): Promise<void> => {
   }
 };
 
+interface ClassroomMutableState {
+  name: string;
+  type: ClassroomType;
+  capacity: number;
+  building: string | null;
+  floor: number | null;
+  isActive: boolean;
+}
+
+const STRUCTURAL_ATTRIBUTE_KEYS = ['type', 'capacity', 'floor'] as const;
+
+const FREE_TEXT_ATTRIBUTE_KEYS = ['name', 'building'] as const;
+
+const buildClassroomUpdateAuditEvents = (
+  classroomId: string,
+  current: ClassroomMutableState,
+  input: UpdateClassroomInput,
+  next: ClassroomMutableState,
+  auditContext: AuditContext,
+): AuditEventInput[] => {
+  const events: AuditEventInput[] = [];
+  const base = { ...auditContext, resourceType: 'classroom' as const, resourceId: classroomId };
+
+  if (current.isActive !== next.isActive) {
+    events.push({
+      ...base,
+      action: next.isActive ? 'classroom.activated' : 'classroom.deactivated',
+      changes: {
+        before: { isActive: current.isActive },
+        after: { isActive: next.isActive },
+      },
+    });
+  }
+
+  const before: Record<string, AuditScalar> = {};
+  const after: Record<string, AuditScalar> = {};
+  const changedFields: string[] = [];
+
+  for (const key of STRUCTURAL_ATTRIBUTE_KEYS) {
+    if (input[key] !== undefined && input[key] !== current[key]) {
+      before[key] = current[key];
+      after[key] = input[key];
+    }
+  }
+
+  for (const key of FREE_TEXT_ATTRIBUTE_KEYS) {
+    if (input[key] !== undefined && input[key] !== current[key]) {
+      changedFields.push(key);
+    }
+  }
+
+  if (Object.keys(after).length > 0 || changedFields.length > 0) {
+    events.push({
+      ...base,
+      action: 'classroom.updated',
+      ...(Object.keys(after).length > 0 ? { changes: { before, after } } : {}),
+      ...(changedFields.length > 0 ? { metadata: { changedFields } } : {}),
+    });
+  }
+
+  return events;
+};
+
 export const listClassrooms = async (query: ListClassroomsQuery): Promise<PaginatedClassrooms> => {
   const prisma = getPrismaClient();
   const where = {
@@ -145,18 +210,42 @@ export const getClassroomById = async (id: string): Promise<ClassroomDetail> => 
   return toClassroomDetail(record);
 };
 
-export const createClassroom = async (input: CreateClassroomInput): Promise<ClassroomDetail> => {
+export const createClassroom = async (
+  input: CreateClassroomInput,
+  auditContext: AuditContext = {},
+): Promise<ClassroomDetail> => {
   const prisma = getPrismaClient();
-  const record = await prisma.classroom.create({
-    data: {
-      name: input.name,
-      type: input.type,
-      capacity: input.capacity,
-      building: input.building ?? null,
-      floor: input.floor ?? null,
-      isActive: input.isActive ?? true,
-    },
-    select: classroomDetailSelect,
+  const isActive = input.isActive ?? true;
+
+  const record = await prisma.$transaction(async (tx) => {
+    const created = await tx.classroom.create({
+      data: {
+        name: input.name,
+        type: input.type,
+        capacity: input.capacity,
+        building: input.building ?? null,
+        floor: input.floor ?? null,
+        isActive,
+      },
+      select: classroomDetailSelect,
+    });
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'classroom.created',
+      resourceType: 'classroom',
+      resourceId: created.id,
+      changes: {
+        after: {
+          type: input.type,
+          capacity: input.capacity,
+          floor: input.floor ?? null,
+          isActive,
+        },
+      },
+    });
+
+    return created;
   });
 
   return toClassroomDetail(record);
@@ -165,11 +254,36 @@ export const createClassroom = async (input: CreateClassroomInput): Promise<Clas
 export const updateClassroom = async (
   id: string,
   input: UpdateClassroomInput,
+  auditContext: AuditContext = {},
 ): Promise<ClassroomDetail> => {
   const prisma = getPrismaClient();
-  await assertClassroomExists(id);
+  const current = await prisma.classroom.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      name: true,
+      type: true,
+      capacity: true,
+      building: true,
+      floor: true,
+      isActive: true,
+    },
+  });
 
-  if (input.isActive === false) {
+  if (!current) {
+    throw new ApiError(404, 'Classroom not found.');
+  }
+
+  const next: ClassroomMutableState = {
+    name: input.name ?? current.name,
+    type: input.type ?? current.type,
+    capacity: input.capacity ?? current.capacity,
+    building: input.building !== undefined ? input.building : current.building,
+    floor: input.floor !== undefined ? input.floor : current.floor,
+    isActive: input.isActive !== undefined ? input.isActive : current.isActive,
+  };
+
+  if (input.isActive === false && current.isActive) {
     const blocking = await prisma.activity.findMany({
       where: { classroomId: id, status: { in: [...BLOCKING_ACTIVITY_STATUSES] } },
       select: { id: true },
@@ -184,17 +298,27 @@ export const updateClassroom = async (
     }
   }
 
-  const record = await prisma.classroom.update({
-    where: { id },
-    data: {
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.type !== undefined ? { type: input.type } : {}),
-      ...(input.capacity !== undefined ? { capacity: input.capacity } : {}),
-      ...(input.building !== undefined ? { building: input.building } : {}),
-      ...(input.floor !== undefined ? { floor: input.floor } : {}),
-      ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
-    },
-    select: classroomDetailSelect,
+  const auditEvents = buildClassroomUpdateAuditEvents(id, current, input, next, auditContext);
+
+  const record = await prisma.$transaction(async (tx) => {
+    const updated = await tx.classroom.update({
+      where: { id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.type !== undefined ? { type: input.type } : {}),
+        ...(input.capacity !== undefined ? { capacity: input.capacity } : {}),
+        ...(input.building !== undefined ? { building: input.building } : {}),
+        ...(input.floor !== undefined ? { floor: input.floor } : {}),
+        ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+      },
+      select: classroomDetailSelect,
+    });
+
+    for (const event of auditEvents) {
+      await writeAuditEvent(tx, event);
+    }
+
+    return updated;
   });
 
   return toClassroomDetail(record);
@@ -203,6 +327,7 @@ export const updateClassroom = async (
 export const addClassroomAmenity = async (
   classroomId: string,
   amenity: string,
+  auditContext: AuditContext = {},
 ): Promise<ClassroomDetail> => {
   const prisma = getPrismaClient();
   await assertClassroomExists(classroomId);
@@ -216,14 +341,24 @@ export const addClassroomAmenity = async (
     throw new ApiError(409, 'Amenity already exists for this classroom.');
   }
 
-  try {
-    await prisma.classroomAmenity.create({ data: { classroomId, amenity } });
-  } catch (error) {
-    if (isUniqueConstraintViolation(error)) {
-      throw new ApiError(409, 'Amenity already exists for this classroom.');
+  await prisma.$transaction(async (tx) => {
+    try {
+      await tx.classroomAmenity.create({ data: { classroomId, amenity } });
+    } catch (error) {
+      if (isUniqueConstraintViolation(error)) {
+        throw new ApiError(409, 'Amenity already exists for this classroom.');
+      }
+      throw error;
     }
-    throw error;
-  }
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'classroom.amenity_added',
+      resourceType: 'classroom',
+      resourceId: classroomId,
+      changes: { after: { amenity } },
+    });
+  });
 
   return getClassroomById(classroomId);
 };
@@ -231,6 +366,7 @@ export const addClassroomAmenity = async (
 export const removeClassroomAmenity = async (
   classroomId: string,
   amenity: string,
+  auditContext: AuditContext = {},
 ): Promise<ClassroomDetail> => {
   const prisma = getPrismaClient();
   await assertClassroomExists(classroomId);
@@ -244,8 +380,18 @@ export const removeClassroomAmenity = async (
     throw new ApiError(404, 'Amenity not found.');
   }
 
-  await prisma.classroomAmenity.delete({
-    where: { classroomId_amenity: { classroomId, amenity: existing.amenity } },
+  await prisma.$transaction(async (tx) => {
+    await tx.classroomAmenity.delete({
+      where: { classroomId_amenity: { classroomId, amenity: existing.amenity } },
+    });
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'classroom.amenity_removed',
+      resourceType: 'classroom',
+      resourceId: classroomId,
+      changes: { before: { amenity: existing.amenity } },
+    });
   });
 
   return getClassroomById(classroomId);
@@ -254,6 +400,7 @@ export const removeClassroomAmenity = async (
 export const addClassroomAvailability = async (
   classroomId: string,
   input: AddClassroomAvailabilityInput,
+  auditContext: AuditContext = {},
 ): Promise<ClassroomDetail> => {
   const prisma = getPrismaClient();
   await assertClassroomExists(classroomId);
@@ -275,22 +422,39 @@ export const addClassroomAvailability = async (
     throw new ApiError(409, 'Classroom availability overlaps an existing window.');
   }
 
-  try {
-    await prisma.classroomAvailability.create({
-      data: {
-        classroomId,
-        dayOfWeek: input.dayOfWeek,
-        startTime,
-        endTime,
-        period: input.period ?? null,
-      },
-    });
-  } catch (error) {
-    if (isUniqueConstraintViolation(error)) {
-      throw new ApiError(409, 'Classroom availability overlaps an existing window.');
+  await prisma.$transaction(async (tx) => {
+    try {
+      await tx.classroomAvailability.create({
+        data: {
+          classroomId,
+          dayOfWeek: input.dayOfWeek,
+          startTime,
+          endTime,
+          period: input.period ?? null,
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintViolation(error)) {
+        throw new ApiError(409, 'Classroom availability overlaps an existing window.');
+      }
+      throw error;
     }
-    throw error;
-  }
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'classroom.availability_added',
+      resourceType: 'classroom',
+      resourceId: classroomId,
+      changes: {
+        after: {
+          dayOfWeek: input.dayOfWeek,
+          startTime: input.startTime,
+          endTime: input.endTime,
+        },
+      },
+      metadata: { hasPeriod: input.period !== undefined && input.period !== null },
+    });
+  });
 
   return getClassroomById(classroomId);
 };
@@ -298,20 +462,44 @@ export const addClassroomAvailability = async (
 export const removeClassroomAvailability = async (
   classroomId: string,
   availabilityId: string,
+  auditContext: AuditContext = {},
 ): Promise<ClassroomDetail> => {
   const prisma = getPrismaClient();
   await assertClassroomExists(classroomId);
 
   const existing = await prisma.classroomAvailability.findFirst({
     where: { id: availabilityId, classroomId },
-    select: { id: true },
+    select: {
+      id: true,
+      dayOfWeek: true,
+      startTime: true,
+      endTime: true,
+      period: true,
+    },
   });
 
   if (!existing) {
     throw new ApiError(404, 'Classroom availability not found.');
   }
 
-  await prisma.classroomAvailability.delete({ where: { id: existing.id } });
+  await prisma.$transaction(async (tx) => {
+    await tx.classroomAvailability.delete({ where: { id: existing.id } });
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'classroom.availability_removed',
+      resourceType: 'classroom',
+      resourceId: classroomId,
+      changes: {
+        before: {
+          dayOfWeek: existing.dayOfWeek,
+          startTime: formatTime(existing.startTime),
+          endTime: formatTime(existing.endTime),
+        },
+      },
+      metadata: { hasPeriod: existing.period !== null },
+    });
+  });
 
   return getClassroomById(classroomId);
 };

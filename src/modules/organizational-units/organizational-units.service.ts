@@ -1,6 +1,8 @@
 import { getPrismaClient } from '../../config/prisma.js';
 import type { ProgramStatus, UnitType } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
+import { writeAuditEvent } from '../audit/audit.service.js';
+import type { AuditContext, AuditEventInput } from '../audit/audit.types.js';
 import type { ListOrganizationalUnitsQuery } from './organizational-units.schemas.js';
 import type {
   CreateOrganizationalUnitInput,
@@ -82,6 +84,42 @@ const isUniqueConstraintViolation = (error: unknown): boolean =>
   'code' in error &&
   (error as { code?: unknown }).code === 'P2002';
 
+const buildUnitUpdateAuditEvent = (
+  current: { id: string; name: string; description: string | null; headId: string | null },
+  input: UpdateOrganizationalUnitInput,
+  auditContext: AuditContext,
+): AuditEventInput | null => {
+  const changedFields: string[] = [];
+  let headChanged = false;
+
+  if (input.name !== undefined && input.name !== current.name) {
+    changedFields.push('name');
+  }
+
+  if (input.description !== undefined && input.description !== current.description) {
+    changedFields.push('description');
+  }
+
+  if (input.headId !== undefined && input.headId !== current.headId) {
+    headChanged = true;
+  }
+
+  if (!headChanged && changedFields.length === 0) {
+    return null;
+  }
+
+  return {
+    ...auditContext,
+    action: 'organizational_unit.updated',
+    resourceType: 'organizational_unit',
+    resourceId: current.id,
+    ...(headChanged
+      ? { changes: { before: { headId: current.headId }, after: { headId: input.headId ?? null } } }
+      : {}),
+    ...(changedFields.length > 0 ? { metadata: { changedFields } } : {}),
+  };
+};
+
 export const listOrganizationalUnits = async (
   query: ListOrganizationalUnitsQuery,
 ): Promise<PaginatedOrganizationalUnits> => {
@@ -136,6 +174,7 @@ export const getOrganizationalUnitById = async (id: string): Promise<Organizatio
 
 export const createOrganizationalUnit = async (
   input: CreateOrganizationalUnitInput,
+  auditContext: AuditContext = {},
 ): Promise<OrganizationalUnitDetail> => {
   const prisma = getPrismaClient();
   await assertHeadUserAvailable(input.headId);
@@ -183,6 +222,20 @@ export const createOrganizationalUnit = async (
         throw new ApiError(500, 'Organizational unit could not be created.');
       }
 
+      await writeAuditEvent(tx, {
+        ...auditContext,
+        action: 'organizational_unit.created',
+        resourceType: 'organizational_unit',
+        resourceId: unit.id,
+        changes: {
+          after: {
+            type: input.type,
+            isActive: true,
+            headId: input.headId ?? null,
+          },
+        },
+      });
+
       return toOrganizationalUnitDetail(record);
     });
   } catch (error) {
@@ -199,11 +252,12 @@ export const createOrganizationalUnit = async (
 export const updateOrganizationalUnit = async (
   id: string,
   input: UpdateOrganizationalUnitInput,
+  auditContext: AuditContext = {},
 ): Promise<OrganizationalUnitDetail> => {
   const prisma = getPrismaClient();
   const unit = await prisma.organizationalUnit.findUnique({
     where: { id },
-    select: { id: true },
+    select: { id: true, name: true, description: true, headId: true },
   });
 
   if (!unit) {
@@ -212,14 +266,24 @@ export const updateOrganizationalUnit = async (
 
   await assertHeadUserAvailable(input.headId);
 
-  const record = await prisma.organizationalUnit.update({
-    where: { id: unit.id },
-    data: {
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.description !== undefined ? { description: input.description } : {}),
-      ...(input.headId !== undefined ? { headId: input.headId } : {}),
-    },
-    select: unitDetailSelect,
+  const auditEvent = buildUnitUpdateAuditEvent(unit, input, auditContext);
+
+  const record = await prisma.$transaction(async (tx) => {
+    const updated = await tx.organizationalUnit.update({
+      where: { id: unit.id },
+      data: {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.headId !== undefined ? { headId: input.headId } : {}),
+      },
+      select: unitDetailSelect,
+    });
+
+    if (auditEvent) {
+      await writeAuditEvent(tx, auditEvent);
+    }
+
+    return updated;
   });
 
   return toOrganizationalUnitDetail(record);
@@ -227,6 +291,7 @@ export const updateOrganizationalUnit = async (
 
 export const deactivateOrganizationalUnit = async (
   id: string,
+  auditContext: AuditContext = {},
 ): Promise<OrganizationalUnitDetail> => {
   const prisma = getPrismaClient();
   const unit = await prisma.organizationalUnit.findUnique({
@@ -283,12 +348,24 @@ export const deactivateOrganizationalUnit = async (
       throw new ApiError(500, 'Organizational unit could not be deactivated.');
     }
 
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'organizational_unit.deactivated',
+      resourceType: 'organizational_unit',
+      resourceId: unit.id,
+      changes: {
+        before: { isActive: true },
+        after: { isActive: false },
+      },
+    });
+
     return toOrganizationalUnitDetail(record);
   });
 };
 
 export const reactivateOrganizationalUnit = async (
   id: string,
+  auditContext: AuditContext = {},
 ): Promise<OrganizationalUnitDetail> => {
   const prisma = getPrismaClient();
   const unit = await prisma.organizationalUnit.findUnique({
@@ -325,6 +402,17 @@ export const reactivateOrganizationalUnit = async (
     if (!record) {
       throw new ApiError(500, 'Organizational unit could not be reactivated.');
     }
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'organizational_unit.reactivated',
+      resourceType: 'organizational_unit',
+      resourceId: unit.id,
+      changes: {
+        before: { isActive: false },
+        after: { isActive: true },
+      },
+    });
 
     return toOrganizationalUnitDetail(record);
   });

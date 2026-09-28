@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 
 import { requireAuthenticatedUser } from '../../middlewares/authenticate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { toAuditContext } from '../../utils/audit-context.js';
 import { successResponse } from '../../utils/response.js';
 import type {
   AddCollaboratorBody,
@@ -40,7 +41,14 @@ export const addEventProgramCollaborator: RequestHandler = asyncHandler(async (r
   const { id } = req.params as { id: string };
   const body = req.body as AddCollaboratorBody;
   const user = requireAuthenticatedUser(req);
-  const result = await addCollaboratorService(user, { eventProgramId: id }, body.userId, body.role);
+  const result = await addCollaboratorService(
+    user,
+    { eventProgramId: id },
+    body.userId,
+    body.role,
+    undefined,
+    toAuditContext(req),
+  );
 
   res.status(201).json(successResponse('Collaborator added successfully.', result));
 });
@@ -49,7 +57,14 @@ export const addActivityCollaborator: RequestHandler = asyncHandler(async (req, 
   const { id } = req.params as { id: string };
   const body = req.body as AddCollaboratorBody;
   const user = requireAuthenticatedUser(req);
-  const result = await addCollaboratorService(user, { activityId: id }, body.userId, body.role);
+  const result = await addCollaboratorService(
+    user,
+    { activityId: id },
+    body.userId,
+    body.role,
+    undefined,
+    toAuditContext(req),
+  );
 
   res.status(201).json(successResponse('Collaborator added successfully.', result));
 });
@@ -63,6 +78,8 @@ export const updateEventProgramCollaboratorRole: RequestHandler = asyncHandler(a
     { eventProgramId: id },
     userId,
     body.role,
+    undefined,
+    toAuditContext(req),
   );
 
   res.status(200).json(successResponse('Collaborator role updated successfully.', result));
@@ -72,7 +89,14 @@ export const updateActivityCollaboratorRole: RequestHandler = asyncHandler(async
   const { id, userId } = req.params as { id: string; userId: string };
   const body = req.body as UpdateCollaboratorRoleBody;
   const user = requireAuthenticatedUser(req);
-  const result = await updateCollaboratorRoleService(user, { activityId: id }, userId, body.role);
+  const result = await updateCollaboratorRoleService(
+    user,
+    { activityId: id },
+    userId,
+    body.role,
+    undefined,
+    toAuditContext(req),
+  );
 
   res.status(200).json(successResponse('Collaborator role updated successfully.', result));
 });
@@ -80,7 +104,13 @@ export const updateActivityCollaboratorRole: RequestHandler = asyncHandler(async
 export const removeEventProgramCollaborator: RequestHandler = asyncHandler(async (req, res) => {
   const { id, userId } = req.params as { id: string; userId: string };
   const user = requireAuthenticatedUser(req);
-  await removeCollaboratorService(user, { eventProgramId: id }, userId);
+  await removeCollaboratorService(
+    user,
+    { eventProgramId: id },
+    userId,
+    undefined,
+    toAuditContext(req),
+  );
 
   res.status(204).send();
 });
@@ -88,7 +118,7 @@ export const removeEventProgramCollaborator: RequestHandler = asyncHandler(async
 export const removeActivityCollaborator: RequestHandler = asyncHandler(async (req, res) => {
   const { id, userId } = req.params as { id: string; userId: string };
   const user = requireAuthenticatedUser(req);
-  await removeCollaboratorService(user, { activityId: id }, userId);
+  await removeCollaboratorService(user, { activityId: id }, userId, undefined, toAuditContext(req));
 
   res.status(204).send();
 });
@@ -103,6 +133,8 @@ export const grantEventProgramPermission: RequestHandler = asyncHandler(async (r
     body.userId,
     body.permission,
     { validFrom: body.validFrom ?? null, validUntil: body.validUntil ?? null },
+    undefined,
+    toAuditContext(req),
   );
 
   res.status(200).json(successResponse('Permission granted successfully.', result));
@@ -118,6 +150,8 @@ export const grantActivityPermission: RequestHandler = asyncHandler(async (req, 
     body.userId,
     body.permission,
     { validFrom: body.validFrom ?? null, validUntil: body.validUntil ?? null },
+    undefined,
+    toAuditContext(req),
   );
 
   res.status(200).json(successResponse('Permission granted successfully.', result));
@@ -127,7 +161,14 @@ export const revokeEventProgramPermission: RequestHandler = asyncHandler(async (
   const { id, permission } = req.params as { id: string; permission: PermissionName };
   const { userId } = req.query as { userId: string };
   const user = requireAuthenticatedUser(req);
-  await revokePermissionService(user, { eventProgramId: id }, userId, permission);
+  await revokePermissionService(
+    user,
+    { eventProgramId: id },
+    userId,
+    permission,
+    undefined,
+    toAuditContext(req),
+  );
 
   res.status(204).send();
 });
@@ -136,7 +177,14 @@ export const revokeActivityPermission: RequestHandler = asyncHandler(async (req,
   const { id, permission } = req.params as { id: string; permission: PermissionName };
   const { userId } = req.query as { userId: string };
   const user = requireAuthenticatedUser(req);
-  await revokePermissionService(user, { activityId: id }, userId, permission);
+  await revokePermissionService(
+    user,
+    { activityId: id },
+    userId,
+    permission,
+    undefined,
+    toAuditContext(req),
+  );
 
   res.status(204).send();
 });

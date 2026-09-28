@@ -1,0 +1,63 @@
+meta {
+  name: List audit events
+  type: http
+  seq: 2
+  tags: [
+    Audit
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/audit-events?limit=5
+  body: none
+  auth: bearer
+}
+
+params:query {
+  limit: 5
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("an admin gets a cursor paginated page of audit events", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.be.an("array");
+    expect(body.data.items.length).to.be.at.most(5);
+    expect(body.data.limit).to.equal(5);
+    expect(body.data.hasMore).to.be.a("boolean");
+    if (body.data.hasMore) {
+      expect(body.data.nextCursor).to.be.a("string");
+    } else {
+      expect(body.data.nextCursor).to.equal(null);
+    }
+  });
+
+  test("audit events are returned newest first with an ISO instant", function () {
+    const items = res.getBody().data.items;
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      expect(item.action).to.be.a("string");
+      expect(item.actorType).to.be.oneOf(["USER", "ANONYMOUS", "SYSTEM"]);
+      expect(item.occurredAt).to.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      if (index > 0) {
+        expect(items[index - 1].occurredAt >= item.occurredAt).to.equal(true);
+      }
+    }
+  });
+
+  test("the audit log does not leak credentials or personal data", function () {
+    const serialized = JSON.stringify(res.getBody());
+    expect(serialized).to.not.include("$argon2");
+    for (const item of res.getBody().data.items) {
+      expect(item).to.not.have.property("email");
+      expect(item).to.not.have.property("password");
+      expect(item).to.not.have.property("passwordHash");
+      expect(item).to.not.have.property("accounts");
+    }
+  });
+}
