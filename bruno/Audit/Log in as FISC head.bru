@@ -1,0 +1,45 @@
+meta {
+  name: Log in as FISC head
+  type: http
+  seq: 8
+  tags: [
+    Audit
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  X-Forwarded-For: 203.0.113.232
+}
+
+body:json {
+  {
+    "email": "{{headEmail}}",
+    "password": "{{headPassword}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.accessToken) {
+    bru.setVar("token", body.data.accessToken);
+    bru.setVar("refreshToken", body.data.refreshToken);
+  }
+}
+
+tests {
+  test("the FISC head logs in with a plain USER role", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().data.accessToken).to.be.a("string");
+  });
+}
+
+docs {
+  La bitacora es de solo lectura para ADMIN: un colaborador con permisos de programa no alcanza, porque el endpoint exige el rol global.
+}

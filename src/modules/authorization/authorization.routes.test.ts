@@ -21,6 +21,13 @@ const buildServiceMock = (): DelegationServiceMock => ({
   updateCollaboratorRole: vi.fn(),
 });
 
+const auditContext = (actorId: string) =>
+  expect.objectContaining({
+    actorId,
+    actorType: 'USER',
+    requestId: expect.any(String) as unknown as string,
+  });
+
 interface PrismaMock {
   user: { findUnique: ReturnType<typeof vi.fn> };
   collaboration: {
@@ -41,6 +48,7 @@ interface PrismaMock {
   activity: { findUnique: ReturnType<typeof vi.fn> };
   eventProgram: { findUnique: ReturnType<typeof vi.fn> };
   permission: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -65,6 +73,7 @@ const createPrismaMock = (): PrismaMock => {
     activity: { findUnique: vi.fn() },
     eventProgram: { findUnique: vi.fn() },
     permission: { findMany: vi.fn(), findUnique: vi.fn() },
+    auditEvent: { create: vi.fn() },
     $transaction: vi.fn(),
   };
 
@@ -325,6 +334,8 @@ describe('collaborator routes', () => {
       { eventProgramId: 'program-001' },
       'user-002',
       'VIEWER',
+      undefined,
+      auditContext('admin-001'),
     );
     expect(response.body).toEqual({
       success: true,
@@ -351,6 +362,8 @@ describe('collaborator routes', () => {
       { activityId: 'activity-001' },
       'user-002',
       'VIEWER',
+      undefined,
+      auditContext('admin-001'),
     );
   });
 
@@ -467,6 +480,8 @@ describe('collaborator routes', () => {
       { eventProgramId: 'program-001' },
       'user-002',
       'EDITOR',
+      undefined,
+      auditContext('user-001'),
     );
     expect(response.body).toEqual({
       success: true,
@@ -493,6 +508,8 @@ describe('collaborator routes', () => {
       { activityId: 'activity-001' },
       'user-002',
       'EDITOR',
+      undefined,
+      auditContext('admin-001'),
     );
   });
 
@@ -619,6 +636,8 @@ describe('collaborator routes', () => {
       expect.objectContaining({ id: 'user-001' }),
       { eventProgramId: 'program-001' },
       'user-002',
+      undefined,
+      auditContext('user-001'),
     );
   });
 
@@ -638,6 +657,8 @@ describe('collaborator routes', () => {
       expect.objectContaining({ id: 'admin-001' }),
       { activityId: 'activity-001' },
       'user-002',
+      undefined,
+      auditContext('admin-001'),
     );
   });
 
@@ -766,6 +787,8 @@ describe('collaborator routes', () => {
         validFrom: new Date('2026-09-20T00:00:00.000Z'),
         validUntil: new Date('2026-10-20T00:00:00.000Z'),
       },
+      undefined,
+      auditContext('user-001'),
     );
     expect(response.body).toEqual({
       success: true,
@@ -793,6 +816,8 @@ describe('collaborator routes', () => {
       'user-002',
       'activity:update',
       { validFrom: null, validUntil: null },
+      undefined,
+      auditContext('admin-001'),
     );
   });
 
@@ -898,6 +923,8 @@ describe('collaborator routes', () => {
       { eventProgramId: 'program-001' },
       'user-002',
       'report:export',
+      undefined,
+      auditContext('user-001'),
     );
     expect(response.text).toBe('');
   });
@@ -919,6 +946,8 @@ describe('collaborator routes', () => {
       { activityId: 'activity-001' },
       'user-002',
       'activity:read',
+      undefined,
+      auditContext('admin-001'),
     );
   });
 

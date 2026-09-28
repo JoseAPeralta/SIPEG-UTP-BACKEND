@@ -29,29 +29,41 @@ interface PrismaMock {
     delete: ReturnType<typeof vi.fn>;
   };
   activity: { findMany: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
 }
 
-const createPrismaMock = (): PrismaMock => ({
-  user: { findUnique: vi.fn() },
-  classroom: {
-    findUnique: vi.fn(),
-    findMany: vi.fn(),
-    count: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
-  classroomAmenity: {
-    findFirst: vi.fn(),
-    create: vi.fn(),
-    delete: vi.fn(),
-  },
-  classroomAvailability: {
-    findFirst: vi.fn(),
-    create: vi.fn(),
-    delete: vi.fn(),
-  },
-  activity: { findMany: vi.fn() },
-});
+const createPrismaMock = (): PrismaMock => {
+  const prisma: PrismaMock = {
+    user: { findUnique: vi.fn() },
+    classroom: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    classroomAmenity: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
+    classroomAvailability: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
+    activity: { findMany: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
+    $transaction: vi.fn(),
+  };
+
+  prisma.$transaction.mockImplementation(
+    async (callback: (client: PrismaMock) => Promise<unknown>) => callback(prisma),
+  );
+
+  return prisma;
+};
 
 const classroomDetailRecord = {
   id: 'classroom-001',
@@ -479,9 +491,13 @@ describe('classroom routes', () => {
       .mockResolvedValueOnce(classroomDetailRecord)
       .mockResolvedValueOnce({ id: 'classroom-001' })
       .mockResolvedValueOnce(classroomDetailRecord);
-    prisma.classroomAvailability.findFirst
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({ id: 'slot-1' });
+    prisma.classroomAvailability.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      id: 'slot-1',
+      dayOfWeek: 1,
+      startTime: new Date('1970-01-01T07:00:00.000Z'),
+      endTime: new Date('1970-01-01T12:00:00.000Z'),
+      period: 'Matutino',
+    });
     prisma.classroomAvailability.create.mockResolvedValue({ id: 'slot-2' });
     prisma.classroomAvailability.delete.mockResolvedValue({ id: 'slot-1' });
     const app = await loadApp(prisma);

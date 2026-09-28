@@ -1,6 +1,7 @@
 import { createDocument, type ZodOpenApiObject } from 'zod-openapi';
 
 import { activitiesPaths } from '../modules/activities/activities.openapi.js';
+import { auditPaths } from '../modules/audit/audit.openapi.js';
 import { authPaths } from '../modules/auth/auth.openapi.js';
 import { authorizationPaths } from '../modules/authorization/authorization.openapi.js';
 import { careersPaths } from '../modules/careers/careers.openapi.js';
@@ -33,6 +34,7 @@ const document: ZodOpenApiObject = {
     { name: 'Organizational Units', description: 'Organizational unit catalog and lifecycle.' },
     { name: 'Careers', description: 'Career catalog management.' },
     { name: 'Classrooms', description: 'Classroom catalog, amenities and availability.' },
+    { name: 'Audit', description: 'Read-only access to the durable audit log.' },
     { name: 'Health', description: 'Service health.' },
   ],
   paths: {
@@ -44,6 +46,7 @@ const document: ZodOpenApiObject = {
     ...organizationalUnitsPaths,
     ...careersPaths,
     ...classroomsPaths,
+    ...auditPaths,
     ...healthPaths,
   },
   components: {

@@ -13,6 +13,7 @@ interface PrismaMock {
   };
   eventProgram: { create: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   activity: { count: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -28,6 +29,7 @@ const createPrismaMock = (): PrismaMock => {
     },
     eventProgram: { create: vi.fn(), update: vi.fn() },
     activity: { count: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
     $transaction: vi.fn(),
   };
 
@@ -46,6 +48,13 @@ const loadService = async (prisma: PrismaMock) => {
 };
 
 const headRecord = { id: 'user-head', firstName: 'Ana', lastName: 'Gomez' };
+
+const unitEditable = {
+  id: 'unit-001',
+  name: 'Facultad de Ingenieria Civil',
+  description: 'Facultad',
+  headId: 'user-head',
+};
 
 const summaryRecord = {
   id: 'unit-001',
@@ -514,5 +523,281 @@ describe('organizational units service', () => {
       message: 'Organizational unit does not have a default event program.',
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('writes a single deactivation audit event inside the transaction', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique
+      .mockResolvedValueOnce({
+        id: 'unit-001',
+        isActive: true,
+        eventPrograms: [{ id: 'program-001' }],
+      })
+      .mockResolvedValueOnce({
+        ...detailRecord,
+        isActive: false,
+        eventPrograms: [{ ...detailRecord.eventPrograms[0], status: 'ARCHIVED' }],
+      });
+    prisma.activity.count.mockResolvedValue(0);
+    const { deactivateOrganizationalUnit } = await loadService(prisma);
+
+    await deactivateOrganizationalUnit('unit-001', {
+      actorId: 'user-001',
+      actorType: 'USER',
+      requestId: 'req-001',
+    });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'organizational_unit.deactivated',
+        actorType: 'USER',
+        actorId: 'user-001',
+        resourceType: 'organizational_unit',
+        resourceId: 'unit-001',
+        requestId: 'req-001',
+        changes: {
+          before: { isActive: true },
+          after: { isActive: false },
+        },
+      }),
+    });
+  });
+
+  it('writes the deactivation audit event after both state changes', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique
+      .mockResolvedValueOnce({
+        id: 'unit-001',
+        isActive: true,
+        eventPrograms: [{ id: 'program-001' }],
+      })
+      .mockResolvedValueOnce({ ...detailRecord, isActive: false });
+    prisma.activity.count.mockResolvedValue(0);
+    const { deactivateOrganizationalUnit } = await loadService(prisma);
+
+    await deactivateOrganizationalUnit('unit-001');
+
+    expect(prisma.eventProgram.update.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.auditEvent.create.mock.invocationCallOrder[0] as number,
+    );
+  });
+
+  it('writes a single reactivation audit event inside the transaction', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique
+      .mockResolvedValueOnce({
+        id: 'unit-001',
+        isActive: false,
+        eventPrograms: [{ id: 'program-001' }],
+      })
+      .mockResolvedValueOnce(detailRecord);
+    const { reactivateOrganizationalUnit } = await loadService(prisma);
+
+    await reactivateOrganizationalUnit('unit-001', {
+      actorId: 'user-001',
+      actorType: 'USER',
+      requestId: 'req-002',
+    });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'organizational_unit.reactivated',
+        actorType: 'USER',
+        actorId: 'user-001',
+        resourceType: 'organizational_unit',
+        resourceId: 'unit-001',
+        requestId: 'req-002',
+        changes: {
+          before: { isActive: false },
+          after: { isActive: true },
+        },
+      }),
+    });
+  });
+
+  it('does not audit a lifecycle transition rejected by validation', async () => {
+    const deactivatePrisma = createPrismaMock();
+    deactivatePrisma.organizationalUnit.findUnique.mockResolvedValue({
+      id: 'unit-001',
+      isActive: false,
+      eventPrograms: [{ id: 'program-001' }],
+    });
+    const { deactivateOrganizationalUnit } = await loadService(deactivatePrisma);
+
+    await expect(deactivateOrganizationalUnit('unit-001')).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    expect(deactivatePrisma.auditEvent.create).not.toHaveBeenCalled();
+
+    const reactivatePrisma = createPrismaMock();
+    reactivatePrisma.organizationalUnit.findUnique.mockResolvedValue({
+      id: 'unit-001',
+      isActive: true,
+      eventPrograms: [{ id: 'program-001' }],
+    });
+    const { reactivateOrganizationalUnit } = await loadService(reactivatePrisma);
+
+    await expect(reactivateOrganizationalUnit('unit-001')).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    expect(reactivatePrisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the unit when the deactivation audit insert fails', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique
+      .mockResolvedValueOnce({
+        id: 'unit-001',
+        isActive: true,
+        eventPrograms: [{ id: 'program-001' }],
+      })
+      .mockResolvedValueOnce({ ...detailRecord, isActive: false });
+    prisma.activity.count.mockResolvedValue(0);
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+    const { deactivateOrganizationalUnit } = await loadService(prisma);
+
+    await expect(deactivateOrganizationalUnit('unit-001')).rejects.toThrow('audit insert failed');
+    expect(prisma.organizationalUnit.update).toHaveBeenCalledTimes(1);
+    expect(prisma.eventProgram.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('organizational unit catalog audit trail', () => {
+  const auditContext = { actorId: 'user-001', actorType: 'USER' as const, requestId: 'req-001' };
+
+  it('writes one creation event once the default program exists', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-head', isActive: true });
+    prisma.organizationalUnit.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(detailRecord);
+    prisma.organizationalUnit.create.mockResolvedValue({ id: 'unit-001' });
+    prisma.eventProgram.create.mockResolvedValue({ id: 'program-001' });
+    const { createOrganizationalUnit } = await loadService(prisma);
+
+    await createOrganizationalUnit({ ...createInput, headId: 'user-head' }, auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'organizational_unit.created',
+        actorId: 'user-001',
+        resourceType: 'organizational_unit',
+        resourceId: 'unit-001',
+        requestId: 'req-001',
+        changes: { after: { type: 'FACULTY', isActive: true, headId: 'user-head' } },
+      }),
+    });
+    expect(prisma.eventProgram.create.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.auditEvent.create.mock.invocationCallOrder[0] as number,
+    );
+  });
+
+  it('does not audit a creation rejected by validation', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-existing' });
+    const { createOrganizationalUnit } = await loadService(prisma);
+
+    await expect(createOrganizationalUnit(createInput, auditContext)).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('records only the attributes that changed and names free text', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue(unitEditable);
+    prisma.organizationalUnit.update.mockResolvedValue(detailRecord);
+    const { updateOrganizationalUnit } = await loadService(prisma);
+
+    await updateOrganizationalUnit(
+      'unit-001',
+      { name: 'Facultad de Ingenieria Civil', description: 'Nueva descripcion' },
+      auditContext,
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'organizational_unit.updated',
+        resourceId: 'unit-001',
+        metadata: { changedFields: ['description'] },
+      }),
+    });
+  });
+
+  it('records a head reassignment as a before and after change', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue(unitEditable);
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-new', isActive: true });
+    prisma.organizationalUnit.update.mockResolvedValue(detailRecord);
+    const { updateOrganizationalUnit } = await loadService(prisma);
+
+    await updateOrganizationalUnit('unit-001', { headId: 'user-new' }, auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'organizational_unit.updated',
+        changes: { before: { headId: 'user-head' }, after: { headId: 'user-new' } },
+      }),
+    });
+  });
+
+  it('records the head release as a null after value', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue(unitEditable);
+    prisma.organizationalUnit.update.mockResolvedValue(detailRecord);
+    const { updateOrganizationalUnit } = await loadService(prisma);
+
+    await updateOrganizationalUnit('unit-001', { headId: null }, auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        changes: { before: { headId: 'user-head' }, after: { headId: null } },
+      }),
+    });
+  });
+
+  it('does not audit an update that repeats the current state', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue(unitEditable);
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-head', isActive: true });
+    prisma.organizationalUnit.update.mockResolvedValue(detailRecord);
+    const { updateOrganizationalUnit } = await loadService(prisma);
+
+    await updateOrganizationalUnit(
+      'unit-001',
+      { name: 'Facultad de Ingenieria Civil', description: 'Facultad', headId: 'user-head' },
+      auditContext,
+    );
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit an update rejected by validation', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue(null);
+    const { updateOrganizationalUnit } = await loadService(prisma);
+
+    await expect(
+      updateOrganizationalUnit('missing', { name: 'Nueva' }, auditContext),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the unit when the update audit insert fails', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue(unitEditable);
+    prisma.organizationalUnit.update.mockResolvedValue(detailRecord);
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+    const { updateOrganizationalUnit } = await loadService(prisma);
+
+    await expect(
+      updateOrganizationalUnit('unit-001', { headId: null }, auditContext),
+    ).rejects.toThrow('audit insert failed');
+    expect(prisma.organizationalUnit.update).toHaveBeenCalledTimes(1);
   });
 });

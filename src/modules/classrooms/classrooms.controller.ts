@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { toAuditContext } from '../../utils/audit-context.js';
 import { successResponse } from '../../utils/response.js';
 import type {
   AddClassroomAmenityBody,
@@ -47,7 +48,7 @@ export const getClassroom: RequestHandler = asyncHandler(async (req, res) => {
 
 export const createClassroom: RequestHandler = asyncHandler(async (req, res) => {
   const body = req.body as CreateClassroomBody;
-  const result = await createClassroomService(body);
+  const result = await createClassroomService(body, toAuditContext(req));
 
   res.status(201).json(successResponse('Classroom created successfully.', result));
 });
@@ -55,7 +56,7 @@ export const createClassroom: RequestHandler = asyncHandler(async (req, res) => 
 export const updateClassroom: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   const body = req.body as UpdateClassroomBody;
-  const result = await updateClassroomService(id, body);
+  const result = await updateClassroomService(id, body, toAuditContext(req));
 
   res.status(200).json(successResponse('Classroom updated successfully.', result));
 });
@@ -63,14 +64,14 @@ export const updateClassroom: RequestHandler = asyncHandler(async (req, res) => 
 export const addClassroomAmenity: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   const body = req.body as AddClassroomAmenityBody;
-  const result = await addClassroomAmenityService(id, body.amenity);
+  const result = await addClassroomAmenityService(id, body.amenity, toAuditContext(req));
 
   res.status(201).json(successResponse('Classroom amenity added successfully.', result));
 });
 
 export const removeClassroomAmenity: RequestHandler = asyncHandler(async (req, res) => {
   const { id, amenity } = req.params as ClassroomAmenityParams;
-  const result = await removeClassroomAmenityService(id, amenity);
+  const result = await removeClassroomAmenityService(id, amenity, toAuditContext(req));
 
   res.status(200).json(successResponse('Classroom amenity removed successfully.', result));
 });
@@ -78,14 +79,14 @@ export const removeClassroomAmenity: RequestHandler = asyncHandler(async (req, r
 export const addClassroomAvailability: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   const body = req.body as AddClassroomAvailabilityBody;
-  const result = await addClassroomAvailabilityService(id, body);
+  const result = await addClassroomAvailabilityService(id, body, toAuditContext(req));
 
   res.status(201).json(successResponse('Classroom availability added successfully.', result));
 });
 
 export const removeClassroomAvailability: RequestHandler = asyncHandler(async (req, res) => {
   const { id, availabilityId } = req.params as ClassroomAvailabilityParams;
-  const result = await removeClassroomAvailabilityService(id, availabilityId);
+  const result = await removeClassroomAvailabilityService(id, availabilityId, toAuditContext(req));
 
   res.status(200).json(successResponse('Classroom availability removed successfully.', result));
 });

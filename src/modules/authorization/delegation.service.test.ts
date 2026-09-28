@@ -27,11 +27,13 @@ interface PrismaMock {
     upsert: ReturnType<typeof vi.fn>;
     deleteMany: ReturnType<typeof vi.fn>;
     createMany: ReturnType<typeof vi.fn>;
+    findUnique: ReturnType<typeof vi.fn>;
   };
   activity: { findUnique: ReturnType<typeof vi.fn> };
   eventProgram: { findUnique: ReturnType<typeof vi.fn> };
   user: { findUnique: ReturnType<typeof vi.fn> };
   permission: { findMany: ReturnType<typeof vi.fn>; findUnique: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -49,11 +51,13 @@ const createPrismaMock = (): PrismaMock => {
       upsert: vi.fn(),
       deleteMany: vi.fn(),
       createMany: vi.fn(),
+      findUnique: vi.fn(),
     },
     activity: { findUnique: vi.fn() },
     eventProgram: { findUnique: vi.fn() },
     user: { findUnique: vi.fn() },
     permission: { findMany: vi.fn(), findUnique: vi.fn() },
+    auditEvent: { create: vi.fn() },
     $transaction: vi.fn(),
   };
 
@@ -2160,5 +2164,484 @@ describe('delegation service audit minimization', () => {
       select: unknown;
     };
     expect(JSON.stringify(readArgs.select)).not.to.include('grantedBy');
+  });
+});
+
+describe('delegation service audit trail', () => {
+  const AUDIT_CONTEXT = { requestId: 'request-001' };
+
+  const auditPayloads = (prisma: PrismaMock) =>
+    prisma.auditEvent.create.mock.calls.map(
+      (call) => (call[0] as { data: Record<string, unknown> }).data,
+    );
+
+  const baseScope = { eventProgramId: 'p1' };
+
+  afterEach(() => {
+    vi.doUnmock('../../config/prisma.js');
+  });
+
+  it('audits a collaborator addition with role, scope and target user', async () => {
+    const prisma = createPrismaMock();
+    prisma.permission.findMany.mockResolvedValue(permissionRecords(ROLE_DEFAULTS.VIEWER));
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-002', isActive: true });
+    prisma.collaboration.findFirst.mockResolvedValue(null);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.create.mockResolvedValue(collaboratorRecord({ id: 'collab-009' }));
+    const { addCollaborator } = await loadService(prisma);
+
+    await addCollaborator(
+      buildUser({ globalRole: 'ADMIN' }),
+      baseScope,
+      'user-002',
+      'VIEWER',
+      NOW,
+      AUDIT_CONTEXT,
+    );
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
+      action: 'authorization.collaborator_added',
+      actorType: 'USER',
+      actorId: 'actor-001',
+      resourceType: 'collaboration',
+      resourceId: 'collab-009',
+      scopeType: 'event_program',
+      scopeId: 'p1',
+      targetUserId: 'user-002',
+      requestId: 'request-001',
+    });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      after: { role: 'VIEWER', permissions: ROLE_DEFAULTS.VIEWER },
+    });
+  });
+
+  it('audits an activity scoped collaborator with the activity scope type', async () => {
+    const prisma = createPrismaMock();
+    prisma.permission.findMany.mockResolvedValue(permissionRecords(ROLE_DEFAULTS.VIEWER));
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-002', isActive: true });
+    prisma.collaboration.findFirst.mockResolvedValue(null);
+    prisma.activity.findUnique.mockResolvedValue({ id: 'act-1', eventProgramId: 'p1' });
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.create.mockResolvedValue(
+      collaboratorRecord({ id: 'collab-010', activityId: 'act-1', eventProgramId: null }),
+    );
+    const { addCollaborator } = await loadService(prisma);
+
+    await addCollaborator(
+      buildUser({ globalRole: 'ADMIN' }),
+      { activityId: 'act-1' },
+      'user-002',
+      'VIEWER',
+      NOW,
+      AUDIT_CONTEXT,
+    );
+
+    expect(auditPayloads(prisma)[0]).toMatchObject({
+      action: 'authorization.collaborator_added',
+      scopeType: 'activity',
+      scopeId: 'act-1',
+    });
+  });
+
+  it('does not audit a rejected collaborator addition', async () => {
+    const prisma = createPrismaMock();
+    prisma.permission.findMany.mockResolvedValue(permissionRecords(ROLE_DEFAULTS.VIEWER));
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-002', isActive: true });
+    prisma.collaboration.findFirst.mockResolvedValue({ id: 'collab-001' });
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    const { addCollaborator } = await loadService(prisma);
+
+    await expect(
+      addCollaborator(
+        buildUser({ globalRole: 'ADMIN' }),
+        baseScope,
+        'user-002',
+        'VIEWER',
+        NOW,
+        AUDIT_CONTEXT,
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit when the actor cannot delegate', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PROGRAM_READ)),
+    ]);
+    const { addCollaborator } = await loadService(prisma);
+
+    await expect(
+      addCollaborator(buildUser(), baseScope, 'user-002', 'VIEWER', NOW, AUDIT_CONTEXT),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('audits the collaborator role change from the previous role to the new one', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({
+      id: 'collab-001',
+      role: 'VIEWER',
+      permissions: [{ permission: { name: PERMISSIONS.ACTIVITY_READ } }],
+    });
+    prisma.permission.findMany.mockResolvedValue(permissionRecords(ROLE_DEFAULTS.EDITOR));
+    prisma.collaboration.update.mockResolvedValue({});
+    prisma.collaborationPermission.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.collaborationPermission.createMany.mockResolvedValue({ count: 11 });
+    prisma.collaboration.findUniqueOrThrow.mockResolvedValue(
+      collaboratorRecord({ id: 'collab-001', role: 'EDITOR' }),
+    );
+    const { updateCollaboratorRole } = await loadService(prisma);
+
+    await updateCollaboratorRole(
+      buildUser({ globalRole: 'ADMIN' }),
+      baseScope,
+      'user-002',
+      'EDITOR',
+      NOW,
+      AUDIT_CONTEXT,
+    );
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
+      action: 'authorization.collaborator_role_changed',
+      actorId: 'actor-001',
+      resourceType: 'collaboration',
+      resourceId: 'collab-001',
+      scopeType: 'event_program',
+      scopeId: 'p1',
+      targetUserId: 'user-002',
+      requestId: 'request-001',
+    });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      before: { role: 'VIEWER' },
+      after: { role: 'EDITOR' },
+    });
+  });
+
+  it('does not audit a role change rejected by the envelope check', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({
+      id: 'collab-001',
+      role: 'VIEWER',
+      permissions: [{ permission: { name: PERMISSIONS.ACTIVITY_READ } }],
+    });
+    const { updateCollaboratorRole } = await loadService(prisma);
+
+    await expect(
+      updateCollaboratorRole(buildUser(), baseScope, 'user-002', 'ORGANIZER', NOW, AUDIT_CONTEXT),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('audits the collaborator removal with the removed role', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({
+      id: 'collab-001',
+      role: 'EDITOR',
+      user: { globalRole: 'USER', isActive: true },
+      permissions: [grant(PERMISSIONS.ACTIVITY_READ)],
+    });
+    prisma.collaboration.delete.mockResolvedValue({});
+    const { removeCollaborator } = await loadService(prisma);
+
+    await removeCollaborator(
+      buildUser({ globalRole: 'ADMIN' }),
+      baseScope,
+      'user-002',
+      NOW,
+      AUDIT_CONTEXT,
+    );
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
+      action: 'authorization.collaborator_removed',
+      actorId: 'actor-001',
+      resourceType: 'collaboration',
+      resourceId: 'collab-001',
+      scopeType: 'event_program',
+      scopeId: 'p1',
+      targetUserId: 'user-002',
+      requestId: 'request-001',
+    });
+    expect(payloads[0]?.['changes']).toMatchObject({ before: { role: 'EDITOR' } });
+  });
+
+  it('does not audit a collaborator removal rejected by the last delegator guard', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({
+      id: 'collab-001',
+      role: 'ORGANIZER',
+      user: { globalRole: 'USER', isActive: true },
+      permissions: [grant(PERMISSIONS.PERMISSION_GRANT)],
+    });
+    prisma.collaboration.findMany.mockResolvedValue([]);
+    const { removeCollaborator } = await loadService(prisma);
+
+    await expect(
+      removeCollaborator(
+        buildUser({ globalRole: 'ADMIN' }),
+        baseScope,
+        'user-002',
+        NOW,
+        AUDIT_CONTEXT,
+      ),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(prisma.collaboration.delete).not.toHaveBeenCalled();
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('audits a new permission grant with its window', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({ id: 'collab-001' });
+    prisma.permission.findUnique.mockResolvedValue({ id: 'perm-1' });
+    prisma.collaborationPermission.findUnique.mockResolvedValue(null);
+    prisma.collaborationPermission.upsert.mockResolvedValue({});
+    prisma.collaboration.findUniqueOrThrow.mockResolvedValue(collaboratorRecord());
+    const validFrom = new Date('2026-09-20T10:00:00.000Z');
+    const validUntil = new Date('2026-09-25T10:00:00.000Z');
+    const { grantPermission } = await loadService(prisma);
+
+    await grantPermission(
+      buildUser({ globalRole: 'ADMIN' }),
+      baseScope,
+      'user-002',
+      PERMISSIONS.ACTIVITY_UPDATE,
+      { validFrom, validUntil },
+      NOW,
+      AUDIT_CONTEXT,
+    );
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
+      action: 'authorization.permission_granted',
+      actorId: 'actor-001',
+      resourceType: 'collaboration_permission',
+      resourceId: 'collab-001',
+      scopeType: 'event_program',
+      scopeId: 'p1',
+      targetUserId: 'user-002',
+      requestId: 'request-001',
+    });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      after: {
+        permission: PERMISSIONS.ACTIVITY_UPDATE,
+        validFrom: validFrom.toISOString(),
+        validUntil: validUntil.toISOString(),
+      },
+    });
+  });
+
+  it('audits a replaced permission grant from the previous window to the new one', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({ id: 'collab-001' });
+    prisma.permission.findUnique.mockResolvedValue({ id: 'perm-1' });
+    prisma.collaborationPermission.findUnique.mockResolvedValue({
+      source: 'OVERRIDE',
+      validFrom: new Date('2026-09-19T08:00:00.000Z'),
+      validUntil: new Date('2026-09-19T09:00:00.000Z'),
+    });
+    prisma.collaborationPermission.upsert.mockResolvedValue({});
+    prisma.collaboration.findUniqueOrThrow.mockResolvedValue(collaboratorRecord());
+    const validUntil = new Date('2026-09-25T10:00:00.000Z');
+    const { grantPermission } = await loadService(prisma);
+
+    await grantPermission(
+      buildUser({ globalRole: 'ADMIN' }),
+      baseScope,
+      'user-002',
+      PERMISSIONS.ACTIVITY_UPDATE,
+      { validUntil },
+      NOW,
+      AUDIT_CONTEXT,
+    );
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({ action: 'authorization.permission_replaced' });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      before: {
+        permission: PERMISSIONS.ACTIVITY_UPDATE,
+        source: 'OVERRIDE',
+        validFrom: '2026-09-19T08:00:00.000Z',
+        validUntil: '2026-09-19T09:00:00.000Z',
+      },
+      after: {
+        permission: PERMISSIONS.ACTIVITY_UPDATE,
+        validFrom: null,
+        validUntil: validUntil.toISOString(),
+      },
+    });
+  });
+
+  it('does not audit a grant rejected by the envelope check', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({ id: 'collab-001' });
+    const { grantPermission } = await loadService(prisma);
+
+    await expect(
+      grantPermission(
+        buildUser(),
+        baseScope,
+        'user-002',
+        PERMISSIONS.ACTIVITY_UPDATE,
+        {},
+        NOW,
+        AUDIT_CONTEXT,
+      ),
+    ).rejects.toMatchObject({ statusCode: 403 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('audits a permission revocation with the revoked window', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({
+      id: 'collab-001',
+      user: { globalRole: 'USER', isActive: true },
+      permissions: [
+        {
+          validFrom: new Date('2026-09-19T08:00:00.000Z'),
+          validUntil: new Date('2026-09-19T09:00:00.000Z'),
+          permission: { name: PERMISSIONS.ACTIVITY_UPDATE },
+        },
+      ],
+    });
+    prisma.permission.findUnique.mockResolvedValue({ id: 'perm-1' });
+    prisma.collaborationPermission.deleteMany.mockResolvedValue({ count: 1 });
+    const { revokePermission } = await loadService(prisma);
+
+    await revokePermission(
+      buildUser({ globalRole: 'ADMIN' }),
+      baseScope,
+      'user-002',
+      PERMISSIONS.ACTIVITY_UPDATE,
+      NOW,
+      AUDIT_CONTEXT,
+    );
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
+      action: 'authorization.permission_revoked',
+      actorId: 'actor-001',
+      resourceType: 'collaboration_permission',
+      resourceId: 'collab-001',
+      scopeType: 'event_program',
+      scopeId: 'p1',
+      targetUserId: 'user-002',
+      requestId: 'request-001',
+    });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      before: {
+        permission: PERMISSIONS.ACTIVITY_UPDATE,
+        validFrom: '2026-09-19T08:00:00.000Z',
+        validUntil: '2026-09-19T09:00:00.000Z',
+      },
+    });
+  });
+
+  it('does not audit a revocation that deletes no row', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue({
+      id: 'collab-001',
+      user: { globalRole: 'USER', isActive: true },
+      permissions: [
+        {
+          validFrom: null,
+          validUntil: null,
+          permission: { name: PERMISSIONS.ACTIVITY_UPDATE },
+        },
+      ],
+    });
+    prisma.permission.findUnique.mockResolvedValue({ id: 'perm-1' });
+    prisma.collaborationPermission.deleteMany.mockResolvedValue({ count: 0 });
+    const { revokePermission } = await loadService(prisma);
+
+    await expect(
+      revokePermission(
+        buildUser({ globalRole: 'ADMIN' }),
+        baseScope,
+        'user-002',
+        PERMISSIONS.ACTIVITY_UPDATE,
+        NOW,
+        AUDIT_CONTEXT,
+      ),
+    ).rejects.toMatchObject({ statusCode: 404 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('never stores collaborator personal data in the audit payload', async () => {
+    const prisma = createPrismaMock();
+    prisma.collaboration.findMany.mockResolvedValue([
+      collaboration(grant(PERMISSIONS.PERMISSION_GRANT)),
+    ]);
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'p1', status: 'ACTIVE' });
+    prisma.collaboration.findFirst.mockResolvedValue(null);
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-002', isActive: true });
+    prisma.permission.findMany.mockResolvedValue(permissionRecords(ROLE_DEFAULTS.VIEWER));
+    prisma.collaboration.create.mockResolvedValue(
+      collaboratorRecord({
+        id: 'collab-011',
+        user: { firstName: 'Ada', lastName: 'Lovelace', email: 'ada@example.com' },
+      }),
+    );
+    const { addCollaborator } = await loadService(prisma);
+
+    await addCollaborator(
+      buildUser({ globalRole: 'ADMIN' }),
+      baseScope,
+      'user-002',
+      'VIEWER',
+      NOW,
+      AUDIT_CONTEXT,
+    );
+
+    const serialized = JSON.stringify(auditPayloads(prisma));
+    expect(serialized).not.to.include('Lovelace');
+    expect(serialized).not.to.include('ada@example.com');
   });
 });

@@ -38,6 +38,7 @@ interface PrismaMock {
   };
   account: { findFirst: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   jwks: { findMany: ReturnType<typeof vi.fn>; count: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -60,6 +61,7 @@ const createPrismaMock = (): PrismaMock => {
     session: { findFirst: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
     account: { findFirst: vi.fn(), update: vi.fn() },
     jwks: { findMany: vi.fn(), count: vi.fn() },
+    auditEvent: { create: vi.fn() },
     $transaction: vi.fn(),
   };
   prisma.$transaction.mockImplementation(
@@ -101,16 +103,20 @@ const setupJwks = async (prismaMock: PrismaMock): Promise<void> => {
   ]);
 };
 
-describe('auth service', () => {
-  let authMock: AuthMock;
-  let prismaMock: PrismaMock;
+let authMock: AuthMock;
+let prismaMock: PrismaMock;
 
+const resetMocks = async (): Promise<void> => {
+  process.env['NODE_ENV'] = 'test';
+  process.env['AUTH_SECRET'] = 'a'.repeat(32);
+  authMock = createAuthMock();
+  prismaMock = createPrismaMock();
+  await setupJwks(prismaMock);
+};
+
+describe('auth service', () => {
   beforeEach(async () => {
-    process.env['NODE_ENV'] = 'test';
-    process.env['AUTH_SECRET'] = 'a'.repeat(32);
-    authMock = createAuthMock();
-    prismaMock = createPrismaMock();
-    await setupJwks(prismaMock);
+    await resetMocks();
   });
 
   afterEach(() => {
@@ -638,6 +644,7 @@ describe('auth service', () => {
     const currentHash = await hashPassword('currentpass123');
     prismaMock.account.findFirst.mockResolvedValue({ id: 'acc-1', password: currentHash });
     prismaMock.session.findFirst.mockResolvedValue({ id: 'session-current' });
+    prismaMock.session.deleteMany.mockResolvedValue({ count: 2 });
 
     const { changePassword } = await loadService(authMock, prismaMock);
     await changePassword('u-1', {
@@ -727,7 +734,10 @@ describe('auth service', () => {
     await loginWithPassword({ email: 'a@b.com', password: 'strongpass1234' });
 
     expect(loggerInfo).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'auth.login.succeeded', actorPseudonym: expect.any(String) }),
+      expect.objectContaining({
+        event: 'auth.login.succeeded',
+        actorPseudonym: expect.any(String),
+      }),
       'auth.login.succeeded',
     );
     expect(JSON.stringify(loggerInfo.mock.calls)).not.toContain('a@b.com');
@@ -737,9 +747,9 @@ describe('auth service', () => {
     authMock.api.signInEmail.mockRejectedValue(new Error('Invalid credentials.'));
 
     const { loginWithPassword } = await loadService(authMock, prismaMock);
-    await expect(
-      loginWithPassword({ email: 'a@b.com', password: 'wrong' }),
-    ).rejects.toMatchObject({ statusCode: 401 });
+    await expect(loginWithPassword({ email: 'a@b.com', password: 'wrong' })).rejects.toMatchObject({
+      statusCode: 401,
+    });
 
     expect(loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'auth.login.failed', actorPseudonym: expect.any(String) }),
@@ -752,6 +762,7 @@ describe('auth service', () => {
     const currentHash = await hashPassword('currentpass123');
     prismaMock.account.findFirst.mockResolvedValue({ id: 'acc-1', password: currentHash });
     prismaMock.session.findFirst.mockResolvedValue({ id: 'session-current' });
+    prismaMock.session.deleteMany.mockResolvedValue({ count: 2 });
 
     const { changePassword } = await loadService(authMock, prismaMock);
     await changePassword('u-1', {
@@ -761,7 +772,10 @@ describe('auth service', () => {
     });
 
     expect(loggerInfo).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'auth.password.changed', actorPseudonym: expect.any(String) }),
+      expect.objectContaining({
+        event: 'auth.password.changed',
+        actorPseudonym: expect.any(String),
+      }),
       'auth.password.changed',
     );
   });
@@ -844,5 +858,118 @@ describe('auth service', () => {
       statusCode: 400,
       message: 'Password reset token is invalid or expired.',
     });
+  });
+});
+
+describe('auth service audit trail', () => {
+  beforeEach(async () => {
+    await resetMocks();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.doUnmock('../../lib/auth.js');
+    vi.doUnmock('../../config/prisma.js');
+    vi.doUnmock('../../config/env.js');
+  });
+
+  const auditPayloads = () =>
+    prismaMock.auditEvent.create.mock.calls.map(
+      (call) => (call[0] as { data: Record<string, unknown> }).data,
+    );
+
+  const readyChangePassword = async () => {
+    const currentHash = await hashPassword('currentpass123');
+    prismaMock.account.findFirst.mockResolvedValue({ id: 'acc-1', password: currentHash });
+    prismaMock.session.findFirst.mockResolvedValue({ id: 'session-current' });
+    prismaMock.session.deleteMany.mockResolvedValue({ count: 3 });
+    return {
+      currentPassword: 'currentpass123',
+      newPassword: 'newstrongpass12',
+      refreshToken: 'current-token',
+    };
+  };
+
+  it('audits the password change and the revoked session count in one transaction', async () => {
+    const body = await readyChangePassword();
+    const { changePassword } = await loadService(authMock, prismaMock);
+
+    await changePassword('u-1', body);
+
+    const payloads = auditPayloads();
+    expect(payloads).toHaveLength(2);
+    expect(payloads[0]).toMatchObject({
+      action: 'auth.password_changed',
+      actorId: 'u-1',
+      resourceType: 'user',
+      resourceId: 'u-1',
+      targetUserId: 'u-1',
+    });
+    expect(payloads[1]).toMatchObject({
+      action: 'auth.other_sessions_revoked',
+      actorId: 'u-1',
+      resourceType: 'user',
+      resourceId: 'u-1',
+      targetUserId: 'u-1',
+      metadata: { revokedSessionCount: 3 },
+    });
+  });
+
+  it('never stores the passwords, the hash or the refresh token in the audit payload', async () => {
+    const body = await readyChangePassword();
+    const { changePassword } = await loadService(authMock, prismaMock);
+
+    await changePassword('u-1', body);
+
+    const serialized = JSON.stringify(auditPayloads());
+    expect(serialized).not.to.include('currentpass123');
+    expect(serialized).not.to.include('newstrongpass12');
+    expect(serialized).not.to.include('$argon2id$');
+    expect(serialized).not.to.include('current-token');
+  });
+
+  it('omits the session revocation event when no other session existed', async () => {
+    const body = await readyChangePassword();
+    prismaMock.session.deleteMany.mockResolvedValue({ count: 0 });
+    const { changePassword } = await loadService(authMock, prismaMock);
+
+    await changePassword('u-1', body);
+
+    const actions = auditPayloads().map((payload) => payload['action']);
+    expect(actions).toEqual(['auth.password_changed']);
+  });
+
+  it('does not audit a password change rejected by a wrong current password', async () => {
+    const currentHash = await hashPassword('currentpass123');
+    prismaMock.account.findFirst.mockResolvedValue({ id: 'acc-1', password: currentHash });
+    prismaMock.session.findFirst.mockResolvedValue({ id: 'session-current' });
+    const { changePassword } = await loadService(authMock, prismaMock);
+
+    await expect(
+      changePassword('u-1', {
+        currentPassword: 'wrongpass123',
+        newPassword: 'newstrongpass12',
+        refreshToken: 'current-token',
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit a password change rejected by a foreign refresh token', async () => {
+    const currentHash = await hashPassword('currentpass123');
+    prismaMock.account.findFirst.mockResolvedValue({ id: 'acc-1', password: currentHash });
+    prismaMock.session.findFirst.mockResolvedValue(null);
+    const { changePassword } = await loadService(authMock, prismaMock);
+
+    await expect(
+      changePassword('u-1', {
+        currentPassword: 'currentpass123',
+        newPassword: 'newstrongpass12',
+        refreshToken: 'foreign-token',
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
   });
 });

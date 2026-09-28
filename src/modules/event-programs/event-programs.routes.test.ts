@@ -10,6 +10,13 @@ interface EventProgramsServiceMock {
   updateEventProgram: ReturnType<typeof vi.fn>;
 }
 
+const auditContext = (actorId: string) =>
+  expect.objectContaining({
+    actorId,
+    actorType: 'USER',
+    requestId: expect.any(String) as unknown as string,
+  });
+
 const buildServiceMock = (): EventProgramsServiceMock => ({
   archiveEventProgram: vi.fn(),
   createEventProgram: vi.fn(),
@@ -279,7 +286,11 @@ describe('event program routes', () => {
       .send(validCreateBody)
       .expect(201);
 
-    expect(service.createEventProgram).toHaveBeenCalledWith(validCreateBody, 'admin-001');
+    expect(service.createEventProgram).toHaveBeenCalledWith(
+      validCreateBody,
+      'admin-001',
+      expect.objectContaining({ actorId: 'admin-001', actorType: 'USER' }),
+    );
     expect(response.body).toEqual({
       success: true,
       message: 'Event program created successfully.',
@@ -445,7 +456,11 @@ describe('PATCH /api/v1/event-programs/:id', () => {
       expect.objectContaining({ id: 'user-001' }),
       { eventProgramId: 'program-001' },
     );
-    expect(service.updateEventProgram).toHaveBeenCalledWith('program-001', parsedUpdateBody);
+    expect(service.updateEventProgram).toHaveBeenCalledWith(
+      'program-001',
+      parsedUpdateBody,
+      auditContext('user-001'),
+    );
     expect(response.body).toEqual({
       success: true,
       message: 'Event program updated successfully.',
@@ -466,7 +481,11 @@ describe('PATCH /api/v1/event-programs/:id', () => {
       .send(updateBody)
       .expect(200);
 
-    expect(service.updateEventProgram).toHaveBeenCalledWith('program-001', parsedUpdateBody);
+    expect(service.updateEventProgram).toHaveBeenCalledWith(
+      'program-001',
+      parsedUpdateBody,
+      auditContext('admin-001'),
+    );
   });
 
   it('rejects an empty body before the service', async () => {
@@ -499,7 +518,11 @@ describe('PATCH /api/v1/event-programs/:id', () => {
       .send({ status: 'ACTIVE' })
       .expect(200);
 
-    expect(service.updateEventProgram).toHaveBeenCalledWith('program-001', { status: 'ACTIVE' });
+    expect(service.updateEventProgram).toHaveBeenCalledWith(
+      'program-001',
+      { status: 'ACTIVE' },
+      auditContext('admin-001'),
+    );
   });
 
   it('rejects a status other than ACTIVE before the service', async () => {
@@ -610,7 +633,10 @@ describe('POST /api/v1/event-programs/:id/archive', () => {
       .set('Authorization', 'Bearer admin-001')
       .expect(200);
 
-    expect(service.archiveEventProgram).toHaveBeenCalledWith('program-001');
+    expect(service.archiveEventProgram).toHaveBeenCalledWith(
+      'program-001',
+      auditContext('admin-001'),
+    );
     expect(response.body).toEqual({
       success: true,
       message: 'Event program archived successfully.',
@@ -635,7 +661,10 @@ describe('POST /api/v1/event-programs/:id/archive', () => {
       expect.objectContaining({ id: 'user-001' }),
       { eventProgramId: 'program-001' },
     );
-    expect(service.archiveEventProgram).toHaveBeenCalledWith('program-001');
+    expect(service.archiveEventProgram).toHaveBeenCalledWith(
+      'program-001',
+      auditContext('user-001'),
+    );
   });
 
   it('rejects a blank id before the service', async () => {
@@ -713,7 +742,10 @@ describe('POST /api/v1/event-programs/:id/reactivate', () => {
       .set('Authorization', 'Bearer admin-001')
       .expect(200);
 
-    expect(service.reactivateEventProgram).toHaveBeenCalledWith('program-001');
+    expect(service.reactivateEventProgram).toHaveBeenCalledWith(
+      'program-001',
+      auditContext('admin-001'),
+    );
     expect(response.body).toEqual({
       success: true,
       message: 'Event program reactivated successfully.',
@@ -738,7 +770,10 @@ describe('POST /api/v1/event-programs/:id/reactivate', () => {
       expect.objectContaining({ id: 'user-001' }),
       { eventProgramId: 'program-001' },
     );
-    expect(service.reactivateEventProgram).toHaveBeenCalledWith('program-001');
+    expect(service.reactivateEventProgram).toHaveBeenCalledWith(
+      'program-001',
+      auditContext('user-001'),
+    );
   });
 
   it('rejects a blank id before the service', async () => {

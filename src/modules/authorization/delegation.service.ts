@@ -4,6 +4,8 @@ import type {
   PermissionGrantSource,
   ProgramStatus,
 } from '../../generated/prisma/enums.js';
+import { writeAuditEvent } from '../audit/audit.service.js';
+import type { AuditContext } from '../audit/audit.types.js';
 import { ApiError } from '../../utils/ApiError.js';
 import {
   getPermissionEnvelopes,
@@ -86,7 +88,21 @@ const scopeWhere = (resolved: ResolvedScope) =>
     ? { activityId: resolved.activityId }
     : { eventProgramId: resolved.eventProgramId };
 
+const scopeType = (resolved: ResolvedScope): 'activity' | 'event_program' =>
+  resolved.activityId ? 'activity' : 'event_program';
+
+const scopeId = (resolved: ResolvedScope): string => resolved.activityId ?? resolved.eventProgramId;
+
+const windowChanges = (
+  validFrom: Date | null,
+  validUntil: Date | null,
+): { validFrom: string | null; validUntil: string | null } => ({
+  validFrom: validFrom ? validFrom.toISOString() : null,
+  validUntil: validUntil ? validUntil.toISOString() : null,
+});
+
 const collaboratorSelect = {
+  id: true,
   userId: true,
   role: true,
   createdAt: true,
@@ -294,6 +310,7 @@ export const addCollaborator = async (
   targetUserId: string,
   role: CollaborationRole,
   now: Date = new Date(),
+  auditContext: AuditContext = {},
 ): Promise<CollaboratorDetail> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
   assertRoleWithinEnvelopes(role, envelopes);
@@ -331,8 +348,8 @@ export const addCollaborator = async (
 
   const permissionIds = await loadPermissionIds(ROLE_DEFAULTS[role]);
 
-  const created = await prisma.$transaction((tx) =>
-    tx.collaboration.create({
+  const created = await prisma.$transaction(async (tx) => {
+    const collaboration = await tx.collaboration.create({
       data: {
         role,
         eventProgramId: resolved.activityId ? null : resolved.eventProgramId,
@@ -347,8 +364,23 @@ export const addCollaborator = async (
         },
       },
       select: collaboratorSelect,
-    }),
-  );
+    });
+
+    await writeAuditEvent(tx, {
+      action: 'authorization.collaborator_added',
+      actorType: 'USER',
+      actorId: actor.id,
+      resourceType: 'collaboration',
+      resourceId: collaboration.id,
+      scopeType: scopeType(resolved),
+      scopeId: scopeId(resolved),
+      targetUserId,
+      requestId: auditContext.requestId,
+      changes: { after: { role, permissions: [...ROLE_DEFAULTS[role]] } },
+    });
+
+    return collaboration;
+  });
 
   return toCollaboratorDetail(created);
 };
@@ -359,6 +391,7 @@ export const updateCollaboratorRole = async (
   targetUserId: string,
   role: CollaborationRole,
   now: Date = new Date(),
+  auditContext: AuditContext = {},
 ): Promise<CollaboratorDetail> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
   assertRoleWithinEnvelopes(role, envelopes);
@@ -376,6 +409,7 @@ export const updateCollaboratorRole = async (
     where: { userId: targetUserId, ...scopeWhere(resolved) },
     select: {
       id: true,
+      role: true,
       permissions: {
         where: { source: 'ROLE_DEFAULT' },
         select: { permission: { select: { name: true } } },
@@ -386,6 +420,8 @@ export const updateCollaboratorRole = async (
   if (!collaboration) {
     throw new ApiError(404, 'Collaborator not found.');
   }
+
+  const previousRole = collaboration.role;
 
   for (const row of collaboration.permissions) {
     if (!envelopes.has(row.permission.name as PermissionName)) {
@@ -412,6 +448,19 @@ export const updateCollaboratorRole = async (
         source: 'ROLE_DEFAULT',
         grantedById: actor.id,
       })),
+    });
+
+    await writeAuditEvent(tx, {
+      action: 'authorization.collaborator_role_changed',
+      actorType: 'USER',
+      actorId: actor.id,
+      resourceType: 'collaboration',
+      resourceId: collaboration.id,
+      scopeType: scopeType(resolved),
+      scopeId: scopeId(resolved),
+      targetUserId,
+      requestId: auditContext.requestId,
+      changes: { before: { role: previousRole }, after: { role } },
     });
 
     return tx.collaboration.findUniqueOrThrow({
@@ -475,6 +524,7 @@ export const removeCollaborator = async (
   scope: AuthorizationScope,
   targetUserId: string,
   now: Date = new Date(),
+  auditContext: AuditContext = {},
 ): Promise<void> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
 
@@ -491,6 +541,7 @@ export const removeCollaborator = async (
     where: { userId: targetUserId, ...scopeWhere(resolved) },
     select: {
       id: true,
+      role: true,
       user: { select: { globalRole: true, isActive: true } },
       permissions: {
         select: {
@@ -516,7 +567,24 @@ export const removeCollaborator = async (
     await assertScopeKeepsDelegator(resolved, targetUserId, now);
   }
 
-  await prisma.collaboration.delete({ where: { id: collaboration.id } });
+  const removedRole = collaboration.role;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.collaboration.delete({ where: { id: collaboration.id } });
+
+    await writeAuditEvent(tx, {
+      action: 'authorization.collaborator_removed',
+      actorType: 'USER',
+      actorId: actor.id,
+      resourceType: 'collaboration',
+      resourceId: collaboration.id,
+      scopeType: scopeType(resolved),
+      scopeId: scopeId(resolved),
+      targetUserId,
+      requestId: auditContext.requestId,
+      changes: { before: { role: removedRole } },
+    });
+  });
 };
 
 export const grantPermission = async (
@@ -526,6 +594,7 @@ export const grantPermission = async (
   permission: PermissionName,
   window: GrantWindowInput = {},
   now: Date = new Date(),
+  auditContext: AuditContext = {},
 ): Promise<CollaboratorDetail> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
   const validFrom = window.validFrom ?? null;
@@ -555,6 +624,16 @@ export const grantPermission = async (
   const permissionId = await loadPermissionId(permission);
 
   return prisma.$transaction(async (tx) => {
+    const previousGrant = await tx.collaborationPermission.findUnique({
+      where: {
+        collaborationId_permissionId: {
+          collaborationId: collaboration.id,
+          permissionId,
+        },
+      },
+      select: { source: true, validFrom: true, validUntil: true },
+    });
+
     await tx.collaborationPermission.upsert({
       where: {
         collaborationId_permissionId: {
@@ -577,6 +656,32 @@ export const grantPermission = async (
         validUntil,
         grantedById: actor.id,
         grantedAt: now,
+      },
+    });
+
+    await writeAuditEvent(tx, {
+      action: previousGrant
+        ? 'authorization.permission_replaced'
+        : 'authorization.permission_granted',
+      actorType: 'USER',
+      actorId: actor.id,
+      resourceType: 'collaboration_permission',
+      resourceId: collaboration.id,
+      scopeType: scopeType(resolved),
+      scopeId: scopeId(resolved),
+      targetUserId,
+      requestId: auditContext.requestId,
+      changes: {
+        ...(previousGrant
+          ? {
+              before: {
+                permission,
+                source: previousGrant.source,
+                ...windowChanges(previousGrant.validFrom, previousGrant.validUntil),
+              },
+            }
+          : {}),
+        after: { permission, ...windowChanges(validFrom, validUntil) },
       },
     });
 
@@ -641,6 +746,7 @@ export const revokePermission = async (
   targetUserId: string,
   permission: PermissionName,
   now: Date = new Date(),
+  auditContext: AuditContext = {},
 ): Promise<void> => {
   const envelopes = await assertActorCanDelegate(actor, scope, now);
 
@@ -702,11 +808,37 @@ export const revokePermission = async (
     await assertRevokeKeepsDelegator(resolved, targetUserId, now);
   }
 
-  const result = await prisma.collaborationPermission.deleteMany({
-    where: { collaborationId: collaboration.id, permissionId },
-  });
+  const revokedGrant = collaboration.permissions[0];
 
-  if (result.count === 0) {
+  if (!revokedGrant) {
     throw new ApiError(404, 'Permission grant not found.');
   }
+
+  await prisma.$transaction(async (tx) => {
+    const result = await tx.collaborationPermission.deleteMany({
+      where: { collaborationId: collaboration.id, permissionId },
+    });
+
+    if (result.count === 0) {
+      throw new ApiError(404, 'Permission grant not found.');
+    }
+
+    await writeAuditEvent(tx, {
+      action: 'authorization.permission_revoked',
+      actorType: 'USER',
+      actorId: actor.id,
+      resourceType: 'collaboration_permission',
+      resourceId: collaboration.id,
+      scopeType: scopeType(resolved),
+      scopeId: scopeId(resolved),
+      targetUserId,
+      requestId: auditContext.requestId,
+      changes: {
+        before: {
+          permission,
+          ...windowChanges(revokedGrant.validFrom, revokedGrant.validUntil),
+        },
+      },
+    });
+  });
 };

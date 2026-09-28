@@ -2,6 +2,7 @@ import type { RequestHandler } from 'express';
 
 import { requireAuthenticatedUser } from '../../middlewares/authenticate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { toAuditContext } from '../../utils/audit-context.js';
 import { successResponse } from '../../utils/response.js';
 import type {
   CreateEventProgramBody,
@@ -34,7 +35,7 @@ export const getEventProgram: RequestHandler = asyncHandler(async (req, res) => 
 export const createEventProgram: RequestHandler = asyncHandler(async (req, res) => {
   const body = req.body as CreateEventProgramBody;
   const user = requireAuthenticatedUser(req);
-  const result = await createEventProgramService(body, user.id);
+  const result = await createEventProgramService(body, user.id, toAuditContext(req));
 
   res.status(201).json(successResponse('Event program created successfully.', result));
 });
@@ -42,21 +43,21 @@ export const createEventProgram: RequestHandler = asyncHandler(async (req, res) 
 export const updateEventProgram: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   const body = req.body as UpdateEventProgramBody;
-  const result = await updateEventProgramService(id, body);
+  const result = await updateEventProgramService(id, body, toAuditContext(req));
 
   res.status(200).json(successResponse('Event program updated successfully.', result));
 });
 
 export const archiveEventProgram: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
-  const result = await archiveEventProgramService(id);
+  const result = await archiveEventProgramService(id, toAuditContext(req));
 
   res.status(200).json(successResponse('Event program archived successfully.', result));
 });
 
 export const reactivateEventProgram: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
-  const result = await reactivateEventProgramService(id);
+  const result = await reactivateEventProgramService(id, toAuditContext(req));
 
   res.status(200).json(successResponse('Event program reactivated successfully.', result));
 });

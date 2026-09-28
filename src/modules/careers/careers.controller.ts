@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { toAuditContext } from '../../utils/audit-context.js';
 import { successResponse } from '../../utils/response.js';
 import type { CreateCareerBody, ListCareersQuery, UpdateCareerBody } from './careers.schemas.js';
 import {
@@ -19,7 +20,7 @@ export const getCareers: RequestHandler = asyncHandler(async (req, res) => {
 
 export const createCareer: RequestHandler = asyncHandler(async (req, res) => {
   const body = req.body as CreateCareerBody;
-  const result = await createCareerService(body);
+  const result = await createCareerService(body, toAuditContext(req));
 
   res.status(201).json(successResponse('Career created successfully.', result));
 });
@@ -27,14 +28,14 @@ export const createCareer: RequestHandler = asyncHandler(async (req, res) => {
 export const updateCareer: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   const body = req.body as UpdateCareerBody;
-  const result = await updateCareerService(id, body);
+  const result = await updateCareerService(id, body, toAuditContext(req));
 
   res.status(200).json(successResponse('Career updated successfully.', result));
 });
 
 export const deleteCareer: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
-  await deleteCareerService(id);
+  await deleteCareerService(id, toAuditContext(req));
 
   res.status(204).send();
 });

@@ -1,6 +1,7 @@
 import type { RequestHandler } from 'express';
 
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { toAuditContext } from '../../utils/audit-context.js';
 import { successResponse } from '../../utils/response.js';
 import type {
   CreateOrganizationalUnitBody,
@@ -32,7 +33,7 @@ export const getOrganizationalUnit: RequestHandler = asyncHandler(async (req, re
 
 export const createOrganizationalUnit: RequestHandler = asyncHandler(async (req, res) => {
   const body = req.body as CreateOrganizationalUnitBody;
-  const result = await createOrganizationalUnitService(body);
+  const result = await createOrganizationalUnitService(body, toAuditContext(req));
 
   res.status(201).json(successResponse('Organizational unit created successfully.', result));
 });
@@ -40,21 +41,21 @@ export const createOrganizationalUnit: RequestHandler = asyncHandler(async (req,
 export const updateOrganizationalUnit: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
   const body = req.body as UpdateOrganizationalUnitBody;
-  const result = await updateOrganizationalUnitService(id, body);
+  const result = await updateOrganizationalUnitService(id, body, toAuditContext(req));
 
   res.status(200).json(successResponse('Organizational unit updated successfully.', result));
 });
 
 export const deactivateOrganizationalUnit: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
-  const result = await deactivateOrganizationalUnitService(id);
+  const result = await deactivateOrganizationalUnitService(id, toAuditContext(req));
 
   res.status(200).json(successResponse('Organizational unit deactivated successfully.', result));
 });
 
 export const reactivateOrganizationalUnit: RequestHandler = asyncHandler(async (req, res) => {
   const { id } = req.params as { id: string };
-  const result = await reactivateOrganizationalUnitService(id);
+  const result = await reactivateOrganizationalUnitService(id, toAuditContext(req));
 
   res.status(200).json(successResponse('Organizational unit reactivated successfully.', result));
 });

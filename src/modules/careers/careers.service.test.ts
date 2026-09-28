@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Prisma } from '../../generated/prisma/client.js';
+
 interface PrismaMock {
   career: {
     findUnique: ReturnType<typeof vi.fn>;
@@ -11,6 +13,7 @@ interface PrismaMock {
   };
   organizationalUnit: { findUnique: ReturnType<typeof vi.fn> };
   user: { count: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -26,6 +29,7 @@ const createPrismaMock = (): PrismaMock => {
     },
     organizationalUnit: { findUnique: vi.fn() },
     user: { count: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
     $transaction: vi.fn(),
   };
 
@@ -64,6 +68,8 @@ const otrosRecord = {
 const facultyUnitRecord = { id: 'unit-001', type: 'FACULTY', isActive: true };
 
 const careerLookup = { id: 'car-001', code: 'FIC-CIV', unitId: 'unit-001' };
+
+const careerEditable = { ...careerLookup, name: 'Ingenieria Civil', description: 'Licenciatura' };
 
 const createInput = {
   name: 'Ingenieria Civil',
@@ -507,5 +513,172 @@ describe('careers service', () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(prisma.user.count).toHaveBeenCalledWith({ where: { careerId: 'car-001' } });
     expect(prisma.career.delete).toHaveBeenCalledWith({ where: { id: 'car-001' } });
+  });
+});
+
+describe('career audit trail', () => {
+  const auditContext = { actorId: 'user-001', actorType: 'USER' as const, requestId: 'req-001' };
+
+  it('writes one creation event inside the transaction', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue(facultyUnitRecord);
+    prisma.career.findUnique.mockResolvedValue(null);
+    prisma.career.create.mockResolvedValue(careerRecord);
+    const { createCareer } = await loadService(prisma);
+
+    await createCareer({ ...createInput, unitId: 'unit-001' }, auditContext);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'career.created',
+        actorId: 'user-001',
+        resourceType: 'career',
+        resourceId: 'car-001',
+        requestId: 'req-001',
+        changes: { after: { code: 'FIC-CIV', unitId: 'unit-001' } },
+      }),
+    });
+  });
+
+  it('reports a global career as a null unit', async () => {
+    const prisma = createPrismaMock();
+    prisma.career.findUnique.mockResolvedValue(null);
+    prisma.career.create.mockResolvedValue(otrosRecord);
+    const { createCareer } = await loadService(prisma);
+
+    await createCareer(createInput, auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ changes: { after: { code: 'FIC-CIV', unitId: null } } }),
+    });
+  });
+
+  it('writes the creation event after the career row', async () => {
+    const prisma = createPrismaMock();
+    prisma.career.findUnique.mockResolvedValue(null);
+    prisma.career.create.mockResolvedValue(careerRecord);
+    const { createCareer } = await loadService(prisma);
+
+    await createCareer(createInput);
+
+    expect(prisma.career.create.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.auditEvent.create.mock.invocationCallOrder[0] as number,
+    );
+  });
+
+  it('records only the attributes that changed and names free text', async () => {
+    const prisma = createPrismaMock();
+    prisma.career.findUnique.mockResolvedValue(careerEditable);
+    prisma.user.count.mockResolvedValue(0);
+    prisma.career.update.mockResolvedValue(careerRecord);
+    const { updateCareer } = await loadService(prisma);
+
+    await updateCareer(
+      'car-001',
+      { name: 'Ingenieria Civil y Ambiental', description: 'Nueva', code: 'FIC-CIV' },
+      auditContext,
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'career.updated',
+        metadata: { changedFields: ['name', 'description'] },
+      }),
+    });
+    expect(prisma.auditEvent.create.mock.calls[0]?.[0].data.changes).toBe(Prisma.DbNull);
+  });
+
+  it('records a unit reassignment as a before and after change', async () => {
+    const prisma = createPrismaMock();
+    prisma.career.findUnique.mockResolvedValue(careerLookup);
+    prisma.organizationalUnit.findUnique.mockResolvedValue(facultyUnitRecord);
+    prisma.user.count.mockResolvedValue(0);
+    prisma.career.update.mockResolvedValue(careerRecord);
+    const { updateCareer } = await loadService(prisma);
+
+    await updateCareer('car-001', { unitId: 'unit-002' }, auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'career.updated',
+        changes: { before: { unitId: 'unit-001' }, after: { unitId: 'unit-002' } },
+      }),
+    });
+  });
+
+  it('does not audit an update that repeats the current state', async () => {
+    const prisma = createPrismaMock();
+    prisma.organizationalUnit.findUnique.mockResolvedValue(facultyUnitRecord);
+    prisma.career.findUnique.mockResolvedValue(careerEditable);
+    prisma.career.update.mockResolvedValue(careerRecord);
+    const { updateCareer } = await loadService(prisma);
+
+    await updateCareer('car-001', { code: 'FIC-CIV', unitId: 'unit-001' }, auditContext);
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit an update rejected by validation', async () => {
+    const prisma = createPrismaMock();
+    prisma.career.findUnique.mockResolvedValue({ id: 'car-otros', code: 'OTROS', unitId: null });
+    const { updateCareer } = await loadService(prisma);
+
+    await expect(updateCareer('car-otros', { code: 'OTRO' }, auditContext)).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the career when the audit insert fails', async () => {
+    const prisma = createPrismaMock();
+    prisma.career.findUnique.mockResolvedValue(careerEditable);
+    prisma.career.update.mockResolvedValue(careerRecord);
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+    const { updateCareer } = await loadService(prisma);
+
+    await expect(updateCareer('car-001', { unitId: null }, auditContext)).rejects.toThrow(
+      'audit insert failed',
+    );
+    expect(prisma.career.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('records a deletion with the state it removed', async () => {
+    const prisma = createPrismaMock();
+    prisma.career.findUnique.mockResolvedValue({
+      id: 'car-001',
+      code: 'FIC-CIV',
+      unitId: 'unit-001',
+    });
+    prisma.user.count.mockResolvedValue(0);
+    prisma.career.delete.mockResolvedValue({ id: 'car-001' });
+    const { deleteCareer } = await loadService(prisma);
+
+    await deleteCareer('car-001', auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'career.deleted',
+        actorId: 'user-001',
+        resourceType: 'career',
+        resourceId: 'car-001',
+        changes: { before: { code: 'FIC-CIV', unitId: 'unit-001' } },
+      }),
+    });
+  });
+
+  it('does not audit a deletion rejected by validation', async () => {
+    const prisma = createPrismaMock();
+    prisma.career.findUnique.mockResolvedValue({ id: 'car-otros', code: 'OTROS' });
+    const { deleteCareer } = await loadService(prisma);
+
+    await expect(deleteCareer('car-otros', auditContext)).rejects.toMatchObject({
+      statusCode: 409,
+    });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
   });
 });

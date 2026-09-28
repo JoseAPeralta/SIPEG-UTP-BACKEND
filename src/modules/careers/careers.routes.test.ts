@@ -20,6 +20,7 @@ interface PrismaMock {
   };
   organizationalUnit: { findUnique: ReturnType<typeof vi.fn> };
   user: { findUnique: ReturnType<typeof vi.fn>; count: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -35,6 +36,7 @@ const createPrismaMock = (): PrismaMock => {
     },
     organizationalUnit: { findUnique: vi.fn() },
     user: { findUnique: vi.fn(), count: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
     $transaction: vi.fn(),
   };
 

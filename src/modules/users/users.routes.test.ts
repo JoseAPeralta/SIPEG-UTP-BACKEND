@@ -21,6 +21,7 @@ interface PrismaMock {
   career: { findUnique: ReturnType<typeof vi.fn> };
   account: { create: ReturnType<typeof vi.fn> };
   session: { deleteMany: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
 
@@ -49,6 +50,7 @@ const createPrismaMock = (): PrismaMock => {
     career: { findUnique: vi.fn() },
     account: { create: vi.fn() },
     session: { deleteMany: vi.fn() },
+    auditEvent: { create: vi.fn() },
     $transaction: vi.fn(),
   };
   prisma.$transaction.mockImplementation(
@@ -814,7 +816,6 @@ describe('users routes', () => {
     firstName: 'Ana',
     lastName: 'Gomez',
     identificationNumber: '8-888-1234',
-    globalRole: 'USER',
     isActive: true,
   };
 
@@ -877,7 +878,7 @@ describe('users routes', () => {
     });
   });
 
-  it('honors role, status, unit and career overrides', async () => {
+  it('honors status, unit and career overrides while forcing USER', async () => {
     const prisma = createPrismaMock();
     mockUserLookup(prisma);
     prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-001', isActive: true });
@@ -890,7 +891,6 @@ describe('users routes', () => {
       .set('Authorization', `Bearer ${adminAccessToken}`)
       .send({
         ...createUserBody,
-        globalRole: 'ADMIN',
         isActive: false,
         unitId: 'unit-001',
         careerId: 'car-001',
@@ -900,13 +900,29 @@ describe('users routes', () => {
     expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          globalRole: 'ADMIN',
+          globalRole: 'USER',
           isActive: false,
           unitId: 'unit-001',
           careerId: 'car-001',
         }),
       }),
     );
+  });
+
+  it('rejects role selection during administrative user creation', async () => {
+    const prisma = createPrismaMock();
+    mockUserLookup(prisma);
+    prisma.user.create.mockResolvedValue(adminUserRecord);
+    const app = await loadApp(prisma);
+
+    const response = await request(app)
+      .post('/api/v1/admin/users')
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({ ...createUserBody, globalRole: 'ADMIN' })
+      .expect(400);
+
+    expect(response.body.message).toBe('Validation error.');
+    expect(prisma.user.create).not.toHaveBeenCalled();
   });
 
   it('does not expose internal or credential fields on creation', async () => {
@@ -1035,6 +1051,21 @@ describe('users routes', () => {
         data: { globalRole: 'ADMIN', isActive: true },
       }),
     );
+  });
+
+  it('rejects promoting an inactive user', async () => {
+    const prisma = createPrismaMock();
+    mockAdminUpdate(prisma, { ...editableUserSnapshot, isActive: false });
+    const app = await loadApp(prisma);
+
+    const response = await request(app)
+      .patch('/api/v1/admin/users/user-target')
+      .set('Authorization', `Bearer ${adminAccessToken}`)
+      .send({ globalRole: 'ADMIN' })
+      .expect(409);
+
+    expect(response.body.message).toBe('Only active users can be promoted to administrator.');
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it('revokes the sessions when an administrator deactivates a user', async () => {

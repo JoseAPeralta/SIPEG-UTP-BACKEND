@@ -8,6 +8,7 @@ import { auth } from '../../lib/auth.js';
 import { getPrismaClient } from '../../config/prisma.js';
 import { logger } from '../../config/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
+import { writeAuditEvent } from '../audit/audit.service.js';
 import { pseudonymize } from '../../utils/pseudonymize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { parseTtlToMilliseconds } from '../../utils/ttl.js';
@@ -313,9 +314,31 @@ export const changePassword = async (userId: string, body: ChangePasswordBody): 
       where: { id: account.id },
       data: { password: newHash },
     });
-    await tx.session.deleteMany({
+
+    const revoked = await tx.session.deleteMany({
       where: { userId, token: { not: body.refreshToken } },
     });
+
+    await writeAuditEvent(tx, {
+      action: 'auth.password_changed',
+      actorType: 'USER',
+      actorId: userId,
+      resourceType: 'user',
+      resourceId: userId,
+      targetUserId: userId,
+    });
+
+    if (revoked.count > 0) {
+      await writeAuditEvent(tx, {
+        action: 'auth.other_sessions_revoked',
+        actorType: 'USER',
+        actorId: userId,
+        resourceType: 'user',
+        resourceId: userId,
+        targetUserId: userId,
+        metadata: { revokedSessionCount: revoked.count },
+      });
+    }
   });
 
   logger.info(
