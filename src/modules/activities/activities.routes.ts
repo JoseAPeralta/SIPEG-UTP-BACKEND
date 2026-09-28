@@ -8,6 +8,7 @@ import { PERMISSIONS } from '../authorization/permissions.js';
 import {
   cancelActivity,
   createActivity,
+  deleteActivity,
   getActivities,
   getActivity,
   getEventProgramActivities,
@@ -72,4 +73,12 @@ activitiesRoutes.post(
   requirePermission(PERMISSIONS.ACTIVITY_CANCEL, activityScope),
   validate(cancelActivitySchema),
   cancelActivity,
+);
+
+activitiesRoutes.delete(
+  '/activities/:id',
+  authenticate,
+  requirePermission(PERMISSIONS.ACTIVITY_DELETE, activityScope),
+  validate(activityParamsSchema),
+  deleteActivity,
 );

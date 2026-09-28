@@ -1,0 +1,21 @@
+meta {
+  name: Delete a draft activity without a token returns 401
+  type: http
+  seq: 25
+  tags: [
+    Activities
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{deletableActivityId}}
+  body: none
+  auth: none
+}
+
+tests {
+  test("deleting without a token is rejected", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

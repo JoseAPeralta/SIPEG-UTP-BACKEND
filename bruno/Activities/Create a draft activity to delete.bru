@@ -1,0 +1,48 @@
+meta {
+  name: Create a draft activity to delete
+  type: http
+  seq: 24
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Actividad temporal fase 5.4",
+    "type": "SEMINAR",
+    "date": "2026-12-18",
+    "startTime": "09:00",
+    "endTime": "11:00",
+    "eventProgramId": "seed_program_fic_default",
+    "equipment": ["Proyector"]
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.id) {
+    bru.setVar("deletableActivityId", body.data.id);
+  }
+}
+
+tests {
+  test("a deletable DRAFT is created", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.data.status).to.equal("DRAFT");
+    expect(body.data.enrolledCount).to.equal(0);
+    expect(body.data.checkedInCount).to.equal(0);
+  });
+}

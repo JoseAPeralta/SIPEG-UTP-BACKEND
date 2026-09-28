@@ -100,6 +100,22 @@ export const activitiesPaths: ZodOpenApiPathsObject = {
         409: errorResponse,
       },
     },
+    delete: {
+      tags: ['Activities'],
+      summary: 'Delete a draft activity',
+      description:
+        'Physically deletes an activity and responds 204 without a body. Requires the activity:delete permission on the activity scope (or the ADMIN role); activity:delete is a default of ORGANIZER only. Retention rule: only DRAFT activities of ACTIVE event programs can be deleted, and the activity must have no attendance records and no alert records, otherwise the endpoint responds 409. Attendance and alerts are retained data protected by ON DELETE RESTRICT, so an activity with history is cancelled instead of deleted. Equipment, speaker links and local collaborations are removed by cascade while the speakers catalog entry is kept. Archived event programs are frozen and their activities respond 409.',
+      security: [{ bearerAuth: [] }],
+      requestParams: { path: activityParamsSchema.shape.params },
+      responses: {
+        204: { description: 'Activity deleted successfully.' },
+        400: errorResponse,
+        401: errorResponse,
+        403: errorResponse,
+        404: errorResponse,
+        409: errorResponse,
+      },
+    },
   },
   '/api/v1/activities/{id}/cancel': {
     post: {
