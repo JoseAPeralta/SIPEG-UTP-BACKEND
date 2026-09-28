@@ -1,6 +1,7 @@
 import pino, { stdSerializers, stdTimeFunctions } from 'pino';
 import type { Logger, LoggerOptions } from 'pino';
 
+import { getLogContext } from '../lib/log-context.js';
 import { env } from './env.js';
 
 export interface CreateLoggerOptions {
@@ -36,6 +37,14 @@ export async function createLogger(options: CreateLoggerOptions): Promise<Logger
       service: options.serviceName,
       version: options.version,
       environment: options.environment,
+    },
+    // Pino emits `level` as a number (30, 40, ...). Loki and Grafana can only
+    // index textual levels, and its detection ignores numeric JSON fields and
+    // then falls back to grepping words out of the line, which would mislabel
+    // events such as `auth.login.failed`. Emitting the name is a conscious
+    // trade-off: pino recommends a transport for human-readable output instead.
+    formatters: {
+      level: (label) => ({ level: label }),
     },
     redact: {
       paths: REDACT_PATHS,
@@ -74,4 +83,19 @@ export const logger = await createLogger({
 
 export function createChildLogger(bindings: Record<string, string>, base: Logger = logger): Logger {
   return base.child(bindings);
+}
+
+/**
+ * Returns a child logger carrying the `requestId` of the current request, when
+ * there is one, plus the given bindings. Security events are emitted from
+ * middlewares and services deep in the stack; this is what keeps them
+ * correlatable with their access log line (`X-Request-ID`) without threading a
+ * logger through every call.
+ */
+export function createRequestLogger(
+  bindings: Record<string, unknown> = {},
+  base: Logger = logger,
+): Logger {
+  const { requestId } = getLogContext();
+  return base.child(requestId ? { requestId, ...bindings } : bindings);
 }

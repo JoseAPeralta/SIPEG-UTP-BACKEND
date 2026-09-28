@@ -109,7 +109,7 @@ describe('auth instance', () => {
     rejectDelivery?.(new Error('SMTP secret detail'));
     await vi.waitFor(() => {
       expect(loggerError).toHaveBeenCalledWith(
-        { event: 'mail.delivery.failed' },
+        { event: 'mail.delivery.failed', logType: 'application' },
         'mail.delivery.failed',
       );
     });

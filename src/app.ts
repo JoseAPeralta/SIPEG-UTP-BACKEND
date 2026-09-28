@@ -6,7 +6,7 @@ import { toNodeHandler } from 'better-auth/node';
 
 import { auth } from './lib/auth.js';
 import { env } from './config/env.js';
-import { logger } from './config/logger.js';
+import { createRequestLogger } from './config/logger.js';
 import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { notFoundHandler } from './middlewares/notFound.middleware.js';
@@ -48,7 +48,9 @@ app.use(
         return;
       }
 
-      logger.warn({ event: 'security.cors.denied', origin }, 'security.cors.denied');
+      createRequestLogger({ event: 'security.cors.denied', logType: 'security', origin }).warn(
+        'security.cors.denied',
+      );
       callback(new ApiError(403, 'CORS origin is not allowed.'));
     },
     credentials: true,

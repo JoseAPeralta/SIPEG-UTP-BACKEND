@@ -54,16 +54,19 @@ describe('server lifecycle logging', () => {
 
     await startServer(server, 0);
 
-    expect(logger.info).toHaveBeenCalledWith({ event: 'app.starting' }, 'app.starting');
+    expect(logger.info).toHaveBeenCalledWith(
+      { event: 'app.starting', logType: 'infrastructure' },
+      'app.starting',
+    );
     await vi.waitFor(() => {
       expect(logger.info).toHaveBeenCalledWith(
-        { event: 'app.listening', port: 0 },
+        { event: 'app.listening', logType: 'infrastructure', port: 0 },
         'app.listening',
       );
     });
     await vi.waitFor(() => {
       expect(logger.error).toHaveBeenCalledWith(
-        { event: 'app.jwks.failed', err: expect.any(Error) },
+        { event: 'app.jwks.failed', logType: 'infrastructure', err: expect.any(Error) },
         'app.jwks.failed',
       );
     });
@@ -78,7 +81,10 @@ describe('server lifecycle logging', () => {
     await startServer(server, 0);
 
     await vi.waitFor(() => {
-      expect(logger.info).toHaveBeenCalledWith({ event: 'app.jwks.ready' }, 'app.jwks.ready');
+      expect(logger.info).toHaveBeenCalledWith(
+        { event: 'app.jwks.ready', logType: 'infrastructure' },
+        'app.jwks.ready',
+      );
     });
 
     await closeServer(server);
@@ -91,7 +97,7 @@ describe('server lifecycle logging', () => {
     server.emit('error', new Error('EADDRINUSE'));
 
     expect(logger.error).toHaveBeenCalledWith(
-      { event: 'app.fatal', err: expect.any(Error) },
+      { event: 'app.fatal', logType: 'infrastructure', err: expect.any(Error) },
       'app.fatal',
     );
     expect(exitSpy).toHaveBeenCalledWith(1);
@@ -106,7 +112,7 @@ describe('server lifecycle logging', () => {
     shutdown(server, 'SIGTERM');
 
     expect(logger.info).toHaveBeenCalledWith(
-      { event: 'app.shutdown.signal', signal: 'SIGTERM' },
+      { event: 'app.shutdown.signal', logType: 'infrastructure', signal: 'SIGTERM' },
       'app.shutdown.signal',
     );
     expect(close).toHaveBeenCalled();
@@ -114,7 +120,7 @@ describe('server lifecycle logging', () => {
     await vi.waitFor(() => {
       expect(mockedDisconnectPrisma).toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith(
-        { event: 'app.shutdown.completed' },
+        { event: 'app.shutdown.completed', logType: 'infrastructure' },
         'app.shutdown.completed',
       );
       expect(exitSpy).toHaveBeenCalledWith(0);
@@ -130,7 +136,7 @@ describe('server lifecycle logging', () => {
 
     await vi.waitFor(() => {
       expect(logger.error).toHaveBeenCalledWith(
-        { event: 'app.shutdown.error', err: closeError },
+        { event: 'app.shutdown.error', logType: 'infrastructure', err: closeError },
         'app.shutdown.error',
       );
       expect(exitSpy).toHaveBeenCalledWith(1);
@@ -146,7 +152,7 @@ describe('server lifecycle logging', () => {
     await vi.advanceTimersByTimeAsync(10_000);
 
     expect(logger.error).toHaveBeenCalledWith(
-      { event: 'app.shutdown.forced' },
+      { event: 'app.shutdown.forced', logType: 'infrastructure' },
       'app.shutdown.forced',
     );
     expect(exitSpy).toHaveBeenCalledWith(1);
@@ -158,7 +164,7 @@ describe('server lifecycle logging', () => {
     process.emit('uncaughtException', new Error('fatal boom'));
 
     expect(logger.error).toHaveBeenCalledWith(
-      { event: 'app.fatal', err: expect.any(Error) },
+      { event: 'app.fatal', logType: 'infrastructure', err: expect.any(Error) },
       'app.fatal',
     );
     expect(exitSpy).toHaveBeenCalledWith(1);
@@ -170,7 +176,7 @@ describe('server lifecycle logging', () => {
     process.emit('unhandledRejection', new Error('rejected promise'), Promise.resolve());
 
     expect(logger.error).toHaveBeenCalledWith(
-      { event: 'app.fatal', err: expect.any(Error) },
+      { event: 'app.fatal', logType: 'infrastructure', err: expect.any(Error) },
       'app.fatal',
     );
     expect(exitSpy).toHaveBeenCalledWith(1);

@@ -11,11 +11,20 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../utils/ApiError.js';
 
-const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
+const { loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+  const loggerWarn = vi.fn();
+  const createRequestLoggerSpy = vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: loggerWarn,
+  }));
+  return { loggerWarn, createRequestLoggerSpy };
+});
 
 vi.mock('../config/logger.js', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
   createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+  createRequestLogger: createRequestLoggerSpy,
 }));
 
 interface PrismaMock {
@@ -128,13 +137,14 @@ describe('authenticate middleware', () => {
     );
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
-    expect(loggerWarn).toHaveBeenCalledWith(
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'auth.account.disabled',
+        logType: 'security',
         actorPseudonym: expect.any(String),
       }),
-      'auth.account.disabled',
     );
+    expect(loggerWarn).toHaveBeenCalledWith('auth.account.disabled');
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('a@b.com');
   });
 
@@ -157,10 +167,10 @@ describe('authenticate middleware', () => {
     );
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(401);
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'auth.token.invalid' }),
-      'auth.token.invalid',
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'auth.token.invalid', logType: 'security' }),
     );
+    expect(loggerWarn).toHaveBeenCalledWith('auth.token.invalid');
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('expired-token-value');
   });
 

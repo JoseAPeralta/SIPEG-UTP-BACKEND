@@ -140,7 +140,7 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
     });
     const refreshExpiresAt = await fetchSessionExpiry(result.token);
     logger.info(
-      { event: 'auth.login.succeeded', actorPseudonym: pseudonymize(user.id) },
+      { event: 'auth.login.succeeded', logType: 'security', actorPseudonym: pseudonymize(user.id) },
       'auth.login.succeeded',
     );
     return {
@@ -151,7 +151,11 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
     };
   } catch (error) {
     logger.warn(
-      { event: 'auth.login.failed', actorPseudonym: pseudonymize(body.email.trim().toLowerCase()) },
+      {
+        event: 'auth.login.failed',
+        logType: 'security',
+        actorPseudonym: pseudonymize(body.email.trim().toLowerCase()),
+      },
       'auth.login.failed',
     );
     throwBetterAuthError(error);
@@ -342,7 +346,7 @@ export const changePassword = async (userId: string, body: ChangePasswordBody): 
   });
 
   logger.info(
-    { event: 'auth.password.changed', actorPseudonym: pseudonymize(userId) },
+    { event: 'auth.password.changed', logType: 'security', actorPseudonym: pseudonymize(userId) },
     'auth.password.changed',
   );
 };
@@ -353,7 +357,7 @@ export const logoutUser = async (_body: LogoutBody): Promise<void> => {
     await prisma.session.deleteMany({
       where: { token: _body.refreshToken },
     });
-    logger.info({ event: 'auth.session.revoked' }, 'auth.session.revoked');
+    logger.info({ event: 'auth.session.revoked', logType: 'security' }, 'auth.session.revoked');
   } catch (error) {
     throwBetterAuthError(error);
   }

@@ -808,7 +808,7 @@ describe('users service', () => {
       }),
     ).resolves.toEqual(adminUserRecord);
     expect(loggerErrorMock).toHaveBeenCalledWith(
-      { event: 'mail.delivery.failed' },
+      { event: 'mail.delivery.failed', logType: 'application' },
       'mail.delivery.failed',
     );
   });

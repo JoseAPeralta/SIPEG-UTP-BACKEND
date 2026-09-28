@@ -3,11 +3,20 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../utils/ApiError.js';
 
-const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
+const { loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+  const loggerWarn = vi.fn();
+  const createRequestLoggerSpy = vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: loggerWarn,
+  }));
+  return { loggerWarn, createRequestLoggerSpy };
+});
 
 vi.mock('../config/logger.js', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
   createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+  createRequestLogger: createRequestLoggerSpy,
 }));
 
 const buildReq = (overrides: Partial<Request> = {}): Request =>
@@ -46,12 +55,17 @@ describe('rate limit middleware', () => {
     });
     const next = vi.fn();
     middleware(buildReq({ body: { email: 'user@example.com' }, ip: '1.2.3.4' }), buildRes(), next);
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'rate_limit.exceeded', limiter: 'login.email' }),
-      'rate_limit.exceeded',
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'rate_limit.exceeded',
+        logType: 'security',
+        limiter: 'login.email',
+      }),
     );
-    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('user@example.com');
-    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('1.2.3.4');
+    expect(loggerWarn).toHaveBeenCalledWith('rate_limit.exceeded');
+    const bindings = JSON.stringify(createRequestLoggerSpy.mock.calls);
+    expect(bindings).not.toContain('user@example.com');
+    expect(bindings).not.toContain('1.2.3.4');
   });
 
   it('prefers user id over ip when authenticated', async () => {
