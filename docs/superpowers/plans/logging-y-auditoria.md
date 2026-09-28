@@ -720,21 +720,191 @@ Tercera prioridad (completitud administrativa):
 - `compose.dev.yaml`, `compose.prod.yaml` (driver de logging `local`)
 - `.dockerignore` (excluir `observability/**` de imágenes de la API si no aplica)
 
-- [ ] **T9.1. Configurar Loki monolítico (`observability/loki/config.yaml`).**
+- [x] **T9.1. Configurar Loki monolítico (`observability/loki/config.yaml`).**
   - Almacenamiento local con volumen persistente.
   - `compactor.retention_enabled: true`, `working_directory`, `delete_request_store`.
   - `limits_config.retention_period: 720h` (30 días) global.
   - `retention_stream` con selector `{log_type="security"}` y `period: 2160h`
     (90 días), prioridad mayor.
   - `schema_config` con index period `24h` (requisito de retención).
-- [ ] **T9.2. Configurar Alloy (`observability/alloy/config.alloy`).**
+    Verificado 2026-09-28 contra `grafana/loki:3.7.8` (imagen fijada, digest
+    `sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193`).
+    `-verify-config=true` responde `config is valid` y sale con 0 para
+    `config.yaml` y `config.dev.yaml`. Smoke en vivo: Loki arranca, elige
+    compactor, `POST /loki/api/v1/push` responde 204, la etiqueta `log_type`
+    aparece en el índice y `query_range` devuelve la línea con su `requestId`;
+    `/config` confirma `retention_period: 30d` y
+    `retention_stream: [{period: 90d, priority: 1, selector: '{log_type="security"}'}]`.
+    `prettier --check` limpio en ambos archivos; suite completa 1273/1273
+    (7 skipped) y `typecheck`, `lint` y `build` en verde.
+    Desviaciones respecto de lo planificado:
+    - **Dos archivos de configuración, no uno.** `observability/loki/config.dev.yaml`
+      baja ambas ventanas a 168 h (7 días) y mantiene schema, compactor, ring y
+      rutas idénticos, para que desarrollo ejercite el mismo camino de código. El
+      volumen de desarrollo se descarta con `docker compose down -v`.
+    - `auth_enabled: false` (decisión tomada): Loki no publica puerto y su
+      frontera es la red de Compose. Si alguna vez se activa, Alloy debe enviar
+      `X-Scope-OrgID` (T9.2) y el datasource de Grafana debe definirlo (T9.4).
+    - Se añade `ruler.enable_api: false`: Loki no evalúa reglas, las alertas son
+      de Grafana (T10.4). Y `analytics.reporting_enabled: false` para no sacar
+      telemetría del host.
+    - No se fijan topes de ingesta (`ingestion_rate_mb`, `max_streams_per_user`):
+      quedan los defaults de 3.7 anotados en un comentario, para calibrarlos con
+      línea base real igual que los umbrales de alerta (T10.4).
+    - Rutas: `common.path_prefix: /loki` deriva `compactor/`, `wal/`,
+      `rules-temp/` y `tsdb-shipper-*`; `common.storage.filesystem` fija
+      `chunks_directory` y `rules_directory`, que es lo que recomienda la
+      documentación. `compactor.working_directory` se declara igual de forma
+      explícita: en 3.7.8 no está deprecado y `storage_config.working_directory`
+      no existe (sería error de configuración).
+    - `index.period: 24h` no es negociable: `allow_structured_metadata` está en
+      `true` por defecto en 3.7, lo que obliga a `store: tsdb` + `schema: v13`,
+      y la retención además exige index period de 24 h.
+    - `reject_old_samples_max_age` queda en su default (1 semana): la retención
+      de 90 días aplica a lo ya almacenado, no a lo que Alloy puede reenviar.
+    - Hallazgo para T9.2: Loki agrega por su cuenta las etiquetas `detected_level`
+      y `service_name`; el pipeline no debe duplicarlas.
+    - Hallazgo para la composición (T9.x): la imagen es distroless (uid 10001, sin
+      shell), así que el healthcheck de Loki no puede usar `wget`. El volumen
+      nombrado en `/loki` se puebla desde la imagen y Loki escribe sin problema
+      (verificado en el smoke).
+- [x] **T9.1b. Emitir `logType` en todos los eventos (extensión de T9.1).**
+      Con el selector `{log_type="security"}` configurado pero sin productor de la
+      etiqueta, la retención de 90 días no habría coincidido con nada: hasta la
+      fase 4 solo el access log emitía `logType`, y los 11 eventos de seguridad no.
+      Se añadió `logType` en los 21 call sites de producción, con tests primero
+      (24 tests en rojo por el campo ausente, 20 aserciones existentes actualizadas).
+      Asignación: `security` en `authenticate`, `authorize`, `rateLimit`, la
+      denegación CORS de `app.ts` y los cuatro eventos de `auth.service`;
+      `application` en `http.error.unexpected` y `mail.delivery.failed`;
+      `infrastructure` en los 11 eventos de `server.ts` y en `prisma.warn` /
+      `prisma.error`. El access log conserva `access`.
+      Verificado 2026-09-28: los 24 tests pasaron de rojo a verde; suite completa
+      1273/1273 (7 skipped), `typecheck`, `lint` y `build` en verde.
+      Desviaciones: los tests de la instrumentación de Prisma viven en el archivo
+      nuevo `src/config/prisma.logs.test.ts` y no en `prisma.test.ts`, que ya
+      existía probando el pool con el entorno real y no admite los mocks
+      necesarios. Toca archivos de las fases 3 y 4.
+- [x] **T9.2. Configurar Alloy (`observability/alloy/config.alloy`).**
       Usar `discovery.docker` + `loki.source.docker` + `loki.write`. Añadir labels
       estáticos de baja cardinalidad (`service`, `environment`). No etiquetar por
       `requestId`, `actorId` ni IDs de recurso.
-- [ ] **T9.3. Acceder al Docker socket con seguridad.**
+      El campo `logType` del JSON ya lo emite la aplicación (T9.1b): el pipeline
+      debe promoverlo a etiqueta `log_type` con un `stage.json` y dejar de lado
+      `detected_level` y `service_name`, que Loki ya agrega por su cuenta.
+      Verificado 2026-09-28 contra `grafana/alloy:v1.20.0` (imagen fijada en
+      T9.5): `alloy validate --stability.level=generally-available` sale con 0 y
+      `alloy fmt --test` limpio. El archivo va con tabulaciones porque es el
+      formato canónico de Alloy; `prettier` no parsea `.alloy` y lo deja intacto.
+      Pipeline: `discovery.docker` (`tcp://docker-socket-proxy:2375`) →
+      `discovery.relabel` (filtro por proyecto y `container` = servicio Compose) →
+      `loki.source.docker` → `loki.process` (`stage.json`, `stage.timestamp`,
+      `stage.labels`, `stage.structured_metadata`) → `loki.write`.
+      Smoke end-to-end contra el stack de desarrollo: un contenedor one-off del
+      propio proyecto emitiendo líneas pino reales llega a Loki con las etiquetas
+      `container=api`, `environment=development`, `level=warn`, `log_type=security`
+      y `service=sipeg-utp-backend`; el filtro `| requestId="<uuid>"` como
+      structured metadata devuelve exactamente esa línea; el timestamp es el `time`
+      de la aplicación y no el de ingesta de Docker; los logs de `db` también
+      entran; el índice no contiene ninguna etiqueta `__meta_*` ni `requestId`; y
+      la búsqueda que documenta el README
+      (`{service="sipeg-utp-backend", environment="development"} |= "<requestId>"`)
+      funciona.
+
+      Desviaciones respecto de lo planificado:
+
+      - El filtro de contenedores va en `discovery.relabel`, no en
+        `loki.source.docker`: el `drop` de la fuente se aplica después de arrancar
+        el tailer y además emite una entrada sin etiquetas; en `discovery` el
+        tailer ni siquiera nace.
+      - `container` es el nombre del servicio Compose (`api`, `db`), no el nombre
+        de instancia (`sipeg-utp-dev-api-1`): este último cambia en cada recreación
+        y abriría un stream nuevo por despliegue.
+      - Se recolecta todo el proyecto salvo el stack de observabilidad
+        (`sipeg-utp-prod` y `sipeg-utp-dev`, excluyendo `loki`, `alloy`,
+        `grafana` y `docker-socket-proxy`). Los logs de `db` son los que alimentan
+        el panel de dependencias fallidas de T10.2.
+      - `tcp://` y no `http://` para el host del socket: con `http://` Alloy
+        instala su propio cliente con un timeout igual a `refresh_interval`, que
+        cortaría el `follow` largo de logs cada 60 s.
+      - No se usa `stage.docker` (la fuente ya desenvuelve el sobre de Docker) ni
+        `stage.drop` (la aplicación ya excluye los health checks exitosos).
+      - `max_backoff_retries = 0`: si Loki está caído, reintentar para siempre es
+        preferible a descartar; el spool del driver de logs de Docker es el que
+        acota el disco.
+      - `route`, `method`, `statusCode` y `durationMs` van a structured metadata y
+        no a etiquetas: como etiquetas multiplicarían los streams por ruta y por
+        código. Para agrupar por ruta, T10.1 usa `| json` en la consulta.
+      - Los logs de `db` y `mailpit` solo llevan `container` porque no son JSON:
+        se consultan con `{container="db"}` y caen en la retención global de 30
+        días.
+
+- [x] **T9.2b. Emitir `level` como texto y heredar `requestId` (extensión).**
+      Sin esto la etiqueta `level` no era posible: Loki solo detecta niveles
+      textuales y, ante un campo numérico, cae a un grep de palabras que etiquetaba
+      mal (`auth.login.failed` emitido en `info` acababa como `error`). Y los
+      eventos de seguridad se emitían con el logger raíz, sin `requestId`, aunque
+      el `AsyncLocalStorage` lo tuviera: no se podían correlacionar con su línea de
+      acceso.
+      Verificado 2026-09-28: 6 tests en rojo antes de implementar. `level` como
+      texto en `src/config/logger.ts` (con el motivo documentado en el código,
+      porque pino recomienda un transport para salida legible) y
+      `createRequestLogger()`, que fusiona el `requestId` del contexto y sustituye
+      el patrón duplicado de `error.middleware.ts`. Lo usan `errorHandler`,
+      `authenticate` (2 eventos), `authorize` (3), `rateLimit` y la denegación CORS
+      de `app.ts`. Suite completa 1286/1286 (7 skipped) y `typecheck`, `lint`,
+      `build`, `format:check` y `docs:check` en verde.
+      Desviación: la firma es `createRequestLogger(bindings?, base?)` y devuelve un
+      child logger, así que los call sites pasan los bindings del evento como
+      argumento y el mensaje al log; los tests de middleware pasaron a afirmar
+      sobre el helper en lugar de sobre `logger.warn`.
+- [x] **T9.2c. Ajustar la detección de Loki (extensión).**
+      `discover_log_levels: false` y `discover_service_name: []` en ambos configs.
+      La detección de niveles queda inactiva porque la aplicación ya entrega el
+      nivel y la de Loki solo aportaría la clasificación por palabras; y
+      `service_name` duplicaba la etiqueta `service` (y para `db` inventaba un
+      valor a partir del nombre del contenedor), lo que abría streams de más.
+      Verificado 2026-09-28: `-verify-config` en verde para los dos archivos y, tras
+      reiniciar Loki, las líneas nuevas ya no traen `service_name`; las series
+      anteriores con esa etiqueta se van con la retención.
+
+- [x] **T9.3. Acceder al Docker socket con seguridad.**
       Ejecutar un `docker-socket-proxy` de solo lectura y apuntar Alloy a él; no
       montar `/var/run/docker.sock` directamente en Alloy. Solo habilitar los
       endpoints de lectura necesarios.
+      Verificado 2026-09-28 con `tecnativa/docker-socket-proxy:v0.5.0`: el socket se
+      monta `:ro`, el puerto 2375 no se publica (solo `expose` en la red
+      `observability`) y todos los permisos denegados quedan explícitos en `0`, con
+      `POST=0` dejando pasar únicamente `GET`/`HEAD`. Creado también
+      `compose.observability.yaml`, que el plan solo mencionaba: es un overlay sin
+      `name:` con `loki`, `docker-socket-proxy` y `alloy`, y fuerza
+      `LOG_PRETTY=false` en el servicio `api` de desarrollo (sin JSON, `pino-pretty`
+      no se puede etiquetar). `alloy` corre como `473:473`, el usuario que la
+      imagen crea sin usar por defecto.
+
+      Desviaciones y hallazgos:
+
+      - `NETWORKS=1` resulta **necesario**: `discovery.docker` llama a
+        `GET /networks` para resolver los nombres de red de cada contenedor y sin
+        ese permiso falla con 403. Es solo lectura y no habilita ninguna mutación.
+      - `EVENTS=1` no lo necesita el pipeline (el tailer sondea `/containers/json`
+        cada minuto y el inspect cada 5 s), pero viene activo por defecto; se deja
+        y se anota.
+      - La red `observability` **no** lleva `internal: true`: verificado que Docker
+        no enruta ni publica puertos en una red interna, y Grafana tiene que quedar
+        en `127.0.0.1` (T9.4/T9.7). El aislamiento real viene de que ahí no se
+        publica ningún puerto y de que los servicios de la aplicación no están en
+        esa red.
+      - Healthchecks: Loki usa su subcomando `loki -health -health.url=...` (la
+        imagen es distroless y no tiene `curl`) y el proxy usa `wget` contra
+        `/_ping`. Alloy se queda sin healthcheck: su imagen no trae cliente HTTP.
+      - `LOKI_CONFIG=config.dev.yaml` selecciona la ventana de retención del
+        overlay; el valor por defecto es `config.yaml`.
+      - Nota operativa: el servicio `migrate` de `compose.dev.yaml` usa una imagen
+        propia, así que hay que reconstruirla con `docker compose -f
+        compose.dev.yaml build migrate` cuando se agregan migraciones; con la
+        imagen vieja las migraciones nuevas no se aplican.
+
 - [ ] **T9.4. Configurar Grafana.**
   - `GF_AUTH_ANONYMOUS_ENABLED=false`.
   - Data source Loki provisionada por archivo.
@@ -742,6 +912,8 @@ Tercera prioridad (completitud administrativa):
   - Volumen propio para Grafana.
 - [ ] **T9.5. Fijar imágenes por versión o digest.**
       Nada de `latest`. Documentar las versiones elegidas en el ADR-0007.
+      Loki ya quedó en `grafana/loki:3.7.8` (T9.1); faltan Alloy, Grafana y
+      `docker-socket-proxy`.
 - [ ] **T9.6. Añadir driver de logging `local` en los servicios Docker.**
       `logging: { driver: local, options: { max-size: '20m', max-file: '5' } }`
       como spool que evita agotar disco si Loki está caído.
@@ -838,12 +1010,12 @@ Tercera prioridad (completitud administrativa):
 
 ## Duración Y Retención Propuesta
 
-| Datos                                 | Retención | Configuración                                |
-| ------------------------------------- | --------: | -------------------------------------------- |
-| Logs de desarrollo                    |    7 días | `compose.observability.yaml` (dev)           |
-| Access/aplicación/infra de producción |   30 días | `loki/config.yaml`                           |
-| Eventos de seguridad                  |   90 días | `retention_stream` `log_type=security`       |
-| Auditoría PostgreSQL                  |  365 días | Política + procedimiento de purga controlada |
+| Datos                                 | Retención | Configuración                                 |
+| ------------------------------------- | --------: | --------------------------------------------- |
+| Logs de desarrollo                    |    7 días | `observability/loki/config.dev.yaml` (168 h)  |
+| Access/aplicación/infra de producción |   30 días | `loki/config.yaml` (`retention_period: 720h`) |
+| Eventos de seguridad                  |   90 días | `retention_stream` `log_type=security`        |
+| Auditoría PostgreSQL                  |  365 días | Política + procedimiento de purga controlada  |
 
 - [ ] **T13.1. Ratificar los 365 días de auditoría.**
       No se encontró política de retención en el repositorio. Confirmar con política
@@ -910,3 +1082,7 @@ Tercera prioridad (completitud administrativa):
 - **Alertas sin línea base:** empezar permisivo y calibrar.
 - **No commitear secretos:** `LOG_PSEUDONYMIZATION_KEY`, tokens de Bruno y
   credenciales de Grafana no van al repositorio.
+- **Deuda de las fases 1 y 4 (hallazgo de T9.1):** ADR-0007 afirma que los eventos
+  `security` no se apagan con `LOG_LEVEL`, pero el logger no lo implementa: hoy un
+  `LOG_LEVEL=error` silencia también esos eventos. No se tocó en T9.1 porque exige
+  una decisión de diseño del logger (nivel efectivo por tipo de log) y tests propios.
