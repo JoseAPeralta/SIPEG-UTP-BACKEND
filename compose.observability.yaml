@@ -1,0 +1,155 @@
+# Stack de observabilidad: Loki + docker-socket-proxy + Alloy (y Grafana en T9.4).
+#
+# Es un *overlay*: no define `name:` para heredar el proyecto del compose base y
+# no toca los servicios de la aplicacion salvo para forzar JSON en desarrollo.
+#
+#   Desarrollo:
+#     LOKI_CONFIG=config.dev.yaml \
+#       docker compose -f compose.dev.yaml -f compose.observability.yaml up -d
+#   Produccion (se une a compose.prod.yaml, .env.prod):
+#     docker compose -f compose.prod.yaml -f compose.observability.yaml \
+#       --env-file .env.prod up -d
+#
+# `LOKI_CONFIG` elige la ventana de retencion (168 h en dev, 720 h + 90 dias de
+# seguridad en produccion). Ver observability/loki/.
+#
+# Ningun servicio de este archivo publica puertos: Loki y Alloy quedan en la red
+# `observability` y Grafana se publicara solo en 127.0.0.1 (T9.4/T9.7).
+
+services:
+  loki:
+    image: grafana/loki:3.7.8
+    command: ['-config.file=/etc/loki/${LOKI_CONFIG:-config.yaml}']
+    volumes:
+      - ./observability/loki:/etc/loki:ro
+      - loki_data:/loki
+    expose:
+      - '3100'
+    # La imagen es distroless (sin shell): el subcomando `-health` es la unica
+    # forma de consultar /ready sin instalar curl en el contenedor.
+    healthcheck:
+      test: ['CMD', '/usr/bin/loki', '-health', '-health.url=http://localhost:3100/ready']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - observability
+
+  # Daemon de solo lectura sobre el socket de Docker. Alloy nunca monta
+  # /var/run/docker.sock: apuntar al proxy limita el radio de accion a GET sobre
+  # /containers, que es lo unico que el pipeline necesita.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    environment:
+      # Permitido: lo que llaman discovery.docker y loki.source.docker
+      # (GET /containers/json, GET /containers/{id}/json, GET /containers/{id}/logs)
+      # y el sondeo /_ping. `discovery.docker` ademas lista redes para resolver
+      # los nombres de red de cada contenedor, asi que `NETWORKS` es necesario
+      # (solo lectura, no concede ninguna mutacion).
+      CONTAINERS: '1'
+      INFO: '1'
+      NETWORKS: '1'
+      PING: '1'
+      VERSION: '1'
+      EVENTS: '1'
+      # Denegado explicitamente. POST=0 deja pasar solo GET/HEAD, asi que el
+      # proxy no puede crear, arrancar, parar ni ejecutar nada en el host.
+      POST: '0'
+      AUTH: '0'
+      BUILD: '0'
+      COMMIT: '0'
+      CONFIGS: '0'
+      DISTRIBUTION: '0'
+      EXEC: '0'
+      GRPC: '0'
+      IMAGES: '0'
+      NODES: '0'
+      PLUGINS: '0'
+      SECRETS: '0'
+      SERVICES: '0'
+      SESSION: '0'
+      SWARM: '0'
+      SYSTEM: '0'
+      TASKS: '0'
+      VOLUMES: '0'
+      ALLOW_START: '0'
+      ALLOW_STOP: '0'
+      ALLOW_RESTARTS: '0'
+      ALLOW_PAUSE: '0'
+      ALLOW_UNPAUSE: '0'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    expose:
+      - '2375'
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '-', 'http://localhost:2375/_ping']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - observability
+
+  alloy:
+    image: grafana/alloy:v1.20.0
+    # La imagen corre como root por defecto; existe el usuario `alloy` (uid 473)
+    # con /var/lib/alloy propio. El volumen nombrado hereda ese propietario.
+    user: '473:473'
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - alloy_data:/var/lib/alloy/data
+    expose:
+      - '12345'
+    depends_on:
+      loki:
+        condition: service_healthy
+      docker-socket-proxy:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - observability
+
+  # Alloy solo puede etiquetar los logs de la API si son JSON. En desarrollo
+  # compose.dev.yaml activa LOG_PRETTY por defecto (pino-pretty no es JSON), asi
+  # que el overlay lo desactiva aqui. En produccion no cambia nada: el logger ya
+  # ignora `pretty` cuando NODE_ENV=production.
+  api:
+    environment:
+      LOG_PRETTY: 'false'
+
+volumes:
+  loki_data:
+  alloy_data:
+
+networks:
+  # Red propia del stack: los servicios de la aplicacion no la comparten y
+  # llegan a los logs por el socket de Docker, no por la red.
+  #
+  # `internal: true` queda deliberadamente FUERA: Docker no publica ni enruta
+  # puertos en una red interna, y Grafana tiene que quedar accesible en
+  # 127.0.0.1 (T9.4/T9.7). Verificado: con `internal: true` un puerto publicado
+  # responde con conexion rechazada desde el host. El aislamiento real viene de
+  # que aqui no se publica ningun puerto (`expose` es solo interno de la red) y
+  # de que los servicios de la aplicacion no estan conectados a esta red.
+  observability:
+    driver: bridge
