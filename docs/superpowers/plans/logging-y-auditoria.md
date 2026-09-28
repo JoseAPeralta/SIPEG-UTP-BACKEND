@@ -316,7 +316,7 @@ Grafana Alloy, Loki, Grafana.
 
 - `prisma/schema.prisma`
 
-- [ ] **T5.1. Modelar `AuditEvent` en `prisma/schema.prisma`.**
+- [x] **T5.1. Modelar `AuditEvent` en `prisma/schema.prisma`.**
       Campos: `id` (cuid), `action`, `occurredAt` (`Timestamptz(3)` UTC),
       `actorType` (enum `USER|ANONYMOUS|SYSTEM`), `actorId`, `resourceType`,
       `resourceId`, `scopeType`, `scopeId`, `targetUserId`, `requestId`,
@@ -325,31 +325,43 @@ Grafana Alloy, Loki, Grafana.
       `(action, occurredAt)`, `(scopeType, scopeId, occurredAt)`, `(occurredAt)`.
       Preferir `action String` + unión de literales en TypeScript en lugar de enum
       PostgreSQL (el catálogo evoluciona).
-- [ ] **T5.2. Definir el catálogo y tipos en `audit.types.ts`.**
+- [x] **T5.2. Definir el catálogo y tipos en `audit.types.ts`.**
       Unión literal de acciones, tipo `AuditContext`, allowlist de claves válidas en
       `changes` y `metadata`, y el enum `actorType`.
-- [ ] **T5.3. Escribir tests primero de `audit.service.ts` (TDD).**
+- [x] **T5.3. Escribir tests primero de `audit.service.ts` (TDD).**
       Casos:
   - Inserta el evento esperado con actor, recurso y cambios.
   - Rechaza claves no permitidas en `changes`/`metadata`.
   - Rechaza valores que parezcan secretos (password, token, hash).
   - El writer exige un `Prisma.TransactionClient` (no usa el cliente global).
-- [ ] **T5.4. Implementar `writeAuditEvent(tx, input)`.**
+- [x] **T5.4. Implementar `writeAuditEvent(tx, input)`.**
       Firma que recibe el `tx` de la transacción para impedir usos no atómicos.
       Exportar helpers `toAuditContext(req)` en un util separado
       (`src/utils/audit-context.ts`) para no acoplar servicios a Express.
-- [ ] **T5.5. Crear la migración.**
+- [x] **T5.5. Crear la migración.**
       Generar con `pnpm prisma migrate dev --name add_durable_audit_events` y luego
       añadir SQL de trigger `BEFORE UPDATE OR DELETE OR TRUNCATE` que lance excepción
       (patrón de inmutabilidad ya usado en `prisma/migrations/20260919053739_*`).
-- [ ] **T5.6. Valida y regenera.**
+- [x] **T5.6. Valida y regenera.**
       `pnpm prisma validate && pnpm prisma format && pnpm prisma generate`.
-- [ ] **T5.7. Prueba de integración de rollback y append-only.**
+- [x] **T5.7. Prueba de integración de rollback y append-only.**
       Con base aislada: forzar fallo del insert de auditoría y comprobar que la
       mutación principal se revierte; confirmar que `UPDATE`/`DELETE`/`TRUNCATE`
       sobre `audit_events` fallan.
-- [ ] **T5.8. Verificar.**
+- [x] **T5.8. Verificar.**
       `pnpm test src/modules/audit` y `pnpm run typecheck`.
+      Verificado 2026-09-27: 15/15 tests unitarios de `audit.service` + 4/4 de
+      `toAuditContext`; 7/7 tests de integración contra la base aislada
+      `sipeg_utp_audit_test` (commit conjunto, rollback por rechazo del payload y
+      por fallo del insert en base de datos, `UPDATE`/`DELETE`/`TRUNCATE`
+      rechazados por trigger, y evento sobreviviendo al borrado del recurso
+      referenciado). Suite completa 1126/1126, typecheck/lint/build en verde.
+      Desviaciones respecto de lo planificado: el test de integración es opt-in
+      vía `AUDIT_TEST_DATABASE_URL` (documentado en `.env.example`) porque la
+      suite del proyecto no usa base de datos real; `removeCollaborator` y
+      `revokePermission` se envuelven en `$transaction` porque no tenían
+      transacción previa y el audit debe ser atómico con el borrado; el payload
+      persiste `NULL` explícito en las columnas opcionales en lugar de omitirlas.
 
 ---
 
@@ -365,31 +377,47 @@ Grafana Alloy, Loki, Grafana.
 
 Acciones de primera prioridad (privilegios y cuentas):
 
-- [ ] **T6.1. Colaboradores:** `authorization.collaborator_added`,
+- [x] **T6.1. Colaboradores:** `authorization.collaborator_added`,
       `authorization.collaborator_role_changed`,
       `authorization.collaborator_removed`.
       Insertar el evento dentro de la transacción existente
       (`delegation.service.ts:334-351`, `:398-421`, y tabla `removeCollaborator`).
       Para el cambio de rol, leer el rol anterior y guardar old→new.
-- [ ] **T6.2. Permisos:** `authorization.permission_granted`,
+- [x] **T6.2. Permisos:** `authorization.permission_granted`,
       `authorization.permission_replaced`, `authorization.permission_revoked`.
       Guardar permiso, scope y ventana `validFrom`/`validUntil` old→new. Nunca
       guardar nombres, emails ni datos personales.
-- [ ] **T6.3. Usuarios admin:** `user.admin_created`, `user.role_changed`,
+- [x] **T6.3. Usuarios admin:** `user.admin_created`, `user.role_changed`,
       `user.activated`, `user.deactivated`.
       Pasar un `AuditContext` desde `users.controller.ts` al servicio y usar la
       transacción existente (`users.service.ts:230-258`, `:396-408`).
-- [ ] **T6.4. Credenciales:** `auth.password_changed` y
+- [x] **T6.4. Credenciales:** `auth.password_changed` y
       `auth.other_sessions_revoked`.
       Usar la transacción existente en `auth.service.ts:301-309`. Registrar solo el
       conteo de sesiones revocadas, no sus tokens.
-- [ ] **T6.5. Actualizar mocks y tests.**
+- [x] **T6.5. Actualizar mocks y tests.**
       Añadir `auditEvent.create` a los mocks Prisma y `$transaction` donde falte
       (users, auth, delegation). Afirmar exactamente un evento por transición y
       ninguno en fallos de validación/autorización.
-- [ ] **T6.6. Verificar.**
+- [x] **T6.6. Verificar.**
       `pnpm test src/modules/authorization src/modules/users src/modules/auth`
       `pnpm run typecheck`
+      Verificado 2026-09-27: 440/440 tests en los tres módulos (11 nuevos de
+      delegación, 11 de usuarios, 6 de credenciales), suite completa 1126/1126,
+      typecheck/lint/build y `docs:check` en verde. Comprobación end-to-end con
+      el servicio real y la base aislada: la promoción de rol escribe un único
+      `user.role_changed` old→new; al bloquear el insert de auditoría con un
+      trigger temporal, la desactivación revierte por completo (el usuario sigue
+      activo y sus 2 sesiones no se borran) y, al retirar el bloqueo, la misma
+      llamada desactiva, revoca y escribe exactamente 1 evento.
+      Desviaciones: `collaborator_added` requiere `id` en `collaboratorSelect`
+      (no se exponía en HTTP porque `toCollaboratorDetail` es explícito);
+      `permission_granted`/`permission_replaced` se distinguen leyendo el grant
+      previo dentro de la transacción; `other_sessions_revoked` solo se emite
+      cuando el conteo es mayor que cero; los servicios reciben un
+      `AuditContext` opcional desde el controller y el writer completa el
+      `requestId` con el contexto de `AsyncLocalStorage`; `createUser` exige el
+      `AuditContext` porque no recibe actor por parámetro.
 
 ---
 
@@ -407,29 +435,104 @@ Acciones de primera prioridad (privilegios y cuentas):
 
 Segunda prioridad (alto riesgo / destructivo):
 
-- [ ] **T7.1. Unidades:** `organizational_unit.deactivated`,
+- [x] **T7.1. Unidades:** `organizational_unit.deactivated`,
       `organizational_unit.reactivated` (transacciones en
       `organizational-units.service.ts:264-287`, `:313-330`).
-- [ ] **T7.2. Programas:** `event_program.published`, `event_program.archived`,
+      Verificado 2026-09-27: 1 evento por transición con `before/after` de
+      `isActive`, escrito dentro de la transacción existente (que ya era atómica)
+      y después de archivar el programa por defecto. Los controllers propagan
+      `toAuditContext(req)`. 6 tests nuevos.
+- [x] **T7.2. Programas:** `event_program.published`, `event_program.archived`,
       `event_program.reactivated` (`event-programs.service.ts:206-350`).
-- [ ] **T7.3. Actividades:** `activity.scheduled`, `activity.unpublished`,
+      Verificado 2026-09-27: los tres `eventProgram.update` se envolvieron en
+      `$transaction` para que el insert de auditoría sea atómico. `published`
+      solo se emite cuando la transición real es `DRAFT -> ACTIVE`; un PATCH de
+      campos sin cambio de estado no audita. 8 tests nuevos.
+- [x] **T7.3. Actividades:** `activity.scheduled`, `activity.unpublished`,
       `activity.schedule_changed`, `activity.cancelled`
       (`activities.service.ts:514-708`).
-- [ ] **T7.4. Aulas y carreras:** `classroom.activated`, `classroom.deactivated`,
+      Verificado 2026-09-27: `updateActivity` y `cancelActivity` envueltos en
+      `$transaction`. Un solo evento por PATCH: si cambia el estado gana
+      `scheduled`/`unpublished`; si no, `schedule_changed` con únicamente las
+      claves que realmente cambiaron (fecha/hora/aula/capacidad). 13 tests
+      nuevos.
+- [x] **T7.4. Aulas y carreras:** `classroom.activated`, `classroom.deactivated`,
       `career.deleted` (`classrooms.service.ts:165-201`, `careers.service.ts:176-199`).
+      Verificado 2026-09-27: `updateClassroom` lee el estado completo antes de
+      escribir (necesario para el diff), envuelve el `update` en `$transaction` y
+      emite un evento por PATCH: el de ciclo de vida si cambia `isActive`, más
+      `classroom.updated` si además cambian atributos. `deleteCareer` ya tenía
+      `$transaction`; escribe `career.deleted` con `before` de `code`/`unitId`
+      después del `delete`. Los controllers propagan `toAuditContext(req)`.
+      6 tests nuevos de ciclo de vida y 9 de borrado/idempotencia.
 
 Tercera prioridad (completitud administrativa):
 
-- [ ] **T7.5. Catálogos:** `organizational_unit.created/updated`,
+- [x] **T7.5. Catálogos:** `organizational_unit.created/updated`,
       `career.created/updated`, `classroom.created/updated`,
       `event_program.created/updated`, `activity.created/updated`,
       `user.profile_updated`, `user.organization_assignment_changed`.
-- [ ] **T7.6. Amenities y disponibilidad de aulas.**
-- [ ] **T7.7. Respetar idempotencia.**
-      No emitir evento cuando la operación no cambia estado (archivar un programa ya
-      archivado, cancelar una actividad ya cancelada).
-- [ ] **T7.8. Verificar.**
+      Verificado 2026-09-27: las nueve operaciones de creación y las cinco de
+      actualización quedaron dentro de `$transaction` para que el insert de
+      auditoría sea atómico. `updateOrganizationalUnit`, `updateCareer` y
+      `updateProfile` no tenían transacción y se agregaron. `updateEventProgram`
+      y `updateActivity` ya la tenían; ahora emiten, además del evento de ciclo
+      de vida, un `*.updated` por los atributos residuales. `user
+.organization_assignment_changed` se emite desde `updateProfile` y desde
+      `updateAdminUser` (junto a `role_changed`/`activated`/`deactivated`).
+      45 tests nuevos.
+- [x] **T7.6. Amenities y disponibilidad de aulas.**
+      Verificado 2026-09-27: `classroom.amenity_added/removed` y
+      `classroom.availability_added/removed`, cada uno en su propia
+      `$transaction` junto con la escritura. La disponibilidad registra
+      `dayOfWeek`/`startTime`/`endTime` y un flag `hasPeriod`; no persiste el
+      texto del `period` (ver desviaciones). 4 tests nuevos.
+- [x] **T7.7. Respetar idempotencia.**
+      Verificado 2026-09-27: ninguna operación de estas fases emite evento
+      cuando el estado no cambia. Un PATCH que repite los valores almacenados no
+      audita, tanto si el cambio es estructural (`unitId`, `careerId`, `capacity`,
+      `floor`, `type`, `isActive`, fechas) como si es de texto libre (`name`,
+      `description`, `label`, `building`, `bannerUrl`, `equipment`, `speakers`).
+      La comparación de `equipment` y `speakers` normaliza y ordena el conjunto,
+      de modo que reenviar la misma lista en otro orden tampoco audita. Una
+      operación rechazada por validación o autorización no audita. 8 tests
+      nuevos dedicados a no-op.
+- [x] **T7.8. Verificar.**
       `pnpm test` y `pnpm run typecheck`.
+      Verificado 2026-09-27: suite completa 1198/1198 (7 skipped, incluida la
+      integración de `audit_events` que es opt-in por
+      `AUDIT_TEST_DATABASE_URL`), `typecheck`, `lint`, `build` y `docs:check` en
+      verde. 72 tests nuevos en total. `docs:check` no reporta drift porque estas
+      fases no cambian esquemas de request ni de response: todos los parámetros
+      nuevos son opcionales y con valor por defecto.
+      Desviaciones respecto de lo planificado: - **No se persiste texto libre en `changes`.** `name`, `description`,
+      `label`, `bannerUrl`, `building`, `period`, `firstName` y `lastName`
+      admiten `@` y palabras que el validador interpreta como secreto. Escribir
+      su valor convertiría una operación legítima en un 500, el mismo problema
+      ya documentado en T7.3 con `cancelReason`. Esos campos se reportan por
+      **nombre** en `metadata.changedFields` (array de strings), que responde
+      qué cambió sin almacenar PII. `changes` queda reservado para valores
+      tipados y seguros (enums, números, booleanos, fechas ISO, `HH:mm`, cuids
+      y `code`, que el schema restringe a `[A-Za-z0-9-]`). `amenity` sí se
+      persiste por valor porque su schema ya prohíbe `@`. - `updateActivity` selecta `equipment` y `speakers` para poder distinguir
+      un PATCH que reenvía la misma lista de uno que la cambia (T7.7); los
+      datos de los ponentes nunca se escriben en el evento, solo el nombre del
+      campo. - Dos tests de fases anteriores afirmaban que un PATCH de campos sin cambio
+      de estado no audita (`event-programs`, `activities`). Con T7.5 eso ahora
+      emite `*.updated`, así que se reescribieron para afirmar el evento de
+      atributo y se añadieron tests gemelos que cubren el no-op. - Se corrigió un bug de `??` frente a `!== undefined` al diferenciar un
+      `null` explícito de un campo no provisto: en
+      `resolveOrganizationAssignment` una selección `unitId: null` (opción
+      "Otro") se reportaba como si no hubiera cambio. - `format:check` sigue fallando por archivos de las fases 1-4
+      (`src/config/logger.ts`, `src/server.ts`, `src/middlewares/*`) ajenos a
+      esta fase; solo se formatearon los archivos tocados aquí. - La suite completa se verificó en verde dos veces (1198/1198) antes de que
+      el entorno se saturara: posteriormente el `load average` subió a ~15 por
+      tres sesiones de editor ajenas y un `docker build` concurrente, y ocho
+      tests de rutas empezaron a fallar con `Test timed out in 5000ms` sin
+      relación con el código. Se confirmó que esos mismos tests fallan igual
+      con los cambios de esta fase en `git stash`, y los 19 archivos de los
+      módulos auditados pasan 677/677 con un solo worker. Es un problema de
+      recursos del entorno, no una regresión.
 
 ---
 
@@ -446,26 +549,155 @@ Tercera prioridad (completitud administrativa):
 **Archivos a modificar:**
 
 - `src/routes.ts`
+- `src/modules/audit/audit.service.ts`
+- `src/modules/audit/audit.types.ts`
 - `src/docs/openapi.ts`
 - `openapi.json`
 
-- [ ] **T8.1. Definir esquemas Zod.**
+- [x] **T8.1. Definir esquemas Zod.**
       Filtros: `action`, `actorId`, `resourceType`, `resourceId`, `scopeType`,
       `scopeId`, `from`, `to`, cursor y límite máximo 100.
-- [ ] **T8.2. Implementar el endpoint de solo lectura `GET /api/v1/audit-events`.**
+      `src/modules/audit/audit.schemas.ts`: `listAuditEventsQuerySchema` con
+      `.strict()` (rechaza claves desconocidas), `limit` por defecto 20 y tope
+      100, ventana de instantes con `z.iso.datetime({ offset: true })` y
+      `.refine` de `from <= to`; esquemas de respuesta `AuditChanges`,
+      `AuditMetadata`, `AuditEvent` y `AuditEventPage` con `.meta({ id })` y
+      `satisfies z.ZodType<...>`. Tipos de lectura en `audit.types.ts`
+      (`AuditValue`, `AuditReadChanges`, `AuditEventResponse`, `AuditEventPage`).
+      Verificado 2026-09-28: 13/13 tests en `audit.schemas.test.ts` (defaults,
+      coerción y límites, `trim` de ids, enums del catálogo, ventana de
+      instantes, cursor opaco, `unknown` y objetos anidados rechazados).
+- [x] **T8.2. Implementar el endpoint de solo lectura `GET /api/v1/audit-events`.**
       Orden middleware: `authenticate -> requireAdmin -> validate -> controller`.
       Solo lectura: **no** crear endpoints de update/delete.
-- [ ] **T8.3. Documentar en OpenAPI y regenerar.**
+      `listAuditEvents` en `audit.service.ts` (junto al writer, sin cambiar su
+      firma), `audit.controller.ts`, `audit.routes.ts` y el montaje en
+      `src/routes.ts`. Paginación por cursor keyset `(occurredAt, id)` descendente
+      con `take: limit + 1`: el cursor es `base64url({"t": iso, "i": id})` y se
+      traduce al predicado `OR: [{ occurredAt: { lt } }, { occurredAt, id: { lt } }]`;
+      un cursor malformado responde `400 Invalid cursor.` antes de tocar Prisma.
+      Verificado 2026-09-28: 11 tests nuevos de `listAuditEvents` (orden y `take`,
+      proyección de fila con ISO y `null`, proyección de solo las 13 columnas del
+      contrato, `hasMore`/`nextCursor`, un predicado por filtro, ventana con un
+      solo lado, cursor como keyset, cursor inválido y página vacía, y que la
+      lectura nunca escribe) y 4 de rutas (200 con la página por defecto, 401 sin
+      token, 403 como `USER` sin tocar Prisma, y `POST`/`PATCH`/`PUT`/`DELETE`
+      respondiendo 404). Suite del módulo 43/43, suite completa 1250/1250
+      (7 skipped, incluida la integración de `audit_events` opt-in por
+      `AUDIT_TEST_DATABASE_URL`), `typecheck`, `lint`, `build` y `docs:check` en
+      verde. La matriz completa de validación de filtros y de límite por ruta
+      queda para T8.4.
+      Desviaciones respecto de lo planificado: - `limit` tiene valor por defecto 20 (convención de las demás listas del
+      repo) con el tope 100 que fija el plan. - El actor se devuelve solo por `actorId`/`targetUserId`, sin join a
+      `User`: coherente con la minimización de ADR-0008 y sin exponer email ni
+      nombres en la respuesta de auditoría. - `action`, `resourceType` y `scopeType` filtran contra el catálogo de
+      `audit.types.ts` con `z.enum`, aunque la columna sea `String`: una acción
+      desconocida no es consultable hasta que entra al catálogo. - `from`/`to` son instantes ISO 8601 con offset, no fechas de negocio:
+      `occurredAt` es `Timestamptz(3)` y se compara en UTC, sin pasar por
+      `src/utils/date.ts` (ADR-0002 aplica a fechas de calendario). - Sin migración de índice compuesto: `audit_events_occurred_at_idx` cubre
+      el prefijo del `ORDER BY` y el desempate por `id` se resuelve en memoria
+      entre instantes iguales. Queda como seguimiento si el `EXPLAIN` de la
+      consulta con rango estrecho muestra degradación. - `changes`/`metadata` se proyectan con un type guard y una única aserción
+      local justificada: `writeAuditEvent` es el único autor y valida la
+      allowlist de claves y valores antes de insertar. - Los tests del servicio cargan `audit.service.js` con `vi.resetModules()` y
+      `vi.doMock` de Prisma, así que el error del cursor se afirma por
+      `statusCode` y mensaje en lugar de `instanceof ApiError` (dos instancias
+      de la clase en el grafo de módulos del test). - `src/docs/openapi.test.ts` no se tocó: la ruta existe pero todavía no está
+      documentada, y `docs:check` no reporta drift porque el documento no
+      cambia hasta T8.3.
+- [x] **T8.3. Documentar en OpenAPI y regenerar.**
       `pnpm run docs:generate && pnpm run docs:check`.
-- [ ] **T8.4. Tests de rutas.**
+      `src/modules/audit/audit.openapi.ts` expone una sola operación
+      `GET /api/v1/audit-events` (tag `Audit`, `bearerAuth`, 200 con
+      `AuditEventPage` y 400/401/403) y `src/docs/openapi.ts` registra
+      `auditPaths` y el tag. La descripción deja constancia de que la bitácora es
+      append-only y por eso no existe operación de escritura, del orden
+      `(occurredAt, id)` descendente y de que la respuesta solo lleva
+      identificadores.
+      Verificado 2026-09-28: `openapi.json` regenerado y `docs:check` en verde; 4
+      componentes nuevos (`AuditEventPage`, `AuditEvent`, `AuditChanges`,
+      `AuditMetadata`) y 10 parámetros de query
+      (`action`/`resourceType`/`scopeType` como enum del catálogo, `from`/`to`
+      como `date-time`, `cursor` con longitud acotada, `limit` con
+      `minimum 1`, `maximum 100` y `default 20`). Frente a `HEAD` la única
+      operación nueva de esta fase es `GET /api/v1/audit-events` y no se elimina
+      ninguna otra (`DELETE /api/v1/activities/{id}` en el mismo diff venía de
+      una fase anterior sin commitear). 4 tests nuevos en
+      `src/docs/openapi.test.ts` (operación esperada, seguridad y fallos, filtros
+      y contrato de página, y ausencia de `post`/`patch`/`put`/`delete` en el
+      path); `src/docs` 60/60.
+- [x] **T8.4. Tests de rutas.**
       Verificar 401 sin token, 403 para usuario no admin, 200 para admin, validación
       de filtros y de límite.
-- [ ] **T8.5. Bruno (solo si se agrega el endpoint).**
+      Verificado 2026-09-28: `audit.routes.test.ts` pasa de 4 a 11 tests. Los 4
+      originales cubren 200 con la página por defecto, 401, 403 sin tocar Prisma y
+      `POST`/`PATCH`/`PUT`/`DELETE` en 404. Los 7 nuevos cubren los 9 filtros
+      reenviados a `where.AND` con `take: limit + 1`, `limit=101` y `limit=0` con
+      `field: query.limit`, enums fuera de catálogo (`query.action`,
+      `query.resourceType`, `query.scopeType`), ventana malformada (`query.from`) e
+      invertida (`query.to`, `from cannot be after to.`), clave desconocida
+      (`field: query`), cursor malformado (`Invalid cursor.` del servicio) y la ida
+      y vuelta del cursor por HTTP, que comprueba que el `nextCursor` devuelto se
+      traduce en el predicado keyset `OR: [{ occurredAt: { lt } }, { occurredAt, id:
+{ lt } }]`. Suite del módulo 54/54; `typecheck`, `lint`, `build` y
+      `docs:check` en verde. La suite completa da 1260/1260 (7 skipped) con un
+      solo worker; en las corridas en paralelo aparecen timeouts de 5000 ms en
+      tests de rutas ajenos a esta fase porque el `load average` del entorno
+      estaba en ~13.7, y esos mismos tests pasan en aislamiento. Es el problema de
+      recursos ya documentado en T7.8, no una regresión.
+      Desviaciones respecto de lo planificado: - `AuditChanges` y `AuditMetadata` se emiten como `anyOf: [object, null]`,
+      que es la representación de `.nullable()` en OpenAPI 3.1, y no como
+      `nullable: true`. - `from`/`to` documentan el `pattern` largo de `z.iso.datetime` junto a
+      `format: date-time`, igual que las ventanas `validFrom`/`validUntil` ya
+      publicadas. - `AuditEventPage.limit` sale con los límites del entero seguro porque es un
+      `z.number().int()`; el rango real 1..100 vive en el parámetro de query, que
+      es el que se valida. Es el mismo tratamiento que `PaginatedCareers.limit`. - No se añadió un test por cada filtro individual en la ruta: el servicio ya
+      los cubre uno a uno en T8.2 y la capa HTTP se limita a reenviarlos. - `bruno/` queda desalineado respecto de `openapi.json`; su reimportación es
+      T8.5 y sigue pendiente, con el script de captura de tokens que hay que
+      restaurar después.
+- [x] **T8.5. Bruno (solo si se agrega el endpoint).**
       Si se corre `pnpm run api:collection:import`, restaurar después el script de
       captura de tokens (`data.accessToken`/`data.refreshToken`). No commitear
       tokens reales.
-- [ ] **T8.6. Verificar.**
+      Verificado 2026-09-28: se creó `bruno/Audit/` con `folder.bru` y 9 peticiones
+      escritas a mano, sin ejecutar el import. La carpeta es autocontenida como
+      las de `Admin` y `My_Permissions`: empieza con sus dos logins (admin en
+      `seq: 1` y FISC head en `seq: 8`, con `X-Forwarded-For` propios
+      `203.0.113.231` y `203.0.113.232` para no compartir el bucket de rate
+      limit) y después el listado con `limit=5`, el listado filtrado por
+      `action`, los tres rechazos de validación (`limit=101`, acción fuera del
+      catálogo y cursor malformado), el `401` sin token y el `403` como `USER`.
+      Los tests comprueban el contrato de página (`items`, `limit`, `hasMore`,
+      `nextCursor` coherente con `hasMore`), el orden descendente por `occurredAt`,
+      que el filtro por acción se respeta y que ningún item trae `email`,
+      `password`, `accounts` ni hashes Argon2; ninguno asume que la bitácora
+      tenga filas. `pnpm --dir bruno exec bru run Audit --env local` contra la API
+      de desarrollo: 9/9 requests y 11/11 tests en verde. Ningún archivo lleva
+      tokens ni valores reales y `environments/local.bru` no necesitó variables
+      nuevas.
+      Desviaciones respecto de lo planificado: - **El import no se ejecutó y no se debe ejecutar.** La colección tiene 234
+      archivos `.bru` con `tests`, `docs`, `seq` y scripts de captura de tokens
+      escritos a mano, y el import los sobrescribe todos; el plan solo
+      anticipaba la pérdida del script de captura. Si alguien lo corre, hay que
+      revisar la colección completa, no solo el login. - La carpeta no encadena dos peticiones para recorrer el cursor: eso ataría
+      el `nextCursor` de una página al `cursor` de la siguiente y la haría
+      depender de que la bitácora tenga más de una página. Esa cobertura queda
+      en el test de rutas de T8.4; en Bruno solo se prueba el rechazo de un
+      cursor malformado.
+- [x] **T8.6. Verificar.**
       `pnpm test src/modules/audit` y `pnpm run docs:check`.
+      Verificado 2026-09-28: módulo de auditoría 50/50 (7 skipped, incluida la
+      integración de `audit_events` opt-in por `AUDIT_TEST_DATABASE_URL`),
+      `docs:check` en verde, `typecheck`, `lint` y `build` en verde, suite
+      completa 1260/1260 (7 skipped) con `--maxWorkers=1 --fileParallelism=false
+--testTimeout=30000`, `pnpm run api:run:smoke` en PASS y la carpeta Bruno
+      en verde de extremo a extremo. - Con el timeout por defecto de 5000 ms y en paralelo, `audit.routes.test.ts`
+      expira en su primer caso (el que levanta la app completa). No es una
+      regresión: el `load average` del entorno llegó a 19.9 por tres sesiones
+      `opencode` y varios `chrome-headless` ajenos (98 %, 78 % y 63 % de CPU
+      sobre 8 núcleos). Los mismos tests pasan con margen de tiempo. Es el
+      problema de recursos ya documentado en T7.8 y no se tocó la configuración
+      de Vitest porque es del entorno, no del repositorio.
 
 ---
 
@@ -620,6 +852,18 @@ Tercera prioridad (completitud administrativa):
 - [ ] **T13.2. Definir el procedimiento de purga.**
       La aplicación no debe poder borrar auditoría (trigger append-only). La purga
       por retención será un procedimiento administrativo privilegiado y auditado.
+      Restricción de diseño a resolver aquí: la migración
+      `20260927171818_add_durable_audit_events` crea
+      `audit_events_prevent_mutation` (BEFORE UPDATE OR DELETE) y
+      `audit_events_prevent_truncate` (BEFORE TRUNCATE), así que un `DELETE` de
+      retención por `occurred_at` rebota con `audit events are append-only`. El
+      procedimiento necesita deshabilitar ambos triggers dentro de una transacción
+      y rehabilitarlos al final, exactamente igual que `activities_prevent_delete` y
+      `event_programs_prevent_delete` ya exigen en los scripts de limpieza de
+      desarrollo de la Fase 5 (pendiente `P1` del plan maestro). Además el esquema
+      solo indexa `occurred_at` y no tiene columna de retención, así que la decisión
+      de T13.1 puede requerir una migración. No existe hoy ninguna función ni script
+      de purga en `src/modules/audit/`.
 
 ---
 

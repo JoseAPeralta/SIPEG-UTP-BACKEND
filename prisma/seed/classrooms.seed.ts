@@ -15,7 +15,7 @@ interface ClassroomCatalogEntry {
   type: ClassroomType;
   capacity: number;
   building: string;
-  floor: number;
+  floor: number | null;
   amenities: readonly string[];
   availability: readonly AvailabilityEntry[];
 }
@@ -142,6 +142,56 @@ export const CLASSROOMS: readonly ClassroomCatalogEntry[] = [
     building: 'Edificio VIPE',
     floor: 1,
     amenities: ['Proyector', 'Smart Board', 'Aire Acondicionado'],
+    availability: STANDARD_AVAILABILITY,
+  },
+  {
+    key: 'aula-202',
+    name: 'Aula 202',
+    type: 'CLASSROOM',
+    capacity: 45,
+    building: 'Edificio 1',
+    floor: 2,
+    amenities: ['Proyector', 'Pizarra', 'Aire Acondicionado'],
+    availability: STANDARD_AVAILABILITY,
+  },
+  {
+    key: 'lab-fisica',
+    name: 'Laboratorio de Física',
+    type: 'LABORATORY',
+    capacity: 26,
+    building: 'Edificio 5',
+    floor: 2,
+    amenities: ['Mesas', 'Proyector', 'Pizarra'],
+    availability: LAB_AVAILABILITY,
+  },
+  {
+    key: 'lab-suelos',
+    name: 'Laboratorio de Suelos',
+    type: 'LABORATORY',
+    capacity: 22,
+    building: 'Edificio 4',
+    floor: 2,
+    amenities: ['Mesas', 'Herramientas', 'Pizarra'],
+    availability: LAB_AVAILABILITY,
+  },
+  {
+    key: 'aula-magna',
+    name: 'Aula Magna',
+    type: 'CLASSROOM',
+    capacity: 200,
+    building: 'Edificio Central',
+    floor: 1,
+    amenities: ['Proyector', 'Micrófono', 'Smart Board', 'Aire Acondicionado'],
+    availability: STANDARD_AVAILABILITY,
+  },
+  {
+    key: 'plaza-central',
+    name: 'Plaza Central',
+    type: 'CLASSROOM',
+    capacity: 150,
+    building: 'Exteriores',
+    floor: null,
+    amenities: ['Pérgola', 'Electricidad'],
     availability: STANDARD_AVAILABILITY,
   },
 ];

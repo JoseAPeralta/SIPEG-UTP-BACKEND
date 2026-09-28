@@ -101,7 +101,6 @@ export const createUserSchema = z.object({
       identificationNumber: trimmedString
         .min(5, 'Identification number must be at least 5 characters.')
         .max(30, 'Identification number must not exceed 30 characters.'),
-      globalRole: z.enum(['USER', 'ADMIN'], 'Global role is invalid.').default('USER'),
       isActive: z.boolean().default(true),
       unitId: trimmedString
         .min(1, 'Unit ID is required.')
@@ -116,7 +115,8 @@ export const createUserSchema = z.object({
     .strict()
     .meta({
       id: 'AdminUserCreate',
-      description: 'Administrative payload used to create a user account.',
+      description:
+        'Administrative payload used to create a USER account. Role promotion is a separate operation.',
     }),
 });
 

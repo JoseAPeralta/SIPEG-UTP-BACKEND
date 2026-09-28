@@ -45,11 +45,7 @@ describe('rate limit middleware', () => {
       name: 'login.email',
     });
     const next = vi.fn();
-    middleware(
-      buildReq({ body: { email: 'user@example.com' }, ip: '1.2.3.4' }),
-      buildRes(),
-      next,
-    );
+    middleware(buildReq({ body: { email: 'user@example.com' }, ip: '1.2.3.4' }), buildRes(), next);
     expect(loggerWarn).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'rate_limit.exceeded', limiter: 'login.email' }),
       'rate_limit.exceeded',

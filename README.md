@@ -71,6 +71,7 @@ docker compose -f compose.prod.yaml --env-file .env.prod up -d --build
 - Si `POSTGRES_PASSWORD` contiene caracteres especiales (`@ : / ? # %`), codificalos en porcentaje o usa solo caracteres alfanumericos.
 - `IMAGE_TAG` permite etiquetar la imagen de la API (por defecto `latest`).
 - La API se detiene con `stop_grace_period: 15s`, mayor que el timeout interno de apagado ordenado.
+- Rendimiento por defecto para un servidor de 4 vCPU: `DATABASE_POOL_MAX=9` (`2 x vCPU + 1`, por instancia; la suma de `pool x instancias` no debe superar `max_connections` de Postgres), `UV_THREADPOOL_SIZE=4` y Argon2id `m=12288 KiB, t=3, p=1` (configuracion minima OWASP de 12 MiB con pico de 48 MiB a 4 hilos). Todos son configurables por entorno.
 
 Detener el entorno:
 
@@ -165,7 +166,7 @@ pnpm run api:run:smoke # seguro: solo GET /api/v1/health
 pnpm run api:run       # coleccion completa; contiene operaciones que modifican datos
 ```
 
-`pnpm run api:collection:import` sobrescribe la coleccion: despues de reimportar hay que restaurar el script post-response y las assertions de `Auth/Log in with email and password - admin.bru`, `Auth/Log in with email and password - user.bru` y `Auth/Log in with email and password - head.bru` (los tres capturan `token`/`refreshToken`), y ademas reordenar los requests de las carpetas `Admin`, `Careers`, `Classrooms` y `Organizational_Units` (el login de head debe quedar antes de los requests que esperan 403 y capturar la misma variable compartida). El folder `Sessions` (separado de `Auth` para no agotar el limite de 5 logins/min por IP) contiene su propio `Sessions/Log in as admin.bru` y los flujos de refresh/logout. Los scripts/assertions de `Sessions/Refresh the access token.bru` y `Sessions/Log out and revoke the refresh token.bru`, y los scripts/assertions de `Auth/Register a new user.bru`, `Auth/Register duplicate email returns 409.bru`, `Auth/Register duplicate identification returns 409.bru`, `Auth/Register rate limit returns 429.bru`, `Auth/Login wrong password returns 401.bru`, `Auth/Login unknown email returns 401.bru`, `Auth/Login rate limit returns 429.bru`, `Sessions/Refresh reused token returns 401.bru` y `Sessions/Logout revoked token returns 401.bru` tambien se restauran. No guardes tokens ni credenciales reales en archivos versionados; usa un archivo `*.private.bru`, ignorado por Git, o variables proporcionadas en runtime. El login tiene limite de 5 intentos por minuto.
+`pnpm run api:collection:import` sobrescribe la coleccion: despues de reimportar hay que restaurar el script post-response y las assertions de `Auth/Log in with email and password - admin.bru`, `Auth/Log in with email and password - user.bru` y `Auth/Log in with email and password - head.bru` (los tres capturan `token`/`refreshToken`), y ademas reordenar los requests de las carpetas `Admin`, `Careers`, `Classrooms` y `Organizational_Units` (el login de head debe quedar antes de los requests que esperan 403 y capturar la misma variable compartida). El folder `Sessions` (separado de `Auth` para no agotar el limite de 5 logins/min por email+IP) contiene su propio `Sessions/Log in as admin.bru` y los flujos de refresh/logout. Los scripts/assertions de `Sessions/Refresh the access token.bru` y `Sessions/Log out and revoke the refresh token.bru`, y los scripts/assertions de `Auth/Register a new user.bru`, `Auth/Register duplicate email returns 409.bru`, `Auth/Register duplicate identification returns 409.bru`, `Auth/Register rate limit returns 429.bru`, `Auth/Login wrong password returns 401.bru`, `Auth/Login unknown email returns 401.bru`, `Auth/Login rate limit returns 429.bru`, `Sessions/Refresh reused token returns 401.bru` y `Sessions/Logout revoked token returns 401.bru` tambien se restauran. No guardes tokens ni credenciales reales en archivos versionados; usa un archivo `*.private.bru`, ignorado por Git, o variables proporcionadas en runtime. El login tiene limite de 5 intentos por minuto.
 
 Flujo de registro (fase 1.1) en Bruno: ejecuta `Auth/Register a new user` (genera `newUserEmail` y `newUserIdentification` en runtime, espera 201 y valida que no se filtre el hash), luego `Auth/Register duplicate email returns 409` y `Auth/Register duplicate identification returns 409`. Para el limite de tasa, espera a una ventana limpia y envia `Auth/Register rate limit returns 429` cuatro veces en menos de un minuto: el cuarto intento responde 429. El registro tiene limite de 3 intentos por minuto por IP.
 
@@ -216,7 +217,7 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
   - `POST /auth/login` — devuelve access token EdDSA + refresh token; credenciales invalidas o cuenta desactivada responden 401 generico (`Invalid email or password`) sin revelar si el correo existe; una cuenta no verificada responde 403; limite de 5 intentos/min por IP.
   - `POST /auth/refresh` — rota el refresh token y emite un nuevo par; el token anterior queda invalido y tokens expirados, revocados o de cuentas desactivadas responden 401.
   - `POST /auth/logout` — invalida solo el refresh token enviado; es idempotente. El access token ya emitido sigue stateless hasta vencer.
-  - `POST /auth/register` — crea una cuenta no verificada y envia un enlace de verificacion con vigencia `AUTH_EMAIL_VERIFICATION_TTL` (24 h por defecto).
+  - `POST /auth/register` — crea una cuenta no verificada con rol `USER`, rechaza campos de rol, estado o permisos y envia un enlace de verificacion con vigencia `AUTH_EMAIL_VERIFICATION_TTL` (24 h por defecto). La ruta nativa `POST /api/auth/sign-up/email` no esta expuesta.
   - `POST /auth/verify-email` — confirma el email; tokens invalidos o vencidos responden 400 generico y el limite es 5 intentos/min por IP.
   - `POST /auth/forgot-password` — siempre responde el mismo 200 exista o no el email; limite independiente de 3 solicitudes/min por IP.
   - `POST /auth/reset-password` — consume un token de un solo uso con vigencia `AUTH_PASSWORD_RESET_TTL` (1 h por defecto), actualiza el hash Argon2id y revoca todas las sesiones del usuario; tiene otro limite independiente de 3 intentos/min por IP.
@@ -241,8 +242,8 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
 - `PATCH /api/v1/users/me` acepta `firstName`, `lastName`, `unitId` y `careerId`. `unitId` admite `null` para la opción "Otro" (sin unidad): en ese caso la carrera queda forzada a la carrera global `Otros`; una carrera distinta produce 400 y la ausencia de `Otros` en la base produce 409.
 - `GET /api/v1/admin/users` (solo `ADMIN`, responde `403` a `USER`) lista usuarios con paginación offset (`page`/`limit`, máximo 50), búsqueda `q` insensible a mayúsculas en nombre, apellido, email o identificación y filtros `globalRole`, `isActive`, `unitId` y `careerId`. No expone `name`, `accounts`, `password`, `passwordHash` ni `emailVerified`.
 - `GET /api/v1/admin/users/{id}` (solo `ADMIN`) devuelve el DTO administrativo seguro de un usuario y responde `404` para un identificador inexistente; tampoco expone `name`, `accounts`, `password`, `passwordHash` ni `emailVerified`.
-- `POST /api/v1/admin/users` (solo `ADMIN`) crea la cuenta y su credencial Argon2id en una transacción, acepta `globalRole` e `isActive` (defaults `USER` y `true`) y valida conflictos de email e identificación (`409`). El correo queda sin verificar (`emailVerified=false`) y se envia el enlace de verificación; la cuenta no puede iniciar sesion hasta verificarlo.
-- `PATCH /api/v1/admin/users/{id}` (solo `ADMIN`) actualiza `globalRole`, `isActive`, `unitId` y `careerId`; al desactivar revoca todas las sesiones del usuario; no permite autodesactivación ni autodegradación y protege al último administrador activo (409). Devuelve el mismo DTO seguro y responde 400/404.
+- `POST /api/v1/admin/users` (solo `ADMIN`) crea la cuenta con rol fijo `USER` y su credencial Argon2id en una transacción; acepta `isActive` (default `true`) y rechaza cualquier campo de rol. Valida conflictos de email e identificación (`409`). El correo queda sin verificar (`emailVerified=false`) y se envia el enlace de verificación; la cuenta no puede iniciar sesion hasta verificarlo.
+- `PATCH /api/v1/admin/users/{id}` (solo `ADMIN`) actualiza `globalRole`, `isActive`, `unitId` y `careerId`. Solo permite promover a `ADMIN` una cuenta que ya este activa y no admite promoverla y desactivarla en la misma petición; una cuenta inactiva debe reactivarse primero. Al desactivar revoca todas las sesiones del usuario; no permite autodesactivación ni autodegradación y protege al último administrador activo (409). Devuelve el mismo DTO seguro y responde 400/404.
 - La carrera `Otros` (`unitId` nulo) es global y se puede elegir con cualquier unidad; al cambiar a una unidad real se conserva. Ya no existe desactivación de carreras (`isActive` fue eliminado). Ver `docs/adr/adr-0006-career-catalog-without-active-flag.md`.
 - El claim `unitId` viaja en el access token JWT; la coherencia carrera-unidad se valida en el servicio (solo para carreras con unidad propia).
 - Las unidades organizativas se modelan en `organizational_units` con `type` (`FACULTY` o `SUBDIRECTORATE`) y un `head` (encargado) opcional. Ver `docs/adr/adr-0003-unified-organizational-units.md`.
@@ -285,6 +286,7 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
 - `POST /api/v1/activities` (privado) crea una actividad dentro de un programa `ACTIVE`. Requiere el permiso `activity:create` en el programa (o rol `ADMIN`), queda en estado `DRAFT` y devuelve un DTO sin codigos con `enrolledCount` y `checkedInCount` en `0`.
 - `PATCH /api/v1/activities/:id` (privado) actualiza parcialmente una actividad y requiere `activity:update` en el scope de la actividad (o rol `ADMIN`). Acepta `name`, `description`, `type`, `date`, `startTime`, `endTime`, `maxCapacity`, `bannerUrl`, `classroomId`, `status`, `speakers[]` y `equipment[]`; `eventProgramId` es inmutable (body estricto). `status` solo admite `DRAFT <-> SCHEDULED` (publicar/despublicar); `ONGOING`, `COMPLETED` y `CANCELLED` no son asignables y las actividades `COMPLETED`/`CANCELLED` responden `409`. `speakers`/`equipment` reemplazan la lista completa (`[]` limpia). Cuando el estado resultante reserva aula (`SCHEDULED`/`ONGOING`), se validan aula activa, ventana de disponibilidad (`409`), solape con otras actividades (`409`) y capacidad del aula (`400`).
 - `POST /api/v1/activities/:id/cancel` (privado) cancela una actividad y requiere `activity:cancel` en el scope de la actividad (o rol `ADMIN`); `activity:cancel` es un permiso por defecto de `ORGANIZER`. Acepta un body opcional `{ "reason": string }` recortado de 1-500 caracteres (claves desconocidas o motivo vacio/sobrado responden `400`); el motivo queda en `cancelReason` del detalle. Se puede cancelar desde `DRAFT`, `SCHEDULED` u `ONGOING`; una actividad `COMPLETED` responde `409 Completed activities cannot be cancelled.` y un programa no `ACTIVE` responde `409 Event programs must be active to cancel their activities.` Cancelar una actividad ya `CANCELLED` es idempotente: responde `200` sin sobrescribir el motivo original. Cancelar libera el aula de la actividad (`SCHEDULED`/`ONGOING` la reservaban). Aun no notifica a los inscritos (diferido a la fase 12).
+- `DELETE /api/v1/activities/:id` (privado) elimina fisicamente una actividad y requiere el permiso `activity:delete` en el scope de la actividad (o rol `ADMIN`); `activity:delete` es un permiso por defecto de `ORGANIZER` y no lo tienen `EDITOR` ni `VIEWER`. Responde `204` sin cuerpo. **Regla de retencion:** solo se eliminan actividades `DRAFT` de programas `ACTIVE` sin asistencia y sin alertas; cualquier otro caso responde `409` (`Only DRAFT activities can be deleted.`, `Event programs must be active to delete their activities.`, `Activities with attendance records cannot be deleted.`, `Activities with alert records cannot be deleted.`), por lo que una actividad con historia se cancela en lugar de borrarse. Si el recurso cambia entre la validacion y el borrado, la operacion responde `409 The activity changed while it was being deleted. Retry the request.` El equipo, los vinculos de ponentes y las colaboraciones locales se eliminan por cascada, pero la ficha del catalogo de ponentes se conserva. El trigger `activities_prevent_delete` de PostgreSQL rechaza el borrado directo por SQL de estados distintos de `DRAFT` y de programas no `ACTIVE`. Cada borrado escribe un evento `activity.deleted` en `audit_events`, que sobrevive a la eliminacion del recurso.
 - Cuerpo de creacion: `name`, `type`, `date` (`YYYY-MM-DD`), `startTime`/`endTime` (`HH:mm`) y `eventProgramId` (obligatorio); opcionales `description`, `maxCapacity`, `bannerUrl`, `classroomId`, `speakers[]` y `equipment[]`.
 - Los ponentes viajan inline en `speakers[]` (`firstName`, `lastName`, `email?`, `organization?`, maximo 10). No requieren cuenta: el servicio reutiliza el ponente del catalogo cuando el email coincide y lo vincula a un usuario si existe una cuenta con ese email.
 - Cambio incompatible: las respuestas exponen `speakers` (array) en lugar de `speaker` (objeto o `null`) en `ActivityListItem` y `ActivityDetail`.
@@ -313,6 +315,73 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
 - `POST /api/v1/classrooms/{id}/availability` y `DELETE /api/v1/classrooms/{id}/availability/{availabilityId}` (solo `ADMIN`) gestionan ventanas semanales; se exige `startTime < endTime` y un solape con otra ventana del mismo día responde `409` (las ventanas adyacentes, como 07:00-12:00 y 12:00-17:00, conviven).
 - Las mutaciones devuelven el detalle completo del aula. La consistencia de reservas se apoya también en la restricción de exclusión `activities_classroom_no_overlap` de PostgreSQL.
 
+## Observabilidad Y Auditoria
+
+El backend emite logs estructurados (JSON de una linea) a stdout/stderr y registra
+las mutaciones sensibles en una bitacora durable. El diseno esta decidido en
+`docs/adr/adr-0007-structured-logging-and-observability.md` y
+`docs/adr/adr-0008-durable-audit-events.md`, y la implementacion paso a paso esta
+en `docs/superpowers/plans/logging-y-auditoria.md`.
+
+Modelo operativo objetivo:
+
+```text
+API -> stdout JSON -> driver Docker `local` (spool)
+    -> Grafana Alloy -> Loki -> Grafana (busqueda, paneles, alertas)
+
+Mutacion sensible -> misma transaccion Prisma -> audit_events (PostgreSQL append-only)
+                  -> GET /api/v1/audit-events (solo ADMIN)
+```
+
+- Cada respuesta incluye `X-Request-ID` (UUID aceptado o generado); usalo para
+  correlacionar un acceso con su error en Grafana.
+- Etiquetas Loki: `service`, `environment`, `log_type`, `level`, `container`.
+  `requestId`, `actorId`, IDs de recurso, IPs y trace IDs viven en el JSON, nunca
+  como labels.
+- Retencion: 30 dias para access/aplicacion/infraestructura y 90 dias para
+  `log_type="security"` (produccion); 7 dias en desarrollo.
+- La API funciona aunque Loki este caido: escribe a stdout y el driver `local`
+  actua como buffer. La rotacion local (`max-size`/`max-file`) evita agotar disco.
+- No se registran cuerpos, cabeceras `Authorization`/`Cookie`, tokens,
+  contrasenas, hashes, `DATABASE_URL`, queries Prisma ni datos de CV.
+
+Variables de entorno nuevas (ver `.env.example`):
+
+- `LOG_LEVEL` (default `info`), `LOG_PRETTY` (solo desarrollo),
+  `LOG_SERVICE_NAME` (default `sipeg-utp-backend`) y `APP_VERSION`.
+- `LOG_PSEUDONYMIZATION_KEY` (obligatoria en produccion, minimo 32 caracteres):
+  clave HMAC para pseudonimizar email/IP en eventos de seguridad.
+
+Cuando el stack de observabilidad este implementado (fase 9 del plan):
+
+```bash
+docker compose -f compose.prod.yaml -f compose.observability.yaml --env-file .env.prod up -d
+```
+
+- Grafana queda en `127.0.0.1` (o detras de un proxy con TLS); Loki y Alloy no
+  publican puertos.
+- En Grafana, la consulta base en Loki es
+  `{service="sipeg-utp-backend", environment="production"}` y la busqueda por
+  peticion es `{service="sipeg-utp-backend"} |= "<X-Request-ID>"`.
+- Acceso al Docker socket mediante `docker-socket-proxy` de solo lectura, nunca
+  montando `/var/run/docker.sock` directamente en Alloy.
+
+### Auditoria
+
+- `audit_events` es append-only: una trigger PostgreSQL rechaza `UPDATE`,
+  `DELETE` y `TRUNCATE`; la aplicacion no puede borrar registros.
+- El catalogo de acciones usa claves como `authorization.permission_granted`,
+  `user.role_changed`, `event_program.archived` o `activity.cancelled`.
+- Consulta de solo lectura para `ADMIN`: `GET /api/v1/audit-events` con filtros
+  `action`, `actorId`, `resourceType`, `resourceId`, `scopeType`, `scopeId`,
+  `from`, `to`, cursor y limite maximo 100. No existen endpoints de modificacion
+  ni eliminacion.
+- Los campos internos `grantedById`/`grantedAt` siguen sin exponerse en HTTP
+  (ver `docs/adr/adr-0001-time-aware-collaboration-authorization.md`); la
+  bitacora durable es la fuente de historial.
+- Retencion base propuesta: 365 dias, pendiente de ratificacion institucional. No
+  se automatiza la purga hasta entonces.
+
 ## Datos De Prueba (Seed)
 
 `pnpm run prisma:seed` carga un conjunto completo e idempotente de datos de prueba
@@ -320,25 +389,29 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
 
 - 6 facultades y 4 subdirecciones, cada una con su programa predeterminado y encargado.
 - 25 carreras: 24 oficiales distribuidas por facultad más la carrera global `Otros` (sin unidad).
-- 29 usuarios demo + 10 aulas con amenidades y disponibilidad.
-- 5 programas adicionales (activo, completado, archivado y borrador), 24 actividades,
-  colaboraciones con permisos materializados y ventanas de vigencia, asistencias,
-  certificados, propuestas con versiones/feedback y alertas.
+- 39 usuarios demo + 15 aulas con amenidades y disponibilidad.
+- 8 programas adicionales (activos, completado, archivado y borrador) y 40 actividades con
+  los 8 tipos del catálogo (`WORKSHOP`, `SEMINAR`, `TALK`, `CONFERENCE`, `PANEL`, `COURSE`,
+  `COMPETITION`, `OTHER`), incluyendo variantes `DRAFT`, `CANCELLED` con motivo, sin aula,
+  sin ponentes, sin cupo y con banner, además de colaboraciones con permisos materializados
+  y ventanas de vigencia, asistencias, certificados, propuestas con versiones/feedback
+  (incluye feedback con imagen) y alertas.
 
 Credenciales demo (password unica `Sipeg2026*UTP`, configurable con `SEED_DEMO_PASSWORD`):
 
-| Rol                           | Email                                                                                                                               |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Administrador                 | `admin@utp.ac.pa`                                                                                                                   |
-| Organizadores de facultad     | `organizador.fic@utp.ac.pa` ... `organizador.fct@utp.ac.pa`                                                                         |
-| Organizadores de subdireccion | `organizador.sub-acad@utp.ac.pa` ... `organizador.sub-ipe@utp.ac.pa`                                                                |
-| Editor / visor                | `editor.eventos@utp.ac.pa`, `visor.eventos@utp.ac.pa`                                                                               |
-| Ponentes                      | `ponente.ana.perez@utp.ac.pa`, `ponente.carlos.rivera@utp.ac.pa`, `ponente.diana.gomez@utp.ac.pa`, `ponente.ivan.morales@utp.ac.pa` |
-| Estudiantes                   | `estudiante01@utp.ac.pa` ... `estudiante12@utp.ac.pa`                                                                               |
+| Rol                           | Email                                                                                                                                                                                                      |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Administrador                 | `admin@utp.ac.pa`                                                                                                                                                                                          |
+| Organizadores de facultad     | `organizador.fic@utp.ac.pa` ... `organizador.fcyt@utp.ac.pa`                                                                                                                                               |
+| Organizadores de subdireccion | `organizador.sub-acad@utp.ac.pa` ... `organizador.sub-ipe@utp.ac.pa`                                                                                                                                       |
+| Editor / visor                | `editor.eventos@utp.ac.pa`, `editor.fii@utp.ac.pa`, `visor.eventos@utp.ac.pa`                                                                                                                              |
+| Ponentes                      | `ponente.ana.perez@utp.ac.pa`, `ponente.carlos.rivera@utp.ac.pa`, `ponente.diana.gomez@utp.ac.pa`, `ponente.ivan.morales@utp.ac.pa`, `ponente.lucia.herrera@utp.ac.pa`, `ponente.roberto.mendez@utp.ac.pa` |
+| Estudiantes                   | `estudiante01@utp.ac.pa` ... `estudiante19@utp.ac.pa`                                                                                                                                                      |
 
 Notas:
 
 - Los correos y numeros de identificacion son sinteticos (`SEED-*`); no corresponden a personas reales.
+- `estudiante19@utp.ac.pa` se siembra inactivo (`isActive: false`) para probar respuestas `401`/`403`.
 - El seed aborta si `NODE_ENV=production` salvo que definas `SEED_ALLOW_PRODUCTION=true`.
 - Re-ejecutarlo es seguro: usa upserts con IDs determinados `seed_*` y respeta los triggers de la base de datos.
 
@@ -347,7 +420,7 @@ Notas:
 `pnpm run prisma:seed:base` carga unicamente la data institucional estable y es
 seguro en produccion (no requiere `SEED_ALLOW_PRODUCTION`):
 
-- Catalogo de permisos de autorizacion (19 claves `recurso:accion`).
+- Catalogo de permisos de autorizacion (20 claves `recurso:accion`).
 - 10 unidades organizativas (6 facultades + 4 subdirecciones) con sus 10 programas
   de eventos predeterminados.
 - 25 carreras: 24 oficiales más la carrera global `Otros` (sin unidad).

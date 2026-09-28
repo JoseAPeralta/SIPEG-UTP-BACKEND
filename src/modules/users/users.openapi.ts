@@ -74,7 +74,7 @@ export const usersPaths: ZodOpenApiPathsObject = {
       tags: ['Admin'],
       summary: 'Create a user',
       description:
-        'Administrative user creation. Requires the ADMIN role. Creates the credential account with Argon2id and sends a verification email; the account cannot sign in until the email is verified.',
+        'Administrative user creation. Requires the ADMIN role and always creates the account with the USER role. Creates the credential account with Argon2id and sends a verification email; the account cannot sign in until the email is verified.',
       security: [{ bearerAuth: [] }],
       requestBody: {
         required: true,
@@ -114,7 +114,7 @@ export const usersPaths: ZodOpenApiPathsObject = {
       tags: ['Admin'],
       summary: 'Update a user',
       description:
-        'Administrative user update. Requires the ADMIN role. Allows changing the global role, active status, organizational unit and career. Deactivating a user revokes all of their sessions; administrators cannot deactivate or demote themselves and the last active administrator cannot be demoted or deactivated.',
+        'Administrative user update. Requires the ADMIN role. Allows changing the global role, active status, organizational unit and career. Only an already-active user can be promoted to ADMIN, and promotion cannot be combined with deactivation. Deactivating a user revokes all of their sessions; administrators cannot deactivate or demote themselves and the last active administrator cannot be demoted or deactivated.',
       security: [{ bearerAuth: [] }],
       requestParams: { path: adminUserParamsSchema.shape.params },
       requestBody: {

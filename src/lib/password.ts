@@ -2,8 +2,8 @@ import argon2 from 'argon2';
 
 const ARGON2_OPTIONS = {
   type: argon2.argon2id,
-  memoryCost: Number(process.env['AUTH_ARGON2_MEMORY_COST'] ?? 19_456),
-  timeCost: Number(process.env['AUTH_ARGON2_TIME_COST'] ?? 2),
+  memoryCost: Number(process.env['AUTH_ARGON2_MEMORY_COST'] ?? 12_288),
+  timeCost: Number(process.env['AUTH_ARGON2_TIME_COST'] ?? 3),
   parallelism: Number(process.env['AUTH_ARGON2_PARALLELISM'] ?? 1),
 } as const;
 

@@ -265,10 +265,12 @@ For errors:
   - `AUTH_EMAIL_VERIFICATION_TTL` (default `24h`), `AUTH_PASSWORD_RESET_TTL` (default `1h`)
   - `TRUSTED_ORIGINS` (CSV adicional a `CORS_ORIGIN`)
 - Rate limiting (via express-rate-limit):
-  - Login: 5/min por usuario/IP
-  - Register: 3/min por usuario/IP
-  - Forgot password y reset password: limiters independientes de 3/min por usuario/IP
-  - Verify email: 5/min por usuario/IP
+  - Login: 5/min por email+IP (bucket combinado) + 30/min por IP como limite complementario
+  - Register: 3/min por email+IP + 30/min por IP
+  - Forgot password: 3/min por email+IP + 10/min por IP; reset password: 3/min por IP (el body no lleva email)
+  - Verify email: 5/min por IP
+  - Change password: 5/min por usuario autenticado (o IP si no hay usuario)
+  - El email de la llave se normaliza (`trim().toLowerCase()`, maximo 254 chars); sin email cae a la llave por IP
   - Better Auth rate limit global: 100/min (configurable)
 - `src/lib/auth.ts` es la unica instancia del proveedor.
 - `src/lib/password.ts` centraliza hashing Argon2id (usado por el proveedor via `password.hash`/`password.verify`).

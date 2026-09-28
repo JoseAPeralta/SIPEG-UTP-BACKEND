@@ -21,20 +21,26 @@ import { errorHandler } from './error.middleware.js';
 
 const mockedGetLogContext = vi.mocked(getLogContext);
 const mockedCreateChildLogger = vi.mocked(createChildLogger);
+const mockedLoggerError = vi.mocked(logger.error);
+
+interface MockResponse extends Response {
+  statusCode: number;
+  body: unknown;
+}
 
 function createReqRes() {
   const res = {
     statusCode: 200,
     body: undefined as unknown,
-    status(code: number) {
+    status(this: MockResponse, code: number) {
       this.statusCode = code;
       return this;
     },
-    json(payload: unknown) {
+    json(this: MockResponse, payload: unknown) {
       this.body = payload;
       return this;
     },
-  } as unknown as Response & { body: unknown };
+  } as unknown as MockResponse;
   return { req: {} as Request, res };
 }
 
@@ -65,8 +71,8 @@ describe('errorHandler', () => {
     errorHandler(new Error('db blew up'), req, res, vi.fn());
 
     expect(res.statusCode).toBe(500);
-    expect(logger.error).toHaveBeenCalledTimes(1);
-    expect(logger.error).toHaveBeenCalledWith(
+    expect(mockedLoggerError).toHaveBeenCalledTimes(1);
+    expect(mockedLoggerError).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'http.error.unexpected' }),
       'http.error.unexpected',
     );
@@ -77,7 +83,7 @@ describe('errorHandler', () => {
 
     errorHandler(new Error('boom'), req, res, vi.fn());
 
-    const bindings = logger.error.mock.calls[0]?.[0] as { err?: Error };
+    const bindings = mockedLoggerError.mock.calls[0]?.[0] as { err?: Error };
     expect(bindings.err).toBeInstanceOf(Error);
     expect(bindings.err?.message).toBe('boom');
   });
@@ -99,13 +105,18 @@ describe('errorHandler', () => {
     errorHandler(new Error('boom'), req, res, vi.fn());
 
     expect(mockedCreateChildLogger).not.toHaveBeenCalled();
-    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(mockedLoggerError).toHaveBeenCalledTimes(1);
   });
 
   it('never leaks internal details in the response body', () => {
     const { req, res } = createReqRes();
 
-    errorHandler(new Error('postgres connection string: postgres://hunter2@internal'), req, res, vi.fn());
+    errorHandler(
+      new Error('postgres connection string: postgres://hunter2@internal'),
+      req,
+      res,
+      vi.fn(),
+    );
 
     expect(res.statusCode).toBe(500);
     expect(res.body).toEqual({

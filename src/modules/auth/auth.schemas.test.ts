@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { authTokensSchema, changePasswordSchema, registerResultSchema } from './auth.schemas.js';
+import {
+  authTokensSchema,
+  changePasswordSchema,
+  registerResultSchema,
+  registerSchema,
+} from './auth.schemas.js';
 
 const authTokensPayload = {
   accessToken: 'header.payload.signature',
@@ -57,6 +62,27 @@ describe('changePasswordSchema', () => {
       changePasswordSchema.parse({ body: { ...validBody, refreshToken: '' } }),
     ).toThrow();
   });
+});
+
+describe('registerSchema', () => {
+  const validBody = {
+    email: 'new.user@utp.ac.pa',
+    password: 'strongpass1234',
+    firstName: 'Nuevo',
+    lastName: 'Usuario',
+    identificationNumber: '8-999-9999',
+  };
+
+  it.each(['globalRole', 'role', 'isActive', 'permissions'])(
+    'rejects the privilege field %s',
+    (field) => {
+      expect(() =>
+        registerSchema.parse({
+          body: { ...validBody, [field]: field === 'permissions' ? [] : 'ADMIN' },
+        }),
+      ).toThrow();
+    },
+  );
 });
 
 describe('registerResultSchema', () => {

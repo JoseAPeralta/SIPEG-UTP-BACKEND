@@ -129,7 +129,10 @@ describe('authenticate middleware', () => {
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
     expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'auth.account.disabled', actorPseudonym: expect.any(String) }),
+      expect.objectContaining({
+        event: 'auth.account.disabled',
+        actorPseudonym: expect.any(String),
+      }),
       'auth.account.disabled',
     );
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('a@b.com');

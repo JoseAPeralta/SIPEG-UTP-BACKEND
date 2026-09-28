@@ -50,6 +50,30 @@ export const PROGRAM_ALERTS: readonly AlertCatalogEntry[] = [
     isRead: true,
     offsetDays: -310,
   },
+  {
+    key: 'activity-updated-cit-panel',
+    type: 'ACTIVITY_UPDATED',
+    recipientKey: 'editor-fii',
+    target: { type: 'activity', activityKey: 'cit-panel-mujeres-stem' },
+    isRead: false,
+    offsetDays: -1,
+  },
+  {
+    key: 'program-updated-feria-cientifica',
+    type: 'PROGRAM_UPDATED',
+    recipientKey: 'org-fcyt',
+    target: { type: 'additionalProgram', programKey: 'feria-cientifica' },
+    isRead: true,
+    offsetDays: -4,
+  },
+  {
+    key: 'activity-cancelled-fcyt',
+    type: 'ACTIVITY_CANCELLED',
+    recipientKey: 'org-fcyt',
+    target: { type: 'activity', activityKey: 'fcyt-seminario-cancelado' },
+    isRead: false,
+    offsetDays: -3,
+  },
 ];
 
 export const seedProgramAlerts = async (

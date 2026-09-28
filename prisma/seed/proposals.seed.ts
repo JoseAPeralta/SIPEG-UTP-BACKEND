@@ -15,6 +15,7 @@ interface ProposalFeedbackCatalogEntry {
   authorKey: string;
   content: string;
   offsetDays: number;
+  imageUrl?: string | null;
 }
 
 interface ProposalCatalogEntry {
@@ -119,9 +120,9 @@ export const PROPOSALS: readonly ProposalCatalogEntry[] = [
   },
   {
     key: 'alimentos-funcionales',
-    unitKey: 'fct',
+    unitKey: 'fcyt',
     speakerKey: 'speaker-ivan',
-    reviewerKey: 'org-fct',
+    reviewerKey: 'org-fcyt',
     title: 'Desarrollo de alimentos funcionales a partir de productos locales',
     content:
       'Propuesta de seminario sobre formulación y validación de alimentos funcionales panameños.',
@@ -140,10 +141,128 @@ export const PROPOSALS: readonly ProposalCatalogEntry[] = [
     ],
     feedback: [
       {
-        authorKey: 'org-fct',
+        authorKey: 'org-fcyt',
         content:
           'No se dispone de laboratorio disponible en la fecha propuesta. Reenviar para el próximo semestre.',
         offsetDays: -52,
+      },
+    ],
+  },
+  {
+    key: 'panel-innovacion-abierta',
+    unitKey: 'fim',
+    speakerKey: 'speaker-lucia',
+    reviewerKey: 'org-fim',
+    title: 'Panel: Innovación abierta en la industria panameña',
+    content:
+      'Propuesta de panel con especialistas de industria y academia sobre innovación abierta.',
+    proposalType: 'PANEL',
+    estimatedDuration: 90,
+    cvUrl: '/cv/seed-lucia-herrera.pdf',
+    status: 'PENDING',
+    submittedOffsetDays: -6,
+    respondedOffsetDays: null,
+    versions: [
+      {
+        title: 'Panel: Innovación abierta en la industria panameña',
+        content: 'Panel de 90 minutos con tres panelistas invitados.',
+        estimatedDuration: 90,
+      },
+    ],
+    feedback: [],
+  },
+  {
+    key: 'curso-ciencia-datos',
+    unitKey: 'fisc',
+    speakerKey: 'speaker-roberto',
+    reviewerKey: 'org-fisc',
+    title: 'Curso de Ciencia de Datos para la Toma de Decisiones',
+    content:
+      'Propuesta de curso intensivo sobre análisis de datos aplicado a decisiones gerenciales.',
+    proposalType: 'COURSE',
+    estimatedDuration: 240,
+    cvUrl: '/cv/seed-roberto-mendez.pdf',
+    status: 'APPROVED',
+    submittedOffsetDays: -50,
+    respondedOffsetDays: -44,
+    versions: [
+      {
+        title: 'Curso de Ciencia de Datos para la Toma de Decisiones',
+        content: 'Versión inicial: cuatro módulos con ejercicios guiados.',
+        estimatedDuration: 180,
+      },
+      {
+        title: 'Curso de Ciencia de Datos para la Toma de Decisiones',
+        content: 'Se amplía con un módulo de visualización y un proyecto final.',
+        estimatedDuration: 240,
+      },
+      {
+        title: 'Curso de Ciencia de Datos para la Toma de Decisiones',
+        content: 'Versión final aprobada con dataset institucional anonimizado.',
+        estimatedDuration: 240,
+      },
+    ],
+    feedback: [
+      {
+        authorKey: 'org-fisc',
+        content: 'Agregar un módulo de visualización y un proyecto integrador.',
+        offsetDays: -47,
+      },
+      {
+        authorKey: 'org-fisc',
+        content: 'Aprobado. Ver el cronograma sugerido para el congreso.',
+        offsetDays: -44,
+        imageUrl: '/feedback/seed-curso-ciencia-datos-cronograma.png',
+      },
+    ],
+  },
+  {
+    key: 'competicion-robotica-estudiantil',
+    unitKey: 'fie',
+    speakerKey: 'speaker-carlos',
+    reviewerKey: 'org-fie',
+    title: 'Competencia estudiantil de robótica autónoma',
+    content: 'Propuesta de competencia por equipos con robots autónomos y retos por niveles.',
+    proposalType: 'COMPETITION',
+    estimatedDuration: 300,
+    cvUrl: '/cv/seed-carlos-rivera.pdf',
+    status: 'PENDING',
+    submittedOffsetDays: -4,
+    respondedOffsetDays: null,
+    versions: [
+      {
+        title: 'Competencia estudiantil de robótica autónoma',
+        content: 'Competencia de una jornada con tres retos y premiación.',
+        estimatedDuration: 300,
+      },
+    ],
+    feedback: [],
+  },
+  {
+    key: 'conferencia-etica-ia',
+    unitKey: 'sub-ipe',
+    speakerKey: 'speaker-ivan',
+    reviewerKey: 'org-sub-ipe',
+    title: 'Conferencia: Ética y regulación de la inteligencia artificial',
+    content: 'Propuesta de conferencia sobre marcos éticos y regulatorios para la IA.',
+    proposalType: 'CONFERENCE',
+    estimatedDuration: 60,
+    cvUrl: '/cv/seed-ivan-morales.pdf',
+    status: 'REJECTED',
+    submittedOffsetDays: -70,
+    respondedOffsetDays: -63,
+    versions: [
+      {
+        title: 'Conferencia: Ética y regulación de la inteligencia artificial',
+        content: 'Conferencia de 60 minutos con panel de preguntas.',
+        estimatedDuration: 60,
+      },
+    ],
+    feedback: [
+      {
+        authorKey: 'org-sub-ipe',
+        content: 'El tema ya está cubierto en el programa. Reenviar con un enfoque diferente.',
+        offsetDays: -63,
       },
     ],
   },
@@ -224,10 +343,16 @@ export const seedProposals = async (
 
       await prisma.proposalFeedback.upsert({
         where: { id: seedId('proposal_feedback', proposal.key, String(index + 1)) },
-        update: { content: feedback.content, authorId: author.id, createdAt },
+        update: {
+          content: feedback.content,
+          imageUrl: feedback.imageUrl ?? null,
+          authorId: author.id,
+          createdAt,
+        },
         create: {
           id: seedId('proposal_feedback', proposal.key, String(index + 1)),
           content: feedback.content,
+          imageUrl: feedback.imageUrl ?? null,
           authorId: author.id,
           proposalId: id,
           createdAt,

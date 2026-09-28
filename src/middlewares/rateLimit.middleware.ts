@@ -63,7 +63,10 @@ export const authRateLimit = ({
     legacyHeaders: false,
     keyGenerator: keyGenerator ?? keyByUserOrIp,
     handler: (_req, _res, next) => {
-      logger.warn({ event: 'rate_limit.exceeded', limiter: name ?? 'default' }, 'rate_limit.exceeded');
+      logger.warn(
+        { event: 'rate_limit.exceeded', limiter: name ?? 'default' },
+        'rate_limit.exceeded',
+      );
       next(new ApiError(429, message ?? 'Too many requests, please try again later.'));
     },
   });
@@ -105,12 +108,27 @@ export const loginRateLimit = chain(
 
 export const registerRateLimit = chain(
   authRateLimit({ windowMs: 60_000, max: 30, message: REGISTER_MESSAGE, name: 'register.ip' }),
-  emailAuthRateLimit({ windowMs: 60_000, max: 3, message: REGISTER_MESSAGE, name: 'register.email' }),
+  emailAuthRateLimit({
+    windowMs: 60_000,
+    max: 3,
+    message: REGISTER_MESSAGE,
+    name: 'register.email',
+  }),
 );
 
 export const forgotPasswordRateLimit = chain(
-  authRateLimit({ windowMs: 60_000, max: 10, message: PASSWORD_RESET_MESSAGE, name: 'forgot_password.ip' }),
-  emailAuthRateLimit({ windowMs: 60_000, max: 3, message: PASSWORD_RESET_MESSAGE, name: 'forgot_password.email' }),
+  authRateLimit({
+    windowMs: 60_000,
+    max: 10,
+    message: PASSWORD_RESET_MESSAGE,
+    name: 'forgot_password.ip',
+  }),
+  emailAuthRateLimit({
+    windowMs: 60_000,
+    max: 3,
+    message: PASSWORD_RESET_MESSAGE,
+    name: 'forgot_password.email',
+  }),
 );
 
 export const resetPasswordRateLimit = authRateLimit({

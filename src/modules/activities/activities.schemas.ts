@@ -126,7 +126,16 @@ const activityListItemShape = {
   id: z.string(),
   name: z.string(),
   description: z.string().nullable(),
-  type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER']),
+  type: z.enum([
+    'WORKSHOP',
+    'SEMINAR',
+    'TALK',
+    'CONFERENCE',
+    'PANEL',
+    'COURSE',
+    'COMPETITION',
+    'OTHER',
+  ]),
   date: z.string().meta({ description: 'Institutional date in YYYY-MM-DD format.' }),
   startTime: z.string().meta({ description: 'Institutional start time in HH:mm format.' }),
   endTime: z.string().meta({ description: 'Institutional end time in HH:mm format.' }),
@@ -218,7 +227,12 @@ export const eventProgramActivitiesQuerySchema = z
       .max(50, 'Limit cannot exceed 50.')
       .default(20),
     status: z.enum(programActivityStatuses, 'Status is invalid.').optional(),
-    type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER'], 'Type is invalid.').optional(),
+    type: z
+      .enum(
+        ['WORKSHOP', 'SEMINAR', 'TALK', 'CONFERENCE', 'PANEL', 'COURSE', 'COMPETITION', 'OTHER'],
+        'Type is invalid.',
+      )
+      .optional(),
     q: z
       .string()
       .trim()
@@ -277,7 +291,10 @@ export const createActivitySchema = z.object({
         .trim()
         .max(2000, 'Description cannot exceed 2000 characters.')
         .nullish(),
-      type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER'], 'Type is invalid.'),
+      type: z.enum(
+        ['WORKSHOP', 'SEMINAR', 'TALK', 'CONFERENCE', 'PANEL', 'COURSE', 'COMPETITION', 'OTHER'],
+        'Type is invalid.',
+      ),
       date: z
         .string()
         .regex(datePattern, 'Date must be in YYYY-MM-DD format.')
@@ -328,7 +345,12 @@ export const updateActivitySchema = z.object({
         .trim()
         .max(2000, 'Description cannot exceed 2000 characters.')
         .nullish(),
-      type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER'], 'Type is invalid.').optional(),
+      type: z
+        .enum(
+          ['WORKSHOP', 'SEMINAR', 'TALK', 'CONFERENCE', 'PANEL', 'COURSE', 'COMPETITION', 'OTHER'],
+          'Type is invalid.',
+        )
+        .optional(),
       date: z
         .string()
         .regex(datePattern, 'Date must be in YYYY-MM-DD format.')
@@ -378,7 +400,16 @@ export const activityDetailSchema = z
     id: z.string(),
     name: z.string(),
     description: z.string().nullable(),
-    type: z.enum(['WORKSHOP', 'SEMINAR', 'TALK', 'OTHER']),
+    type: z.enum([
+      'WORKSHOP',
+      'SEMINAR',
+      'TALK',
+      'CONFERENCE',
+      'PANEL',
+      'COURSE',
+      'COMPETITION',
+      'OTHER',
+    ]),
     date: z.string().meta({ description: 'Institutional date in YYYY-MM-DD format.' }),
     startTime: z.string().meta({ description: 'Institutional start time in HH:mm format.' }),
     endTime: z.string().meta({ description: 'Institutional end time in HH:mm format.' }),
