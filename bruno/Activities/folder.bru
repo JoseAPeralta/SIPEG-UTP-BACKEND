@@ -8,4 +8,20 @@ auth {
 
 docs {
   Event activities.
+
+  Running this folder leaves two residues per run, both by design.
+
+  One CANCELLED activity: the `draftActivityId` fixture has to serve the
+  DRAFT, SCHEDULED and CANCELLED assertions, so a single activity walks the
+  whole lifecycle and the retention rule forbids removing it afterwards. The
+  API answers 409 and the trigger blocks the direct SQL delete, so this residue
+  is unavoidable until there is an age-based purge or an administrative
+  endpoint. `pnpm run prisma:cleanup:dev -- --pattern='Actividad temporal%'
+  --apply` is the sanctioned way to clear it.
+
+  One orphan speaker in the catalog: the full payload request links
+  ana.prueba@utp.ac.pa, and deleting the activity unlinks the speaker but keeps
+  the catalog entry, which is what the retention rule for the speakers catalog
+  prescribes. The cleanup script deliberately does not remove catalog entries,
+  so this one needs a manual delete.
 }
