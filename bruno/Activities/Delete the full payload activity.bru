@@ -1,0 +1,30 @@
+meta {
+  name: Delete the full payload activity
+  type: http
+  seq: 37
+  tags: [
+    Activities
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{fullPayloadActivityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Closing request of the folder. The activity created by `Create an activity` is still a DRAFT with no attendance, so the retention rule lets the API remove it. It keeps this collection from leaving a second residue per run; the only unavoidable residue is the CANCELLED activity from the cancel requests, which the retention rule forbids deleting and that `pnpm run prisma:cleanup:dev` purges.
+}
+
+tests {
+  test("the full payload DRAFT is deleted with 204", function () {
+    expect(res.getStatus()).to.equal(204);
+    const body = res.getBody();
+    expect(body === undefined || body === null || body === "").to.equal(true);
+  })
+}
