@@ -1,0 +1,27 @@
+meta {
+  name: Delete a published activity returns 409
+  type: http
+  seq: 27
+  tags: [
+    Activities
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{seedActivityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("only DRAFT activities can be deleted", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Only DRAFT activities can be deleted.");
+  });
+}

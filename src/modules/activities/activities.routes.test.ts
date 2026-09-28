@@ -16,7 +16,15 @@ interface ActivitiesServiceMock {
   getActivityById: ReturnType<typeof vi.fn>;
   updateActivity: ReturnType<typeof vi.fn>;
   cancelActivity: ReturnType<typeof vi.fn>;
+  deleteActivity: ReturnType<typeof vi.fn>;
 }
+
+const auditContext = (actorId: string) =>
+  expect.objectContaining({
+    actorId,
+    actorType: 'USER',
+    requestId: expect.any(String) as unknown as string,
+  });
 
 const buildServiceMock = (): ActivitiesServiceMock => ({
   listUpcomingActivities: vi.fn(),
@@ -25,6 +33,7 @@ const buildServiceMock = (): ActivitiesServiceMock => ({
   getActivityById: vi.fn(),
   updateActivity: vi.fn(),
   cancelActivity: vi.fn(),
+  deleteActivity: vi.fn(),
 });
 
 interface PrismaMock {
@@ -324,7 +333,10 @@ describe('activity routes', () => {
       .send(validCreateBody)
       .expect(201);
 
-    expect(service.createActivity).toHaveBeenCalledWith(parsedCreateBody);
+    expect(service.createActivity).toHaveBeenCalledWith(
+      parsedCreateBody,
+      expect.objectContaining({ actorType: expect.any(String) }),
+    );
     expect(response.body).toEqual({
       success: true,
       message: 'Activity created successfully.',
@@ -481,10 +493,14 @@ describe('activity routes', () => {
     expect(authorization.getEffectivePermissions).toHaveBeenCalledWith(userRecord, {
       activityId: 'activity-002',
     });
-    expect(service.updateActivity).toHaveBeenCalledWith('activity-002', {
-      name: 'Nuevo nombre',
-      maxCapacity: 25,
-    });
+    expect(service.updateActivity).toHaveBeenCalledWith(
+      'activity-002',
+      {
+        name: 'Nuevo nombre',
+        maxCapacity: 25,
+      },
+      auditContext('user-001'),
+    );
     expect(response.body).toEqual({
       success: true,
       message: 'Activity updated successfully.',
@@ -509,7 +525,11 @@ describe('activity routes', () => {
       .expect(200);
 
     expect(authorization.getEffectivePermissions).not.toHaveBeenCalled();
-    expect(service.updateActivity).toHaveBeenCalledWith('activity-002', { status: 'SCHEDULED' });
+    expect(service.updateActivity).toHaveBeenCalledWith(
+      'activity-002',
+      { status: 'SCHEDULED' },
+      auditContext('admin-001'),
+    );
   });
 
   it('rejects update bodies without fields or with unknown keys before the service', async () => {
@@ -779,7 +799,11 @@ describe('activity cancel route', () => {
       .send({ reason: '  Lluvia  ' })
       .expect(200);
 
-    expect(service.cancelActivity).toHaveBeenCalledWith('activity-002', 'Lluvia');
+    expect(service.cancelActivity).toHaveBeenCalledWith(
+      'activity-002',
+      'Lluvia',
+      auditContext('user-001'),
+    );
     expect(response.body).toEqual({
       success: true,
       message: 'Activity cancelled successfully.',
@@ -808,7 +832,11 @@ describe('activity cancel route', () => {
       .expect(200);
 
     expect(authorization.getEffectivePermissions).not.toHaveBeenCalled();
-    expect(service.cancelActivity).toHaveBeenCalledWith('activity-002', undefined);
+    expect(service.cancelActivity).toHaveBeenCalledWith(
+      'activity-002',
+      undefined,
+      auditContext('admin-001'),
+    );
   });
 
   it('rejects cancel bodies with unknown keys, a blank reason or an oversized reason', async () => {
@@ -877,6 +905,115 @@ describe('activity cancel route', () => {
     expect(conflict.body).toMatchObject({
       success: false,
       message: 'Completed activities cannot be cancelled.',
+    });
+  });
+});
+
+describe('activity delete route', () => {
+  it('rejects delete requests without a token', async () => {
+    const service = buildServiceMock();
+    const app = await loadApp({ service });
+
+    await request(app).delete('/api/v1/activities/activity-002').expect(401);
+    expect(service.deleteActivity).not.toHaveBeenCalled();
+  });
+
+  it('rejects delete requests when the user lacks activity:delete', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(userRecord);
+    const authorization: AuthorizationMock = {
+      getEffectivePermissions: vi.fn().mockResolvedValue(new Set(['activity:update'])),
+    };
+    const app = await loadApp({ service, prisma, authorization });
+
+    await request(app)
+      .delete('/api/v1/activities/activity-002')
+      .set('Authorization', `Bearer ${userToken}`)
+      .expect(403);
+
+    expect(authorization.getEffectivePermissions).toHaveBeenCalledWith(userRecord, {
+      activityId: 'activity-002',
+    });
+    expect(service.deleteActivity).not.toHaveBeenCalled();
+  });
+
+  it('deletes a DRAFT activity for a collaborator with activity:delete', async () => {
+    const service = buildServiceMock();
+    service.deleteActivity.mockResolvedValue(undefined);
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(userRecord);
+    const authorization: AuthorizationMock = {
+      getEffectivePermissions: vi.fn().mockResolvedValue(new Set(['activity:delete'])),
+    };
+    const app = await loadApp({ service, prisma, authorization });
+
+    const response = await request(app)
+      .delete('/api/v1/activities/activity-002')
+      .set('Authorization', `Bearer ${userToken}`)
+      .expect(204);
+
+    expect(service.deleteActivity).toHaveBeenCalledWith('activity-002', auditContext('user-001'));
+    expect(response.text).toBe('');
+  });
+
+  it('deletes a DRAFT activity for an admin without a permission lookup', async () => {
+    const service = buildServiceMock();
+    service.deleteActivity.mockResolvedValue(undefined);
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const authorization: AuthorizationMock = {
+      getEffectivePermissions: vi.fn().mockResolvedValue(new Set()),
+    };
+    const app = await loadApp({ service, prisma, authorization });
+
+    await request(app)
+      .delete('/api/v1/activities/activity-002')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(204);
+
+    expect(authorization.getEffectivePermissions).not.toHaveBeenCalled();
+    expect(service.deleteActivity).toHaveBeenCalledWith('activity-002', auditContext('admin-001'));
+  });
+
+  it('rejects a blank activity id on delete before the service', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp({ service, prisma });
+
+    await request(app)
+      .delete('/api/v1/activities/%20')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(400);
+
+    expect(service.deleteActivity).not.toHaveBeenCalled();
+  });
+
+  it('propagates the service 404 and 409 retention errors on delete', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp({ service, prisma });
+    const { ApiError } = await import('../../utils/ApiError.js');
+
+    service.deleteActivity.mockRejectedValue(new ApiError(404, 'Activity not found.'));
+    await request(app)
+      .delete('/api/v1/activities/missing')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(404);
+
+    service.deleteActivity.mockRejectedValue(
+      new ApiError(409, 'Only DRAFT activities can be deleted.'),
+    );
+    const conflict = await request(app)
+      .delete('/api/v1/activities/activity-002')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(409);
+
+    expect(conflict.body).toMatchObject({
+      success: false,
+      message: 'Only DRAFT activities can be deleted.',
     });
   });
 });

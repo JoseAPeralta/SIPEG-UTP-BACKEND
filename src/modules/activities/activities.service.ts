@@ -2,6 +2,8 @@ import { getPrismaClient } from '../../config/prisma.js';
 import type { ActivityStatus, ActivityType } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { getInstitutionalDayOfWeek, startOfInstitutionalDay } from '../../utils/date.js';
+import { writeAuditEvent } from '../audit/audit.service.js';
+import type { AuditContext, AuditEventInput, AuditScalar } from '../audit/audit.types.js';
 import { getEffectivePermissions } from '../authorization/authorization.service.js';
 import { PERMISSIONS } from '../authorization/permissions.js';
 import type {
@@ -182,6 +184,29 @@ const isExclusionViolation = (error: unknown): boolean => {
     candidate.meta?.code === '23P01' ||
     (typeof candidate.message === 'string' &&
       candidate.message.includes('activities_classroom_no_overlap'))
+  );
+};
+
+const ACTIVITY_DELETION_CONFLICT_MESSAGE =
+  'The activity changed while it was being deleted. Retry the request.';
+
+// A deletion can lose the eligibility race between the guards and the write:
+// a concurrent attendance/alert insert trips the ON DELETE RESTRICT foreign
+// keys, and the retention trigger rejects a status or program change.
+const isDeletionRetentionConflict = (error: unknown): boolean => {
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const candidate = error as { code?: unknown; message?: unknown; meta?: { code?: unknown } };
+  const message = typeof candidate.message === 'string' ? candidate.message : '';
+
+  return (
+    candidate.code === 'P2003' ||
+    candidate.meta?.code === 'P2003' ||
+    message.includes('23503') ||
+    message.includes('only DRAFT activities can be deleted') ||
+    message.includes('activities can only be deleted in an active event program')
   );
 };
 
@@ -434,7 +459,10 @@ const buildSpeakerCreates = async (speakers: SpeakerInput[]) => {
   );
 };
 
-export const createActivity = async (input: CreateActivityBody): Promise<ActivityDetail> => {
+export const createActivity = async (
+  input: CreateActivityBody,
+  auditContext: AuditContext = {},
+): Promise<ActivityDetail> => {
   const prisma = getPrismaClient();
 
   const program = await prisma.eventProgram.findUnique({
@@ -477,43 +505,224 @@ export const createActivity = async (input: CreateActivityBody): Promise<Activit
 
   const startTime = new Date(`1970-01-01T${input.startTime}:00.000Z`);
   const endTime = new Date(`1970-01-01T${input.endTime}:00.000Z`);
+  const speakerCreates = input.speakers?.length ? await buildSpeakerCreates(input.speakers) : null;
 
-  const record = await prisma.activity.create({
-    data: {
-      name: input.name,
-      description: input.description ?? null,
-      type: input.type,
-      date,
-      startTime,
-      endTime,
-      maxCapacity: input.maxCapacity ?? null,
-      bannerUrl: input.bannerUrl ?? null,
-      status: 'DRAFT',
-      eventProgramId: program.id,
-      classroomId: input.classroomId ?? null,
-      ...(input.speakers?.length
-        ? { speakers: { create: await buildSpeakerCreates(input.speakers) } }
-        : {}),
-      ...(input.equipment?.length
-        ? {
-            equipment: {
-              createMany: {
-                data: input.equipment.map((name) => ({ name })),
-                skipDuplicates: true,
+  const record = await prisma.$transaction(async (tx) => {
+    const created = await tx.activity.create({
+      data: {
+        name: input.name,
+        description: input.description ?? null,
+        type: input.type,
+        date,
+        startTime,
+        endTime,
+        maxCapacity: input.maxCapacity ?? null,
+        bannerUrl: input.bannerUrl ?? null,
+        status: 'DRAFT',
+        eventProgramId: program.id,
+        classroomId: input.classroomId ?? null,
+        ...(speakerCreates ? { speakers: { create: speakerCreates } } : {}),
+        ...(input.equipment?.length
+          ? {
+              equipment: {
+                createMany: {
+                  data: input.equipment.map((name) => ({ name })),
+                  skipDuplicates: true,
+                },
               },
-            },
-          }
-        : {}),
-    },
-    select: activityDetailSelect,
+            }
+          : {}),
+      },
+      select: activityDetailSelect,
+    });
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'activity.created',
+      resourceType: 'activity',
+      resourceId: created.id,
+      scopeType: 'event_program',
+      scopeId: program.id,
+      changes: {
+        after: {
+          status: 'DRAFT',
+          type: input.type,
+          date: input.date,
+          startTime: input.startTime,
+          endTime: input.endTime,
+          maxCapacity: input.maxCapacity ?? null,
+          classroomId: input.classroomId ?? null,
+          eventProgramId: program.id,
+        },
+      },
+    });
+
+    return created;
   });
 
   return toActivityDetail(record, 0, 0);
 };
 
+interface ActivityScheduleSnapshot {
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  classroomId: string | null;
+  maxCapacity: number | null;
+}
+
+const ACTIVITY_FREE_TEXT_KEYS = ['name', 'description', 'bannerUrl'] as const;
+
+interface ActivityResidualSnapshot {
+  type: ActivityType;
+  name: string;
+  description: string | null;
+  bannerUrl: string | null;
+  equipment: string[];
+  speakers: string[];
+}
+
+const normalizeSet = (values: readonly string[]): string =>
+  [...values]
+    .map((value) => value.trim())
+    .sort()
+    .join(' ');
+
+const sameStringSet = (left: readonly string[], right: readonly string[]): boolean =>
+  normalizeSet(left) === normalizeSet(right);
+
+const speakerSetKey = (speaker: {
+  email?: string | null | undefined;
+  firstName?: string | null | undefined;
+  lastName?: string | null | undefined;
+  organization?: string | null | undefined;
+}): string =>
+  [
+    speaker.email ?? '',
+    speaker.firstName ?? '',
+    speaker.lastName ?? '',
+    speaker.organization ?? '',
+  ].join('');
+
+const buildActivityScheduleChanges = (
+  current: ActivityScheduleSnapshot,
+  next: ActivityScheduleSnapshot,
+): { before: Record<string, AuditScalar>; after: Record<string, AuditScalar> } => {
+  const before: Record<string, AuditScalar> = {};
+  const after: Record<string, AuditScalar> = {};
+
+  const pairs = [
+    ['date', formatDate(current.date), formatDate(next.date)],
+    ['startTime', formatTime(current.startTime), formatTime(next.startTime)],
+    ['endTime', formatTime(current.endTime), formatTime(next.endTime)],
+    ['classroomId', current.classroomId, next.classroomId],
+    ['maxCapacity', current.maxCapacity, next.maxCapacity],
+  ] as const;
+
+  for (const [key, previous, updated] of pairs) {
+    if (previous !== updated) {
+      before[key] = previous;
+      after[key] = updated;
+    }
+  }
+
+  return { before, after };
+};
+
+const buildActivityUpdateAuditEvents = (
+  activityId: string,
+  eventProgramId: string,
+  currentStatus: ActivityStatus,
+  nextStatus: ActivityStatus,
+  scheduleChanges: { before: Record<string, AuditScalar>; after: Record<string, AuditScalar> },
+  residualChanges: AuditEventInput | null,
+  auditContext: AuditContext,
+): AuditEventInput[] => {
+  const base = {
+    ...auditContext,
+    resourceType: 'activity' as const,
+    resourceId: activityId,
+    scopeType: 'event_program' as const,
+    scopeId: eventProgramId,
+  };
+
+  const events: AuditEventInput[] = [];
+
+  if (currentStatus !== nextStatus) {
+    events.push({
+      ...base,
+      action: nextStatus === 'SCHEDULED' ? 'activity.scheduled' : 'activity.unpublished',
+      changes: {
+        before: { status: currentStatus },
+        after: { status: nextStatus },
+      },
+    });
+  } else if (Object.keys(scheduleChanges.after).length > 0) {
+    events.push({
+      ...base,
+      action: 'activity.schedule_changed',
+      changes: scheduleChanges,
+    });
+  }
+
+  if (residualChanges) {
+    events.push(residualChanges);
+  }
+
+  return events;
+};
+
+const buildActivityResidualAuditEvent = (
+  activityId: string,
+  eventProgramId: string,
+  current: ActivityResidualSnapshot,
+  input: UpdateActivityBody,
+  nextSpeakerSet: string[] | undefined,
+  auditContext: AuditContext,
+): AuditEventInput | null => {
+  const before: Record<string, AuditScalar> = {};
+  const after: Record<string, AuditScalar> = {};
+  const changedFields: string[] = [];
+
+  if (input.type !== undefined && input.type !== current.type) {
+    before['type'] = current.type;
+    after['type'] = input.type;
+  }
+
+  for (const key of ACTIVITY_FREE_TEXT_KEYS) {
+    if (input[key] !== undefined && input[key] !== current[key]) {
+      changedFields.push(key);
+    }
+  }
+
+  if (input.equipment !== undefined && !sameStringSet(input.equipment, current.equipment)) {
+    changedFields.push('equipment');
+  }
+
+  if (nextSpeakerSet !== undefined && !sameStringSet(nextSpeakerSet, current.speakers)) {
+    changedFields.push('speakers');
+  }
+
+  if (Object.keys(after).length === 0 && changedFields.length === 0) {
+    return null;
+  }
+
+  return {
+    ...auditContext,
+    action: 'activity.updated',
+    resourceType: 'activity',
+    resourceId: activityId,
+    scopeType: 'event_program',
+    scopeId: eventProgramId,
+    ...(Object.keys(after).length > 0 ? { changes: { before, after } } : {}),
+    ...(changedFields.length > 0 ? { metadata: { changedFields } } : {}),
+  };
+};
+
 export const updateActivity = async (
   id: string,
   input: UpdateActivityBody,
+  auditContext: AuditContext = {},
 ): Promise<ActivityDetail> => {
   const prisma = getPrismaClient();
 
@@ -527,6 +736,18 @@ export const updateActivity = async (
       endTime: true,
       classroomId: true,
       maxCapacity: true,
+      type: true,
+      name: true,
+      description: true,
+      bannerUrl: true,
+      equipment: { select: { name: true } },
+      speakers: {
+        select: {
+          speaker: {
+            select: { email: true, firstName: true, lastName: true, organization: true },
+          },
+        },
+      },
       eventProgram: {
         select: {
           id: true,
@@ -651,18 +872,61 @@ export const updateActivity = async (
       : {}),
   };
 
-  const record = await prisma.activity
-    .update({
-      where: { id },
-      data,
-      select: activityDetailWithCountSelect,
-    })
-    .catch((error: unknown) => {
-      if (isExclusionViolation(error)) {
-        throw new ApiError(409, 'Classroom is already reserved for an overlapping activity.');
-      }
-      throw error;
-    });
+  const scheduleChanges = buildActivityScheduleChanges(
+    {
+      date: current.date,
+      startTime: current.startTime,
+      endTime: current.endTime,
+      classroomId: current.classroomId,
+      maxCapacity: current.maxCapacity,
+    },
+    { date, startTime, endTime, classroomId, maxCapacity },
+  );
+
+  const auditEvents = buildActivityUpdateAuditEvents(
+    id,
+    current.eventProgram.id,
+    current.status,
+    status,
+    scheduleChanges,
+    buildActivityResidualAuditEvent(
+      id,
+      current.eventProgram.id,
+      {
+        type: current.type,
+        name: current.name,
+        description: current.description,
+        bannerUrl: current.bannerUrl,
+        equipment: current.equipment.map((item) => item.name),
+        speakers: current.speakers.map(({ speaker }) => speakerSetKey(speaker)),
+      },
+      input,
+      input.speakers?.map(speakerSetKey),
+      auditContext,
+    ),
+    auditContext,
+  );
+
+  const record = await prisma.$transaction(async (tx) => {
+    const updated = await tx.activity
+      .update({
+        where: { id },
+        data,
+        select: activityDetailWithCountSelect,
+      })
+      .catch((error: unknown) => {
+        if (isExclusionViolation(error)) {
+          throw new ApiError(409, 'Classroom is already reserved for an overlapping activity.');
+        }
+        throw error;
+      });
+
+    for (const event of auditEvents) {
+      await writeAuditEvent(tx, event);
+    }
+
+    return updated;
+  });
 
   const checkedInCount = await prisma.attendance.count({
     where: { activityId: id, checkedInAt: { not: null } },
@@ -671,7 +935,11 @@ export const updateActivity = async (
   return toActivityDetail(record, record._count.attendance, checkedInCount);
 };
 
-export const cancelActivity = async (id: string, reason?: string): Promise<ActivityDetail> => {
+export const cancelActivity = async (
+  id: string,
+  reason?: string,
+  auditContext: AuditContext = {},
+): Promise<ActivityDetail> => {
   const prisma = getPrismaClient();
 
   const current = await prisma.activity.findUnique({
@@ -693,10 +961,28 @@ export const cancelActivity = async (id: string, reason?: string): Promise<Activ
       throw new ApiError(409, 'Event programs must be active to cancel their activities.');
     }
 
-    record = await prisma.activity.update({
-      where: { id },
-      data: { status: 'CANCELLED', cancelReason: reason ?? null },
-      select: activityDetailWithCountSelect,
+    record = await prisma.$transaction(async (tx) => {
+      const cancelled = await tx.activity.update({
+        where: { id },
+        data: { status: 'CANCELLED', cancelReason: reason ?? null },
+        select: activityDetailWithCountSelect,
+      });
+
+      await writeAuditEvent(tx, {
+        ...auditContext,
+        action: 'activity.cancelled',
+        resourceType: 'activity',
+        resourceId: id,
+        scopeType: 'event_program',
+        scopeId: current.eventProgram.id,
+        changes: {
+          before: { status: current.status },
+          after: { status: 'CANCELLED' },
+        },
+        metadata: { hasCancelReason: reason !== undefined },
+      });
+
+      return cancelled;
     });
   }
 
@@ -705,4 +991,75 @@ export const cancelActivity = async (id: string, reason?: string): Promise<Activ
   });
 
   return toActivityDetail(record, record._count.attendance, checkedInCount);
+};
+
+export const deleteActivity = async (
+  id: string,
+  auditContext: AuditContext = {},
+): Promise<void> => {
+  const prisma = getPrismaClient();
+
+  const current = await prisma.activity.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      eventProgram: { select: { id: true, status: true } },
+    },
+  });
+
+  if (!current) {
+    throw new ApiError(404, 'Activity not found.');
+  }
+  if (current.status !== 'DRAFT') {
+    throw new ApiError(409, 'Only DRAFT activities can be deleted.');
+  }
+  if (current.eventProgram.status !== 'ACTIVE') {
+    throw new ApiError(409, 'Event programs must be active to delete their activities.');
+  }
+
+  const [enrolledCount, alertCount] = await Promise.all([
+    prisma.attendance.count({ where: { activityId: id } }),
+    prisma.alert.count({ where: { activityId: id } }),
+  ]);
+
+  if (enrolledCount > 0) {
+    throw new ApiError(409, 'Activities with attendance records cannot be deleted.');
+  }
+  if (alertCount > 0) {
+    throw new ApiError(409, 'Activities with alert records cannot be deleted.');
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const deleted = await tx.activity
+      .deleteMany({
+        where: {
+          id,
+          status: 'DRAFT',
+          eventProgram: { status: 'ACTIVE' },
+          attendance: { none: {} },
+          alerts: { none: {} },
+        },
+      })
+      .catch((error: unknown) => {
+        if (isDeletionRetentionConflict(error)) {
+          throw new ApiError(409, ACTIVITY_DELETION_CONFLICT_MESSAGE);
+        }
+        throw error;
+      });
+
+    if (deleted.count !== 1) {
+      throw new ApiError(409, ACTIVITY_DELETION_CONFLICT_MESSAGE);
+    }
+
+    await writeAuditEvent(tx, {
+      ...auditContext,
+      action: 'activity.deleted',
+      resourceType: 'activity',
+      resourceId: id,
+      scopeType: 'event_program',
+      scopeId: current.eventProgram.id,
+      changes: { before: { status: 'DRAFT' } },
+    });
+  });
 };

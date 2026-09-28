@@ -6,7 +6,8 @@ interface ActivityRecord {
   id: string;
   name: string;
   description: string | null;
-  type: 'WORKSHOP' | 'SEMINAR' | 'TALK' | 'OTHER';
+  type:
+    'WORKSHOP' | 'SEMINAR' | 'TALK' | 'CONFERENCE' | 'PANEL' | 'COURSE' | 'COMPETITION' | 'OTHER';
   date: Date;
   startTime: Date;
   endTime: Date;
@@ -210,14 +211,26 @@ interface CreatePrismaMock {
   classroom: { findUnique: ReturnType<typeof vi.fn> };
   user: { findMany: ReturnType<typeof vi.fn> };
   activity: { create: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
 }
 
-const createCreatePrismaMock = (): CreatePrismaMock => ({
-  eventProgram: { findUnique: vi.fn() },
-  classroom: { findUnique: vi.fn() },
-  user: { findMany: vi.fn() },
-  activity: { create: vi.fn() },
-});
+const createCreatePrismaMock = (): CreatePrismaMock => {
+  const prisma: CreatePrismaMock = {
+    eventProgram: { findUnique: vi.fn() },
+    classroom: { findUnique: vi.fn() },
+    user: { findMany: vi.fn() },
+    activity: { create: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
+    $transaction: vi.fn(),
+  };
+
+  prisma.$transaction.mockImplementation(
+    async (callback: (client: CreatePrismaMock) => Promise<unknown>) => callback(prisma),
+  );
+
+  return prisma;
+};
 
 const loadCreateService = async (prisma: CreatePrismaMock) => {
   vi.resetModules();
@@ -457,6 +470,57 @@ describe('createActivity', () => {
       },
     });
   });
+
+  it('writes one creation event inside the transaction', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    prisma.activity.create.mockResolvedValue(createdRecord);
+    const { createActivity } = await loadCreateService(prisma);
+
+    await createActivity(createBody, {
+      actorId: 'user-001',
+      actorType: 'USER',
+      requestId: 'req-030',
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'activity.created',
+        actorId: 'user-001',
+        resourceType: 'activity',
+        resourceId: 'activity-001',
+        requestId: 'req-030',
+        scopeType: 'event_program',
+        scopeId: 'program-001',
+        changes: {
+          after: {
+            status: 'DRAFT',
+            type: 'WORKSHOP',
+            date: '2026-09-20',
+            startTime: '08:00',
+            endTime: '10:00',
+            maxCapacity: null,
+            classroomId: null,
+            eventProgramId: 'program-001',
+          },
+        },
+      }),
+    });
+    expect(prisma.activity.create.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.auditEvent.create.mock.invocationCallOrder[0] as number,
+    );
+  });
+
+  it('does not audit a creation rejected by validation', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ ...activeProgram, status: 'DRAFT' });
+    const { createActivity } = await loadCreateService(prisma);
+
+    await expect(createActivity(createBody)).rejects.toMatchObject({ statusCode: 400 });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
 });
 
 interface DetailPrismaMock {
@@ -659,15 +723,27 @@ interface UpdatePrismaMock {
   classroomAvailability: { findFirst: ReturnType<typeof vi.fn> };
   user: { findMany: ReturnType<typeof vi.fn> };
   attendance: { count: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
 }
 
-const createUpdatePrismaMock = (): UpdatePrismaMock => ({
-  activity: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
-  classroom: { findUnique: vi.fn() },
-  classroomAvailability: { findFirst: vi.fn() },
-  user: { findMany: vi.fn() },
-  attendance: { count: vi.fn() },
-});
+const createUpdatePrismaMock = (): UpdatePrismaMock => {
+  const prisma: UpdatePrismaMock = {
+    activity: { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() },
+    classroom: { findUnique: vi.fn() },
+    classroomAvailability: { findFirst: vi.fn() },
+    user: { findMany: vi.fn() },
+    attendance: { count: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
+    $transaction: vi.fn(),
+  };
+
+  prisma.$transaction.mockImplementation(
+    async (callback: (client: UpdatePrismaMock) => Promise<unknown>) => callback(prisma),
+  );
+
+  return prisma;
+};
 
 const loadUpdateService = async (prisma: UpdatePrismaMock) => {
   vi.resetModules();
@@ -1098,6 +1174,229 @@ describe('updateActivity', () => {
       message: 'Classroom is already reserved for an overlapping activity.',
     });
   });
+
+  it('writes a single schedule_changed event for a date and time change', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: true,
+      capacity: 60,
+    });
+    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-001' });
+    prisma.activity.findFirst.mockResolvedValue(null);
+    prisma.activity.update.mockResolvedValue(
+      updateRecord({
+        status: 'SCHEDULED',
+        date: new Date('2026-10-12T00:00:00.000Z'),
+        startTime: new Date('1970-01-01T15:00:00.000Z'),
+        endTime: new Date('1970-01-01T18:00:00.000Z'),
+      }),
+    );
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await updateActivity(
+      'activity-001',
+      { date: '2026-10-12', startTime: '15:00', endTime: '18:00' },
+      { actorId: 'user-001', actorType: 'USER', requestId: 'req-100' },
+    );
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'activity.schedule_changed',
+        actorId: 'user-001',
+        resourceType: 'activity',
+        resourceId: 'activity-001',
+        scopeType: 'event_program',
+        scopeId: 'program-001',
+        requestId: 'req-100',
+        changes: {
+          before: { date: '2026-10-05', startTime: '14:00', endTime: '17:00' },
+          after: { date: '2026-10-12', startTime: '15:00', endTime: '18:00' },
+        },
+      }),
+    });
+  });
+
+  it('writes a single scheduled event when a draft is published to the schedule', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'DRAFT' }));
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: true,
+      capacity: 60,
+    });
+    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-001' });
+    prisma.activity.findFirst.mockResolvedValue(null);
+    prisma.activity.update.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await updateActivity(
+      'activity-001',
+      { status: 'SCHEDULED' },
+      {
+        actorId: 'user-001',
+        actorType: 'USER',
+        requestId: 'req-101',
+      },
+    );
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'activity.scheduled',
+        resourceType: 'activity',
+        resourceId: 'activity-001',
+        scopeType: 'event_program',
+        scopeId: 'program-001',
+        requestId: 'req-101',
+        changes: { before: { status: 'DRAFT' }, after: { status: 'SCHEDULED' } },
+      }),
+    });
+  });
+
+  it('writes a single unpublished event when a scheduled activity returns to draft', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    prisma.activity.update.mockResolvedValue(updateRecord({ status: 'DRAFT' }));
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await updateActivity(
+      'activity-001',
+      { status: 'DRAFT' },
+      {
+        actorId: 'user-001',
+        actorType: 'USER',
+      },
+    );
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'activity.unpublished',
+        resourceType: 'activity',
+        resourceId: 'activity-001',
+        changes: { before: { status: 'SCHEDULED' }, after: { status: 'DRAFT' } },
+      }),
+    });
+  });
+
+  it('emits only the status transition when a patch changes status and schedule together', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'DRAFT' }));
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: true,
+      capacity: 60,
+    });
+    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-001' });
+    prisma.activity.findFirst.mockResolvedValue(null);
+    prisma.activity.update.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await updateActivity('activity-001', { status: 'SCHEDULED', startTime: '15:00' });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: 'activity.scheduled' }),
+    });
+  });
+
+  it('records the classroom change inside the schedule_changed event', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    prisma.activity.update.mockResolvedValue(
+      updateRecord({ status: 'SCHEDULED', classroomId: 'classroom-002' }),
+    );
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-002',
+      isActive: true,
+      capacity: 60,
+    });
+    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-001' });
+    prisma.activity.findFirst.mockResolvedValue(null);
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await updateActivity('activity-001', { classroomId: 'classroom-002' });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'activity.schedule_changed',
+        changes: {
+          before: { classroomId: 'classroom-001' },
+          after: { classroomId: 'classroom-002' },
+        },
+      }),
+    });
+  });
+
+  it('audits a patch that only renames the activity as an attribute change', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    prisma.activity.update.mockResolvedValue(
+      updateRecord({ status: 'SCHEDULED', name: 'Taller renombrado' }),
+    );
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await updateActivity('activity-001', { name: 'Taller renombrado' });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'activity.updated',
+        resourceId: 'activity-001',
+        metadata: { changedFields: ['name'] },
+      }),
+    });
+  });
+
+  it('does not audit a patch that repeats the stored attributes', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    prisma.activity.update.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await updateActivity('activity-001', { name: 'Taller de Inteligencia Artificial' });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit a status transition rejected as invalid', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'ONGOING' }));
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await expect(updateActivity('activity-001', { status: 'DRAFT' })).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Activity status transition is not allowed.',
+    });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the activity when the schedule audit insert fails', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: true,
+      capacity: 60,
+    });
+    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-001' });
+    prisma.activity.findFirst.mockResolvedValue(null);
+    prisma.activity.update.mockResolvedValue(
+      updateRecord({ status: 'SCHEDULED', startTime: new Date('1970-01-01T15:00:00.000Z') }),
+    );
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await expect(updateActivity('activity-001', { startTime: '15:00' })).rejects.toThrow(
+      'audit insert failed',
+    );
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
 });
 
 interface ProgramActivitiesPrismaMock {
@@ -1349,12 +1648,24 @@ describe('listEventProgramActivities', () => {
 interface CancelPrismaMock {
   activity: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   attendance: { count: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
 }
 
-const createCancelPrismaMock = (): CancelPrismaMock => ({
-  activity: { findUnique: vi.fn(), update: vi.fn() },
-  attendance: { count: vi.fn() },
-});
+const createCancelPrismaMock = (): CancelPrismaMock => {
+  const prisma: CancelPrismaMock = {
+    activity: { findUnique: vi.fn(), update: vi.fn() },
+    attendance: { count: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
+    $transaction: vi.fn(),
+  };
+
+  prisma.$transaction.mockImplementation(
+    async (callback: (client: CancelPrismaMock) => Promise<unknown>) => callback(prisma),
+  );
+
+  return prisma;
+};
 
 const loadCancelService = async (prisma: CancelPrismaMock) => {
   vi.resetModules();
@@ -1445,6 +1756,90 @@ describe('cancelActivity', () => {
     expect(result).toMatchObject({ status: 'CANCELLED', cancelReason: 'Motivo original' });
   });
 
+  it('writes a single cancelled event with the status transition', async () => {
+    const prisma = createCancelPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(buildDetailRecord({ status: 'SCHEDULED' }));
+    prisma.activity.update.mockResolvedValue(
+      buildDetailRecord({ status: 'CANCELLED', cancelReason: 'Lluvia' }),
+    );
+    prisma.attendance.count.mockResolvedValue(4);
+    const { cancelActivity } = await loadCancelService(prisma);
+
+    await cancelActivity('activity-001', 'Lluvia', {
+      actorId: 'user-001',
+      actorType: 'USER',
+      requestId: 'req-200',
+    });
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'activity.cancelled',
+        actorId: 'user-001',
+        resourceType: 'activity',
+        resourceId: 'activity-001',
+        scopeType: 'event_program',
+        scopeId: 'program-001',
+        requestId: 'req-200',
+        changes: { before: { status: 'SCHEDULED' }, after: { status: 'CANCELLED' } },
+      }),
+    });
+  });
+
+  it('flags that a cancellation carried a free-text reason without storing it', async () => {
+    const prisma = createCancelPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(buildDetailRecord({ status: 'SCHEDULED' }));
+    prisma.activity.update.mockResolvedValue(
+      buildDetailRecord({ status: 'CANCELLED', cancelReason: 'Lluvia' }),
+    );
+    prisma.attendance.count.mockResolvedValue(0);
+    const { cancelActivity } = await loadCancelService(prisma);
+
+    await cancelActivity('activity-001', 'Lluvia');
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ metadata: { hasCancelReason: true } }),
+    });
+  });
+
+  it('flags a cancellation without reason', async () => {
+    const prisma = createCancelPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(buildDetailRecord({ status: 'SCHEDULED' }));
+    prisma.activity.update.mockResolvedValue(buildDetailRecord({ status: 'CANCELLED' }));
+    prisma.attendance.count.mockResolvedValue(0);
+    const { cancelActivity } = await loadCancelService(prisma);
+
+    await cancelActivity('activity-001');
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ metadata: { hasCancelReason: false } }),
+    });
+  });
+
+  it('does not audit a cancellation rejected by the program state', async () => {
+    const prisma = createCancelPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(
+      buildDetailRecord({ status: 'DRAFT', programStatus: 'ARCHIVED' }),
+    );
+    const { cancelActivity } = await loadCancelService(prisma);
+
+    await expect(cancelActivity('activity-001')).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the activity when the cancellation audit insert fails', async () => {
+    const prisma = createCancelPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(buildDetailRecord({ status: 'SCHEDULED' }));
+    prisma.activity.update.mockResolvedValue(buildDetailRecord({ status: 'CANCELLED' }));
+    prisma.attendance.count.mockResolvedValue(0);
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+    const { cancelActivity } = await loadCancelService(prisma);
+
+    await expect(cancelActivity('activity-001', 'Lluvia')).rejects.toThrow('audit insert failed');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects DRAFT activities of non ACTIVE programs with 409', async () => {
     const prisma = createCancelPrismaMock();
     prisma.activity.findUnique.mockResolvedValue(
@@ -1470,5 +1865,238 @@ describe('cancelActivity', () => {
       statusCode: 409,
       message: 'Completed activities cannot be cancelled.',
     });
+  });
+});
+
+interface DeletePrismaMock {
+  activity: {
+    findUnique: ReturnType<typeof vi.fn>;
+    deleteMany: ReturnType<typeof vi.fn>;
+  };
+  attendance: { count: ReturnType<typeof vi.fn> };
+  alert: { count: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
+}
+
+const createDeletePrismaMock = (): DeletePrismaMock => {
+  const prisma: DeletePrismaMock = {
+    activity: { findUnique: vi.fn(), deleteMany: vi.fn() },
+    attendance: { count: vi.fn() },
+    alert: { count: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
+    $transaction: vi.fn(),
+  };
+
+  prisma.$transaction.mockImplementation(
+    async (callback: (client: DeletePrismaMock) => Promise<unknown>) => callback(prisma),
+  );
+
+  return prisma;
+};
+
+const loadDeleteService = async (prisma: DeletePrismaMock) => {
+  vi.resetModules();
+  vi.doMock('../../config/prisma.js', () => ({ getPrismaClient: () => prisma }));
+
+  return import('./activities.service.js');
+};
+
+const deletableActivity = () => ({
+  id: 'activity-001',
+  status: 'DRAFT' as const,
+  eventProgram: { id: 'program-001', status: 'ACTIVE' as const },
+});
+
+const cleanDeleteMock = (): DeletePrismaMock => {
+  const prisma = createDeletePrismaMock();
+  prisma.activity.findUnique.mockResolvedValue(deletableActivity());
+  prisma.attendance.count.mockResolvedValue(0);
+  prisma.alert.count.mockResolvedValue(0);
+
+  return prisma;
+};
+
+describe('deleteActivity', () => {
+  afterEach(() => {
+    vi.doUnmock('../../config/prisma.js');
+  });
+
+  it('throws 404 when the activity does not exist', async () => {
+    const prisma = createDeletePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(null);
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('missing')).rejects.toMatchObject({
+      statusCode: 404,
+      message: 'Activity not found.',
+    });
+    expect(prisma.activity.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it.each(['SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED'] as const)(
+    'rejects deleting a %s activity with 409',
+    async (status) => {
+      const prisma = createDeletePrismaMock();
+      prisma.activity.findUnique.mockResolvedValue({ ...deletableActivity(), status });
+      const { deleteActivity } = await loadDeleteService(prisma);
+
+      await expect(deleteActivity('activity-001')).rejects.toMatchObject({
+        statusCode: 409,
+        message: 'Only DRAFT activities can be deleted.',
+      });
+      expect(prisma.activity.deleteMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(['ARCHIVED', 'DRAFT'] as const)(
+    'rejects deleting when the program is %s with 409',
+    async (programStatus) => {
+      const prisma = createDeletePrismaMock();
+      prisma.activity.findUnique.mockResolvedValue({
+        ...deletableActivity(),
+        eventProgram: { id: 'program-001', status: programStatus },
+      });
+      const { deleteActivity } = await loadDeleteService(prisma);
+
+      await expect(deleteActivity('activity-001')).rejects.toMatchObject({
+        statusCode: 409,
+        message: 'Event programs must be active to delete their activities.',
+      });
+      expect(prisma.activity.deleteMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an activity with attendance records with 409', async () => {
+    const prisma = createDeletePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(deletableActivity());
+    prisma.attendance.count.mockResolvedValue(3);
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('activity-001')).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Activities with attendance records cannot be deleted.',
+    });
+    expect(prisma.attendance.count).toHaveBeenCalledWith({
+      where: { activityId: 'activity-001' },
+    });
+    expect(prisma.activity.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects an activity with alert records with 409', async () => {
+    const prisma = createDeletePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(deletableActivity());
+    prisma.attendance.count.mockResolvedValue(0);
+    prisma.alert.count.mockResolvedValue(1);
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('activity-001')).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Activities with alert records cannot be deleted.',
+    });
+    expect(prisma.activity.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes a clean DRAFT activity with a conditional delete and returns nothing', async () => {
+    const prisma = cleanDeleteMock();
+    prisma.activity.deleteMany.mockResolvedValue({ count: 1 });
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('activity-001')).resolves.toBeUndefined();
+
+    expect(prisma.activity.deleteMany).toHaveBeenCalledWith({
+      where: {
+        id: 'activity-001',
+        status: 'DRAFT',
+        eventProgram: { status: 'ACTIVE' },
+        attendance: { none: {} },
+        alerts: { none: {} },
+      },
+    });
+  });
+
+  it('writes a single activity.deleted event in the same transaction', async () => {
+    const prisma = cleanDeleteMock();
+    prisma.activity.deleteMany.mockResolvedValue({ count: 1 });
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await deleteActivity('activity-001', {
+      actorId: 'user-001',
+      actorType: 'USER',
+      requestId: 'req-300',
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'activity.deleted',
+        actorId: 'user-001',
+        resourceType: 'activity',
+        resourceId: 'activity-001',
+        scopeType: 'event_program',
+        scopeId: 'program-001',
+        requestId: 'req-300',
+        changes: { before: { status: 'DRAFT' } },
+      }),
+    });
+  });
+
+  it('does not audit a deletion rejected by the status guard', async () => {
+    const prisma = createDeletePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue({ ...deletableActivity(), status: 'SCHEDULED' });
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('activity-001')).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('surfaces the conflict when the conditional delete matches no row', async () => {
+    const prisma = cleanDeleteMock();
+    prisma.activity.deleteMany.mockResolvedValue({ count: 0 });
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('activity-001')).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'The activity changed while it was being deleted. Retry the request.',
+    });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('translates a foreign key violation raised by a concurrent insert into a 409', async () => {
+    const prisma = cleanDeleteMock();
+    prisma.activity.deleteMany.mockRejectedValue(
+      Object.assign(new Error('Foreign key constraint violated'), { code: 'P2003' }),
+    );
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('activity-001')).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'The activity changed while it was being deleted. Retry the request.',
+    });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('translates the retention trigger rejection into a 409', async () => {
+    const prisma = cleanDeleteMock();
+    prisma.activity.deleteMany.mockRejectedValue(new Error('only DRAFT activities can be deleted'));
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('activity-001')).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'The activity changed while it was being deleted. Retry the request.',
+    });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the deletion when the audit insert fails', async () => {
+    const prisma = cleanDeleteMock();
+    prisma.activity.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+    const { deleteActivity } = await loadDeleteService(prisma);
+
+    await expect(deleteActivity('activity-001')).rejects.toThrow('audit insert failed');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
   });
 });
