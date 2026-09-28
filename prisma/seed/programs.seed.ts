@@ -79,6 +79,43 @@ export const ADDITIONAL_PROGRAMS: readonly AdditionalProgramCatalogEntry[] = [
     finalStatus: 'DRAFT',
     archiveOffsetDays: null,
   },
+  {
+    key: 'feria-cientifica',
+    unitKey: 'fcyt',
+    name: 'Feria Científica UTP 2026',
+    description: 'Feria de divulgación científica de la Facultad de Ciencias y Tecnología.',
+    label: 'FECYT-2026',
+    bannerUrl: '/banners/feria-cientifica-2026.jpg',
+    startOffsetDays: 40,
+    endOffsetDays: 42,
+    finalStatus: 'ACTIVE',
+    archiveOffsetDays: null,
+  },
+  {
+    key: 'encuentro-deportivo',
+    unitKey: 'sub-vida',
+    name: 'Encuentro Deportivo Universitario 2026',
+    description: 'Encuentro deportivo y recreativo de la comunidad universitaria.',
+    label: 'EDU-2026',
+    bannerUrl: '/banners/encuentro-deportivo-2026.jpg',
+    startOffsetDays: 50,
+    endOffsetDays: 51,
+    finalStatus: 'ACTIVE',
+    archiveOffsetDays: null,
+  },
+  {
+    key: 'congreso-mecatronica',
+    unitKey: 'fim',
+    name: 'Congreso de Mecatrónica y Automatización 2026',
+    description:
+      'Congreso de la Facultad de Ingeniería Mecánica sobre mecatrónica y automatización.',
+    label: 'CMA-2026',
+    bannerUrl: '/banners/congreso-mecatronica-2026.jpg',
+    startOffsetDays: 60,
+    endOffsetDays: 62,
+    finalStatus: 'ACTIVE',
+    archiveOffsetDays: null,
+  },
 ];
 
 export interface SeedProgram {

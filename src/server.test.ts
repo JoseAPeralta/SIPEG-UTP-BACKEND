@@ -56,7 +56,10 @@ describe('server lifecycle logging', () => {
 
     expect(logger.info).toHaveBeenCalledWith({ event: 'app.starting' }, 'app.starting');
     await vi.waitFor(() => {
-      expect(logger.info).toHaveBeenCalledWith({ event: 'app.listening', port: 0 }, 'app.listening');
+      expect(logger.info).toHaveBeenCalledWith(
+        { event: 'app.listening', port: 0 },
+        'app.listening',
+      );
     });
     await vi.waitFor(() => {
       expect(logger.error).toHaveBeenCalledWith(
@@ -102,12 +105,18 @@ describe('server lifecycle logging', () => {
 
     shutdown(server, 'SIGTERM');
 
-    expect(logger.info).toHaveBeenCalledWith({ event: 'app.shutdown.signal', signal: 'SIGTERM' }, 'app.shutdown.signal');
+    expect(logger.info).toHaveBeenCalledWith(
+      { event: 'app.shutdown.signal', signal: 'SIGTERM' },
+      'app.shutdown.signal',
+    );
     expect(close).toHaveBeenCalled();
 
     await vi.waitFor(() => {
       expect(mockedDisconnectPrisma).toHaveBeenCalled();
-      expect(logger.info).toHaveBeenCalledWith({ event: 'app.shutdown.completed' }, 'app.shutdown.completed');
+      expect(logger.info).toHaveBeenCalledWith(
+        { event: 'app.shutdown.completed' },
+        'app.shutdown.completed',
+      );
       expect(exitSpy).toHaveBeenCalledWith(0);
     });
   });
@@ -136,7 +145,10 @@ describe('server lifecycle logging', () => {
     shutdown(server, 'SIGTERM');
     await vi.advanceTimersByTimeAsync(10_000);
 
-    expect(logger.error).toHaveBeenCalledWith({ event: 'app.shutdown.forced' }, 'app.shutdown.forced');
+    expect(logger.error).toHaveBeenCalledWith(
+      { event: 'app.shutdown.forced' },
+      'app.shutdown.forced',
+    );
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 

@@ -72,9 +72,6 @@ export const logger = await createLogger({
   pretty: env.LOG_PRETTY,
 });
 
-export function createChildLogger(
-  bindings: Record<string, string>,
-  base: Logger = logger,
-): Logger {
+export function createChildLogger(bindings: Record<string, string>, base: Logger = logger): Logger {
   return base.child(bindings);
 }

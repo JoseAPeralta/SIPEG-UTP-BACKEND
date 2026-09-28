@@ -4,6 +4,7 @@ import type { Logger } from 'pino';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { env } from './env.js';
 import { createChildLogger, createLogger, logger } from './logger.js';
 
 function createMemoryStream() {
@@ -75,7 +76,14 @@ describe('logger', () => {
         'redaction',
       );
       const parsed = JSON.parse(output().trim());
-      for (const key of ['password', 'token', 'accessToken', 'refreshToken', 'cookie', 'authorization']) {
+      for (const key of [
+        'password',
+        'token',
+        'accessToken',
+        'refreshToken',
+        'cookie',
+        'authorization',
+      ]) {
         expect(parsed[key]).toBe('[Redacted]');
       }
       expect(parsed.nested.password).toBe('[Redacted]');
@@ -141,5 +149,13 @@ describe('logger', () => {
     const childSpy = vi.spyOn(logger, 'child');
     createChildLogger({ requestId: 'req-1' });
     expect(childSpy).toHaveBeenCalledWith({ requestId: 'req-1' });
+  });
+
+  it('silences the ambient singleton in the test environment', () => {
+    // vitest.config.ts sets LOG_LEVEL=silent so the reporter output stays
+    // readable. Tests that assert on log output raise the level explicitly,
+    // as requestLogger.middleware.test.ts does.
+    expect(env.LOG_LEVEL).toBe('silent');
+    expect(logger.level).toBe('silent');
   });
 });

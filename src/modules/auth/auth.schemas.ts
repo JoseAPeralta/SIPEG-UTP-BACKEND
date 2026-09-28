@@ -10,15 +10,17 @@ export const loginSchema = z.object({
 });
 
 export const registerSchema = z.object({
-  body: z.object({
-    email: z.string().email('Invalid email format.'),
-    password: z.string().min(12, 'Password must be at least 12 characters.').max(128),
-    firstName: trimmedString.min(2).max(100),
-    lastName: trimmedString.min(2).max(100),
-    identificationNumber: trimmedString.min(5).max(30),
-    unitId: z.string().min(1).optional(),
-    careerId: z.string().min(1).optional(),
-  }),
+  body: z
+    .object({
+      email: z.string().email('Invalid email format.'),
+      password: z.string().min(12, 'Password must be at least 12 characters.').max(128),
+      firstName: trimmedString.min(2).max(100),
+      lastName: trimmedString.min(2).max(100),
+      identificationNumber: trimmedString.min(5).max(30),
+      unitId: z.string().min(1).optional(),
+      careerId: z.string().min(1).optional(),
+    })
+    .strict(),
 });
 
 export const refreshSchema = z.object({

@@ -49,6 +49,8 @@ export const authPaths: ZodOpenApiPathsObject = {
     post: {
       tags: ['Auth'],
       summary: 'Register a new user',
+      description:
+        'Public registration always creates an active USER account. Role, status and permission fields are rejected.',
       requestBody: {
         required: true,
         content: { 'application/json': { schema: registerSchema.shape.body } },

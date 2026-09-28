@@ -23,6 +23,7 @@ const expectedOperations = [
   'GET /api/v1/activities',
   'GET /api/v1/activities/{id}',
   'PATCH /api/v1/activities/{id}',
+  'DELETE /api/v1/activities/{id}',
   'POST /api/v1/activities',
   'POST /api/v1/activities/{id}/cancel',
   'GET /api/v1/activities/{id}/collaborators',
@@ -65,6 +66,7 @@ const expectedOperations = [
   'DELETE /api/v1/classrooms/{id}/amenities/{amenity}',
   'POST /api/v1/classrooms/{id}/availability',
   'DELETE /api/v1/classrooms/{id}/availability/{availabilityId}',
+  'GET /api/v1/audit-events',
   'GET /api/v1/health',
 ].sort();
 
@@ -140,6 +142,22 @@ describe('openApiDocument', () => {
 
     expect(operation?.security).toEqual([{ bearerAuth: [] }]);
     expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+    expect(operation?.responses?.['404']).toBeDefined();
+    expect(operation?.responses?.['409']).toBeDefined();
+  });
+
+  it('documents the activity deletion with bearer security and its retention conflicts', () => {
+    const operation = openApiDocument.paths?.['/api/v1/activities/{id}']?.delete;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(names).toContain('id');
+    expect(operation?.requestBody).toBeUndefined();
+    expect(operation?.responses?.['204']).toBeDefined();
     expect(operation?.responses?.['400']).toBeDefined();
     expect(operation?.responses?.['401']).toBeDefined();
     expect(operation?.responses?.['403']).toBeDefined();
@@ -474,11 +492,18 @@ describe('openApiDocument', () => {
 
   it('documents the admin user creation body', () => {
     const schema = openApiDocument.components?.schemas?.['AdminUserCreate'] as
-      { properties?: Record<string, unknown>; required?: string[] } | undefined;
+      | {
+          additionalProperties?: boolean;
+          properties?: Record<string, unknown>;
+          required?: string[];
+        }
+      | undefined;
 
     expect(schema?.properties).toHaveProperty('email');
     expect(schema?.properties).toHaveProperty('password');
     expect(schema?.properties).toHaveProperty('unitId');
+    expect(schema?.properties).not.toHaveProperty('globalRole');
+    expect(schema?.additionalProperties).toBe(false);
     expect(schema?.required).toEqual(
       expect.arrayContaining([
         'email',
@@ -488,6 +513,26 @@ describe('openApiDocument', () => {
         'identificationNumber',
       ]),
     );
+  });
+
+  it('documents public registration as a closed privilege-free object', () => {
+    const requestBody = openApiDocument.paths?.['/api/v1/auth/register']?.post?.requestBody;
+    const mediaType =
+      requestBody && 'content' in requestBody
+        ? requestBody.content?.['application/json']
+        : undefined;
+    const schema =
+      mediaType && 'schema' in mediaType
+        ? (mediaType.schema as {
+            additionalProperties?: boolean;
+            properties?: Record<string, unknown>;
+          })
+        : undefined;
+
+    expect(schema?.additionalProperties).toBe(false);
+    expect(schema?.properties).not.toHaveProperty('globalRole');
+    expect(schema?.properties).not.toHaveProperty('role');
+    expect(schema?.properties).not.toHaveProperty('permissions');
   });
 
   it('keeps public organizational unit reads without bearer security', () => {
@@ -689,5 +734,65 @@ describe('openApiDocument', () => {
     expect(listPermission?.properties).toHaveProperty('origin');
     expect(listPermission?.properties).toHaveProperty('effective');
     expect(listPermission?.properties).toHaveProperty('source');
+  });
+
+  it('marks the audit log listing as admin-only with its failures', () => {
+    const operation = openApiDocument.paths?.['/api/v1/audit-events']?.get;
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(operation?.requestBody).toBeUndefined();
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+  });
+
+  it('documents the audit log filters and the cursor page contract', () => {
+    const operation = openApiDocument.paths?.['/api/v1/audit-events']?.get;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+    const page = openApiDocument.components?.schemas?.['AuditEventPage'] as
+      { properties?: Record<string, unknown>; required?: string[] } | undefined;
+    const event = openApiDocument.components?.schemas?.['AuditEvent'] as
+      { properties?: Record<string, unknown> } | undefined;
+
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'action',
+        'actorId',
+        'resourceType',
+        'resourceId',
+        'scopeType',
+        'scopeId',
+        'from',
+        'to',
+        'cursor',
+        'limit',
+      ]),
+    );
+    expect(names).toHaveLength(10);
+    expect(page?.properties).toHaveProperty('items');
+    expect(page?.properties).toHaveProperty('nextCursor');
+    expect(page?.properties).toHaveProperty('hasMore');
+    expect(page?.required).toEqual(['items', 'limit', 'hasMore', 'nextCursor']);
+    expect(event?.properties).toHaveProperty('action');
+    expect(event?.properties).toHaveProperty('occurredAt');
+    expect(event?.properties).toHaveProperty('actorId');
+    expect(event?.properties).toHaveProperty('targetUserId');
+    expect(event?.properties).toHaveProperty('requestId');
+    expect(event?.properties).toHaveProperty('changes');
+    expect(event?.properties).toHaveProperty('metadata');
+    expect(openApiDocument.components?.schemas).toHaveProperty('AuditChanges');
+    expect(openApiDocument.components?.schemas).toHaveProperty('AuditMetadata');
+  });
+
+  it('documents the audit log as read only', () => {
+    const pathItem = openApiDocument.paths?.['/api/v1/audit-events'];
+
+    expect(pathItem?.get).toBeDefined();
+    expect(pathItem?.post).toBeUndefined();
+    expect(pathItem?.patch).toBeUndefined();
+    expect(pathItem?.put).toBeUndefined();
+    expect(pathItem?.delete).toBeUndefined();
   });
 });

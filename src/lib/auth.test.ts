@@ -108,7 +108,10 @@ describe('auth instance', () => {
     expect(sendPasswordResetEmail).toHaveBeenCalledWith('user@utp.ac.pa', 'reset-secret');
     rejectDelivery?.(new Error('SMTP secret detail'));
     await vi.waitFor(() => {
-      expect(loggerError).toHaveBeenCalledWith({ event: 'mail.delivery.failed' }, 'mail.delivery.failed');
+      expect(loggerError).toHaveBeenCalledWith(
+        { event: 'mail.delivery.failed' },
+        'mail.delivery.failed',
+      );
     });
     expect(JSON.stringify(loggerError.mock.calls)).not.toContain('secret');
   });

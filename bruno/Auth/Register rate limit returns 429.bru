@@ -15,11 +15,11 @@ post {
 
 body:json {
   {
-    "email": "rl.{{$timestamp}}.{{$randomInt}}@utp.ac.pa",
+    "email": "rate-limit.register@utp.ac.pa",
     "password": "PruebaSipeg2026*",
     "firstName": "Prueba",
     "lastName": "RateLimit",
-    "identificationNumber": "rl-{{$timestamp}}-{{$randomInt}}",
+    "identificationNumber": "rl-register-identification",
     "unitId": "seed_unit_fic",
     "careerId": "seed_career_fic-civ"
   }
@@ -39,5 +39,5 @@ tests {
 }
 
 docs {
-  Send this request four times within one minute from a clean window to observe the 429. Other register requests in the folder also count toward the limit of 3 per minute per IP.
+  Send this request four times within one minute from a clean window to observe the 429. The limiter keys by email+IP (3/min), so keep the fixed email; other requests with the same email from the same IP also count toward that bucket. The companion per-IP limit is 30/min.
 }

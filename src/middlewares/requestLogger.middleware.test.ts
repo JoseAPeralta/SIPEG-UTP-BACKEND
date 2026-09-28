@@ -1,9 +1,15 @@
 import { EventEmitter } from 'node:events';
 
 import type { Request, Response } from 'express';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { accessLogLevel, requestLogger, resolveRequestId, routeTemplate } from './requestLogger.middleware.js';
+import { logger } from '../config/logger.js';
+import {
+  accessLogLevel,
+  requestLogger,
+  resolveRequestId,
+  routeTemplate,
+} from './requestLogger.middleware.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -123,10 +129,21 @@ describe('requestLogger middleware', () => {
   const readAccessLogs = (writeSpy: ReturnType<typeof vi.spyOn>) =>
     writeSpy.mock.calls
       .map((call: unknown[]) => call[0])
-      .filter((chunk: unknown): chunk is string => typeof chunk === 'string' && chunk.includes('"logType":"access"'))
+      .filter(
+        (chunk: unknown): chunk is string =>
+          typeof chunk === 'string' && chunk.includes('"logType":"access"'),
+      )
       .map((chunk: string) => JSON.parse(chunk) as Record<string, unknown>);
 
+  // The suite runs with LOG_LEVEL=silent (see vitest.config.ts) so the reporter
+  // output stays readable. This file asserts on the access log itself, so it
+  // turns the ambient singleton back on for the duration of each test.
+  beforeEach(() => {
+    logger.level = 'info';
+  });
+
   afterEach(() => {
+    logger.level = 'silent';
     vi.restoreAllMocks();
   });
 
@@ -206,7 +223,10 @@ describe('requestLogger middleware', () => {
   });
 
   it('logs 5xx health checks as errors', () => {
-    const { reqEmitter, resEmitter } = createEmitterPair({ path: '/api/v1/health', statusCode: 500 });
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      path: '/api/v1/health',
+      statusCode: 500,
+    });
     const next = vi.fn();
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -251,7 +271,10 @@ describe('requestLogger middleware', () => {
   });
 
   it('warns on 429 responses', () => {
-    const { reqEmitter, resEmitter } = createEmitterPair({ path: '/api/v1/login', statusCode: 429 });
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      path: '/api/v1/login',
+      statusCode: 429,
+    });
     const next = vi.fn();
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);

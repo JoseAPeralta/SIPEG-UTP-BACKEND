@@ -68,7 +68,8 @@ export const registerFatalHandlers = (): void => {
   });
 };
 
-const isMain = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+const isMain =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMain) {
   registerFatalHandlers();

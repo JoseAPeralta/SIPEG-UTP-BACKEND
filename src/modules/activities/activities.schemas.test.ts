@@ -81,10 +81,23 @@ describe('activityListItemSchema', () => {
     expect(activityListItemSchema.parse(activityPayload)).toEqual(activityPayload);
   });
 
+  it('accepts every activity type in the catalog', () => {
+    for (const type of [
+      'WORKSHOP',
+      'SEMINAR',
+      'TALK',
+      'CONFERENCE',
+      'PANEL',
+      'COURSE',
+      'COMPETITION',
+      'OTHER',
+    ]) {
+      expect(() => activityListItemSchema.parse({ ...activityPayload, type })).not.toThrow();
+    }
+  });
+
   it('rejects an activity type outside the catalog', () => {
-    expect(() =>
-      activityListItemSchema.parse({ ...activityPayload, type: 'CONFERENCE' }),
-    ).toThrow();
+    expect(() => activityListItemSchema.parse({ ...activityPayload, type: 'WEBINAR' })).toThrow();
   });
 
   it('rejects an organizational unit type outside the catalog', () => {
@@ -275,7 +288,7 @@ describe('createActivitySchema', () => {
 
   it('rejects an activity type outside the catalog', () => {
     expect(() =>
-      createActivitySchema.parse({ body: { ...createPayload, type: 'CONFERENCE' } }),
+      createActivitySchema.parse({ body: { ...createPayload, type: 'WEBINAR' } }),
     ).toThrow();
   });
 });
@@ -487,8 +500,19 @@ describe('eventProgramActivitiesQuerySchema', () => {
   });
 
   it('validates the activity type', () => {
-    expect(eventProgramActivitiesQuerySchema.safeParse({ type: 'TALK' }).success).toBe(true);
-    expect(eventProgramActivitiesQuerySchema.safeParse({ type: 'CONFERENCE' }).success).toBe(false);
+    for (const type of [
+      'WORKSHOP',
+      'SEMINAR',
+      'TALK',
+      'CONFERENCE',
+      'PANEL',
+      'COURSE',
+      'COMPETITION',
+      'OTHER',
+    ]) {
+      expect(eventProgramActivitiesQuerySchema.safeParse({ type }).success).toBe(true);
+    }
+    expect(eventProgramActivitiesQuerySchema.safeParse({ type: 'WEBINAR' }).success).toBe(false);
   });
 
   it('rejects an empty search term', () => {
