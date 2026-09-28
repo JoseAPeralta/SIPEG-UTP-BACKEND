@@ -4,8 +4,9 @@ import type { Logger } from 'pino';
 
 import { describe, expect, it, vi } from 'vitest';
 
+import { runWithLogContext } from '../lib/log-context.js';
 import { env } from './env.js';
-import { createChildLogger, createLogger, logger } from './logger.js';
+import { createChildLogger, createLogger, createRequestLogger, logger } from './logger.js';
 
 function createMemoryStream() {
   const chunks: string[] = [];
@@ -149,6 +150,60 @@ describe('logger', () => {
     const childSpy = vi.spyOn(logger, 'child');
     createChildLogger({ requestId: 'req-1' });
     expect(childSpy).toHaveBeenCalledWith({ requestId: 'req-1' });
+  });
+
+  it('emits the level as a string name, not a number', async () => {
+    await withLogger('test', (log, output) => {
+      log.info('hello');
+      log.warn({ event: 'auth.token.invalid' }, 'auth.token.invalid');
+      log.error(new Error('boom'), 'unexpected');
+      const lines = output()
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line));
+      expect(lines.map((entry) => entry.level)).toEqual(['info', 'warn', 'error']);
+    });
+  });
+
+  it('createRequestLogger inherits requestId from the log context', async () => {
+    const { stream, output } = createMemoryStream();
+    const log = await createLogger({
+      level: 'trace',
+      environment: 'test',
+      serviceName: 'svc',
+      version: '1.0.0',
+      stream,
+    });
+
+    runWithLogContext({ requestId: 'req-7' }, () => {
+      createRequestLogger({ event: 'http.error.unexpected', logType: 'application' }, log).error(
+        new Error('boom'),
+        'http.error.unexpected',
+      );
+    });
+
+    const parsed = JSON.parse(output().trim());
+    expect(parsed.requestId).toBe('req-7');
+    expect(parsed.event).toBe('http.error.unexpected');
+    expect(parsed.logType).toBe('application');
+    expect(parsed.service).toBe('svc');
+  });
+
+  it('createRequestLogger omits requestId outside a request', async () => {
+    const { stream, output } = createMemoryStream();
+    const log = await createLogger({
+      level: 'trace',
+      environment: 'test',
+      serviceName: 'svc',
+      version: '1.0.0',
+      stream,
+    });
+
+    createRequestLogger({ event: 'app.starting', logType: 'infrastructure' }, log).info('boot');
+
+    const parsed = JSON.parse(output().trim());
+    expect('requestId' in parsed).toBe(false);
+    expect(parsed.event).toBe('app.starting');
   });
 
   it('silences the ambient singleton in the test environment', () => {

@@ -736,6 +736,7 @@ describe('auth service', () => {
     expect(loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'auth.login.succeeded',
+        logType: 'security',
         actorPseudonym: expect.any(String),
       }),
       'auth.login.succeeded',
@@ -752,7 +753,11 @@ describe('auth service', () => {
     });
 
     expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'auth.login.failed', actorPseudonym: expect.any(String) }),
+      expect.objectContaining({
+        event: 'auth.login.failed',
+        logType: 'security',
+        actorPseudonym: expect.any(String),
+      }),
       'auth.login.failed',
     );
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('a@b.com');
@@ -774,6 +779,7 @@ describe('auth service', () => {
     expect(loggerInfo).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'auth.password.changed',
+        logType: 'security',
         actorPseudonym: expect.any(String),
       }),
       'auth.password.changed',
@@ -787,7 +793,7 @@ describe('auth service', () => {
     await logoutUser({ refreshToken: 'refresh-1' });
 
     expect(loggerInfo).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'auth.session.revoked' }),
+      expect.objectContaining({ event: 'auth.session.revoked', logType: 'security' }),
       'auth.session.revoked',
     );
   });

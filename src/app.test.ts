@@ -1,11 +1,20 @@
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
+const { loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+  const loggerWarn = vi.fn();
+  const createRequestLoggerSpy = vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: loggerWarn,
+  }));
+  return { loggerWarn, createRequestLoggerSpy };
+});
 
 vi.mock('./config/logger.js', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
   createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+  createRequestLogger: createRequestLoggerSpy,
 }));
 
 const loadApp = async (docsEnabled?: string) => {
@@ -94,10 +103,14 @@ describe('security middleware', () => {
       message: 'CORS origin is not allowed.',
       errors: [],
     });
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'security.cors.denied', origin: 'https://evil.example' }),
-      'security.cors.denied',
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'security.cors.denied',
+        logType: 'security',
+        origin: 'https://evil.example',
+      }),
     );
+    expect(loggerWarn).toHaveBeenCalledWith('security.cors.denied');
   });
 
   it('allows requests from the configured origin', async () => {

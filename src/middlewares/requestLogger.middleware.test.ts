@@ -237,7 +237,7 @@ describe('requestLogger middleware', () => {
     const logs = readAccessLogs(writeSpy);
     expect(logs).toHaveLength(1);
     expect(logs[0]?.['statusCode']).toBe(500);
-    expect(logs[0]?.['level']).toBe(50);
+    expect(logs[0]?.['level']).toBe('error');
   });
 
   it('logs aborted requests when the client closes before finish', () => {
@@ -252,7 +252,7 @@ describe('requestLogger middleware', () => {
     const logs = readAccessLogs(writeSpy);
     expect(logs).toHaveLength(1);
     expect(logs[0]?.['aborted']).toBe(true);
-    expect(logs[0]?.['level']).toBe(40);
+    expect(logs[0]?.['level']).toBe('warn');
   });
 
   it('emits only one access event when both finish and close fire', () => {
@@ -284,7 +284,7 @@ describe('requestLogger middleware', () => {
 
     const logs = readAccessLogs(writeSpy);
     expect(logs).toHaveLength(1);
-    expect(logs[0]?.['level']).toBe(40);
+    expect(logs[0]?.['level']).toBe('warn');
     expect(logs[0]?.['statusCode']).toBe(429);
   });
 });

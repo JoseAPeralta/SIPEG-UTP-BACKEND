@@ -1,7 +1,7 @@
 import type { Request, RequestHandler } from 'express';
 import rateLimit from 'express-rate-limit';
 
-import { logger } from '../config/logger.js';
+import { createRequestLogger } from '../config/logger.js';
 import { ApiError } from '../utils/ApiError.js';
 
 interface AuthRateLimitOptions {
@@ -63,10 +63,11 @@ export const authRateLimit = ({
     legacyHeaders: false,
     keyGenerator: keyGenerator ?? keyByUserOrIp,
     handler: (_req, _res, next) => {
-      logger.warn(
-        { event: 'rate_limit.exceeded', limiter: name ?? 'default' },
-        'rate_limit.exceeded',
-      );
+      createRequestLogger({
+        event: 'rate_limit.exceeded',
+        logType: 'security',
+        limiter: name ?? 'default',
+      }).warn('rate_limit.exceeded');
       next(new ApiError(429, message ?? 'Too many requests, please try again later.'));
     },
   });

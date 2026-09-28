@@ -275,7 +275,7 @@ const sendAccountVerificationEmail = async (email: string): Promise<void> => {
   try {
     await auth.api.sendVerificationEmail({ body: { email } });
   } catch {
-    logger.error({ event: 'mail.delivery.failed' }, 'mail.delivery.failed');
+    logger.error({ event: 'mail.delivery.failed', logType: 'application' }, 'mail.delivery.failed');
   }
 };
 

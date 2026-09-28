@@ -17,7 +17,7 @@ const trustedOrigins = [
 ];
 
 const reportEmailDeliveryFailure = (): void => {
-  logger.error({ event: 'mail.delivery.failed' }, 'mail.delivery.failed');
+  logger.error({ event: 'mail.delivery.failed', logType: 'application' }, 'mail.delivery.failed');
 };
 
 export const auth = betterAuth({
