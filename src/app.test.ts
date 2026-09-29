@@ -33,6 +33,13 @@ const loadApp = async (docsEnabled?: string) => {
   vi.doMock('./lib/auth.js', () => ({
     auth: {
       options: { baseURL: 'http://localhost:3000' },
+      handler: vi.fn(
+        async () =>
+          new Response(JSON.stringify({ keys: [] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
       api: {
         signInEmail: vi.fn(),
         signUpEmail: vi.fn(),
@@ -143,6 +150,40 @@ describe('security middleware', () => {
     expect(response.body).toEqual({
       success: false,
       message: 'Route /api/auth/sign-up/email not found.',
+      errors: [],
+    });
+  });
+});
+
+describe('Better Auth native surface', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('./lib/auth.js');
+    vi.doUnmock('./config/prisma.js');
+  });
+
+  it('serves the JWKS endpoint consumed by token verification and health checks', async () => {
+    const { app } = await loadApp();
+
+    const response = await request(app).get('/api/auth/jwks').expect(200);
+
+    expect(response.body).toEqual({ keys: [] });
+  });
+
+  it.each([
+    ['post', '/api/auth/request-password-reset'],
+    ['post', '/api/auth/reset-password'],
+    ['post', '/api/auth/verify-email'],
+    ['post', '/api/auth/sign-in/email'],
+    ['get', '/api/auth/get-session'],
+  ] as const)('does not expose the native %s %s endpoint', async (method, path) => {
+    const { app } = await loadApp();
+
+    const response = await request(app)[method](path).expect(404);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: `Route ${path} not found.`,
       errors: [],
     });
   });

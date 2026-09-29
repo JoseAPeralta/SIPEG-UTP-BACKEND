@@ -91,6 +91,21 @@ const envSchema = z
       });
     }
 
+    const passwordResetOrigin = new URL(value.AUTH_PASSWORD_RESET_URL).origin;
+    const trustedOrigins = [...corsOrigins, ...(value.TRUSTED_ORIGINS?.split(',') ?? [])]
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+
+    if (!trustedOrigins.includes(passwordResetOrigin)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_PASSWORD_RESET_URL'],
+        message:
+          `AUTH_PASSWORD_RESET_URL origin (${passwordResetOrigin}) must be listed in ` +
+          'CORS_ORIGIN or TRUSTED_ORIGINS; the auth provider rejects it otherwise.',
+      });
+    }
+
     if (value.NODE_ENV === 'production' && !value.LOG_PSEUDONYMIZATION_KEY) {
       context.addIssue({
         code: 'custom',

@@ -228,7 +228,7 @@ const { data, error } = await api.GET('/api/v1/activities', {
 });
 ```
 
-Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth) y no forman parte del contrato documentado; el contrato publico es `/api/v1/*`.
+El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET /api/auth/jwks`, que consumen la verificacion de tokens y el health check. Todo lo demas bajo `/api/auth/*` responde `404`, de modo que el contrato publico es `/api/v1/*` y toda operacion sensible pasa por sus rate limiters.
 
 ### Auth
 
@@ -239,9 +239,9 @@ Las rutas de `/api/auth/*` pertenecen al proveedor de autenticacion (Better Auth
   - `POST /auth/login` — devuelve access token EdDSA + refresh token; credenciales invalidas o cuenta desactivada responden 401 generico (`Invalid email or password`) sin revelar si el correo existe; una cuenta no verificada responde 403; limite de 5 intentos/min por IP.
   - `POST /auth/refresh` — rota el refresh token y emite un nuevo par; el token anterior queda invalido y tokens expirados, revocados o de cuentas desactivadas responden 401.
   - `POST /auth/logout` — invalida solo el refresh token enviado; es idempotente. El access token ya emitido sigue stateless hasta vencer.
-  - `POST /auth/register` — crea una cuenta no verificada con rol `USER`, rechaza campos de rol, estado o permisos y envia un enlace de verificacion con vigencia `AUTH_EMAIL_VERIFICATION_TTL` (24 h por defecto). La ruta nativa `POST /api/auth/sign-up/email` no esta expuesta.
+  - `POST /auth/register` — crea una cuenta no verificada con rol `USER`, rechaza campos de rol, estado o permisos y envia un enlace de verificacion con vigencia `AUTH_EMAIL_VERIFICATION_TTL` (24 h por defecto). Es la unica via de registro: las rutas nativas del proveedor no estan expuestas.
   - `POST /auth/verify-email` — confirma el email; tokens invalidos o vencidos responden 400 generico y el limite es 5 intentos/min por IP.
-  - `POST /auth/forgot-password` — siempre responde el mismo 200 exista o no el email; limite independiente de 3 solicitudes/min por IP.
+  - `POST /auth/forgot-password` — siempre responde el mismo 200 exista o no el email; limite independiente de 3 solicitudes/min por IP. El origin de `AUTH_PASSWORD_RESET_URL` debe estar en `CORS_ORIGIN` o `TRUSTED_ORIGINS`; si no coincide, la app no arranca.
   - `POST /auth/reset-password` — consume un token de un solo uso con vigencia `AUTH_PASSWORD_RESET_TTL` (1 h por defecto), actualiza el hash Argon2id y revoca todas las sesiones del usuario; tiene otro limite independiente de 3 intentos/min por IP.
   - `POST /auth/change-password` — requiere Bearer token, contrasena actual y nueva de 12-128 caracteres, mas el `refreshToken` de la sesion actual; actualiza el hash Argon2id y revoca todas las demas sesiones conservando la actual; limite de 5 intentos/min por usuario.
 - Los access tokens ya emitidos son stateless y pueden conservar validez hasta `AUTH_TOKEN_TTL`: tras un reset se revocan todos los refresh tokens del usuario y tras un cambio de contrasena se revocan todos menos el de la sesion actual.
