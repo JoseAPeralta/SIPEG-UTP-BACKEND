@@ -358,12 +358,15 @@ describe('openApiDocument', () => {
     const verificationResponses =
       openApiDocument.paths?.['/api/v1/auth/verify-email']?.post?.responses;
     const resetResponses = openApiDocument.paths?.['/api/v1/auth/reset-password']?.post?.responses;
+    const forgotResponses =
+      openApiDocument.paths?.['/api/v1/auth/forgot-password']?.post?.responses;
 
     expect(loginResponses?.['403']).toBeDefined();
     expect(verificationResponses?.['400']).toBeDefined();
     expect(verificationResponses?.['429']).toBeDefined();
     expect(resetResponses?.['400']).toBeDefined();
     expect(resetResponses?.['429']).toBeDefined();
+    expect(forgotResponses?.['403']).toBeDefined();
   });
 
   it('marks change password with bearer security and documents its failures', () => {

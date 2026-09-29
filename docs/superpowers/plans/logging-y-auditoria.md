@@ -952,11 +952,30 @@ Tercera prioridad (completitud administrativa):
 
 ## Fase 11 - Frontera Better Auth
 
-- [ ] **T11.1. Inventariar endpoints directos `/api/auth/*` realmente usados.**
-      `src/app.ts:53` monta el handler completo de Better Auth. Identificar cuáles
-      son necesarios para el frontend y cuáles duplican los endpoints propios.
-- [ ] **T11.2. Restringir superficies no usadas.**
-      Deshabilitar o bloquear endpoints del proveedor que no se requieran.
+- [x] **T11.1. Inventariar endpoints directos `/api/auth/*` realmente usados.**
+      `src/app.ts` montaba el handler completo de Better Auth. Inventario: el unico
+      endpoint necesario por HTTP es `GET /api/auth/jwks`, consumido por
+      `src/utils/jwt-verifier.ts` y `src/modules/health/health.controller.ts`. Todo
+      lo demas (registro, login, refresh, verify-email, forgot/reset-password,
+      sesiones) lo invoca la app en server-side con `auth.api.*`, que no pasa por
+      el router HTTP. El frontend solo consume `/api/v1/*` y `/api/auth/jwks`.
+- [x] **T11.2. Restringir superficies no usadas.**
+      Allowlist fail-closed en `src/app.ts`: `GET /api/auth/jwks` explicito y
+      `app.all('/api/auth/*splat', notFoundHandler)` para el resto. Cualquier
+      endpoint que el proveedor agregue en el futuro nace en 404. Se descarto
+      `disabledPaths` de Better Auth: exige enumerar las ~28 rutas core, no cubre
+      rutas de plugins futuros y su 404 crudo se salta `notFoundHandler` y su
+      logging.
+
+      Efecto de seguridad: `/api/auth/request-password-reset`,
+      `/api/auth/reset-password` y `/api/auth/sign-in/email` ya no evitan los
+      limitadores de `express-rate-limit`. El limitador interno del proveedor usa
+      clave `ip + path` **sin email**, asi que el bucket por email+IP de
+      `forgot-password` quedaba en 3/min solo por IP.
+
+      Verificado en `src/app.test.ts` (`Better Auth native surface`).
+      Ver `docs/superpowers/plans/2026-09-29-auth-password-reset-hardening.md`.
+
 - [ ] **T11.3. Verificar hooks de la versión instalada (1.7.5).**
       Para signup, verificación de email y reset de contraseña, comprobar si existe
       un hook post-éxito utilizable para auditar el sujeto.

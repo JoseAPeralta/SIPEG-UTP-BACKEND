@@ -58,8 +58,8 @@ app.use(
   }),
 );
 
-app.post('/api/auth/sign-up/email', notFoundHandler);
-app.all('/api/auth/*splat', toNodeHandler(auth));
+app.get('/api/auth/jwks', toNodeHandler(auth));
+app.all('/api/auth/*splat', notFoundHandler);
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));

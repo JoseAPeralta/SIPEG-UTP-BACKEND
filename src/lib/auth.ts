@@ -9,12 +9,17 @@ import { parseTtlToSeconds } from '../utils/ttl.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../modules/auth/auth.email.js';
 import { hashPassword, verifyPassword } from './password.js';
 
+const splitOrigins = (value: string): string[] =>
+  value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
 const trustedOrigins = [
-  env.CORS_ORIGIN,
-  ...(env.TRUSTED_ORIGINS?.split(',')
-    .map((o) => o.trim())
-    .filter(Boolean) ?? []),
-];
+  ...splitOrigins(env.CORS_ORIGIN),
+  ...(env.TRUSTED_ORIGINS ? splitOrigins(env.TRUSTED_ORIGINS) : []),
+  new URL(env.AUTH_PASSWORD_RESET_URL).origin,
+].filter((origin, index, origins) => origins.indexOf(origin) === index);
 
 const reportEmailDeliveryFailure = (): void => {
   logger.error({ event: 'mail.delivery.failed', logType: 'application' }, 'mail.delivery.failed');

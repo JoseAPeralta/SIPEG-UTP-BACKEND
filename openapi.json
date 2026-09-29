@@ -591,6 +591,16 @@
               }
             }
           },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Error response.",
             "content": {

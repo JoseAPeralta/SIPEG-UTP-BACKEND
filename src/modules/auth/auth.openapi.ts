@@ -134,6 +134,7 @@ export const authPaths: ZodOpenApiPathsObject = {
           content: { 'application/json': { schema: apiSuccessResponse(emptyDataSchema) } },
         },
         400: errorResponse,
+        403: errorResponse,
         429: errorResponse,
       },
     },
