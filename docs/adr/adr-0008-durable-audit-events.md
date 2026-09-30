@@ -73,6 +73,33 @@ Crear una bitacora durable append-only en PostgreSQL, separada de los logs:
   atomicidad con esas operaciones. Los fallos de login/reset van a Loki, no a
   `audit_events`.
 
+  Decisiones de la instrumentacion de esa frontera (fase 11):
+
+  - **El hook no escribe; identifica.** `emailVerification.afterEmailVerification`
+    y `emailAndPassword.onPasswordReset` solo anotan el `userId` en un marcador
+    creado por la llamada en curso. La escritura ocurre en el servicio, cuando la
+    llamada del proveedor ya termino bien.
+  - **La razon del indireccion es `revokeSessionsOnPasswordReset`.**
+    `onPasswordReset` corre despues de cambiar la contrasena pero **antes** de
+    revocar las sesiones. Escribir auditoria dentro del hook convertiria un fallo
+    de la bitacora en sesiones sin revocar: el titular tendria una contrasena
+    nueva creyendo que cerro el resto de sus accesos.
+  - **El marcador es por llamada, no global.** Viaja en un `AsyncLocalStorage` con
+    un objeto propio por invocacion, de modo que dos resets simultaneos no pueden
+    intercambiarse el sujeto.
+  - **Un fallo de auditoria no revierte la operacion.** La mutacion ya ocurrio y es
+    irreversible desde la aplicacion; perderla por un insert caido seria peor que
+    la linea que falta. El error se reporta como `audit.write.failed`
+    (`logType: application`) y el flujo continua. Consecuencia asumida: puede
+    existir una operacion exitosa sin su linea en la bitacora.
+  - **Actor = sujeto.** Registro, verificacion y reset son flujos publicos sin
+    sesion. El unico identificador con certeza es el del usuario afectado, asi que
+    `actorId` es ese mismo id; atribuir la accion a un `SYSTEM` o a un
+    administrador sugeriria una intervencion que nadie hizo.
+  - **`user.registered` se escribe tras confirmar la persistencia**, no al recibir
+    la respuesta del proveedor: auditar un alta que no llego a la base dejaria un
+    evento sin sujeto real.
+
 ## Consequences
 
 ### Positive
@@ -95,7 +122,12 @@ Crear una bitacora durable append-only en PostgreSQL, separada de los logs:
 - **NEG-002**: Cada mutacion instrumentada gana una escritura adicional dentro de
   su transaccion, con leve costo de latencia.
 - **NEG-003**: Las operaciones de Better Auth no pueden auditarse atomicamente sin
-  una transaccion compartida; la cobertura de esa frontera queda parcial.
+  una transaccion compartida; la cobertura de esa frontera queda parcial. En
+  concreto, `user.registered`, `auth.email_verified` y `auth.password_reset` se
+  escriben **despues** de que la mutacion se aplique y con su propia transaccion:
+  una caida entre ambos deja la operacion hecha sin su registro. Se eligio esa
+  direccion porque la alternativa (escribir dentro del hook) puede impedir la
+  revocacion de sesiones.
 - **NEG-004**: Los mocks de Prisma y los tests de rutas deben extenderse
   (`auditEvent.create` y `$transaction`), ampliando el mantenimiento.
 - **NEG-005**: La purga por retencion queda pendiente de ratificacion; hasta

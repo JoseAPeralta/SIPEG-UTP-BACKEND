@@ -40,6 +40,9 @@ export const AUDIT_ACTIONS = [
   'classroom.amenity_removed',
   'classroom.availability_added',
   'classroom.availability_removed',
+  'user.registered',
+  'auth.email_verified',
+  'auth.password_reset',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
