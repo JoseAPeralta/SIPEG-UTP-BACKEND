@@ -261,23 +261,25 @@ El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET 
 
 - Password hashing con **Argon2id** (parametros OWASP: `t=2, m=19 MiB, p=1`).
 - Access tokens: JWT EdDSA Ed25519 (15 min) validados contra JWKS cacheado.
-- Refresh tokens: sesiones server-side (`AUTH_REFRESH_TTL`, 7 dias por defecto), expiracion absoluta y revocacion inmediata.
+- Refresh tokens: sesiones server-side (`AUTH_REFRESH_TTL`, 7 dias por defecto), expiracion absoluta y revocacion inmediata. Viajan en la cookie `sipeg-refresh` (`HttpOnly`, `Path=/api/v1/auth`, host-only, `Secure` en produccion) y **no** en el cuerpo de la respuesta: asi la sesion se comparte entre pestanas y un XSS no puede leer la credencial. Ver `docs/adr/adr-0009-refresh-token-cookie-httponly.md`.
 - Endpoints principales (`/api/v1/auth/*`):
-  - `POST /auth/login` — devuelve access token EdDSA + refresh token; credenciales invalidas o cuenta desactivada responden 401 generico (`Invalid email or password`) sin revelar si el correo existe; una cuenta no verificada responde 403; limite de 5 intentos/min por IP.
-  - `POST /auth/refresh` — rota el refresh token y emite un nuevo par; el token anterior queda invalido y tokens expirados, revocados o de cuentas desactivadas responden 401.
-  - `POST /auth/logout` — invalida solo el refresh token enviado; es idempotente. El access token ya emitido sigue stateless hasta vencer.
+  - `POST /auth/login` — devuelve el access token EdDSA en el cuerpo y el refresh token en la cookie `sipeg-refresh`; credenciales invalidas o cuenta desactivada responden 401 generico (`Invalid email or password`) sin revelar si el correo existe; una cuenta no verificada responde 403; limite de 5 intentos/min por IP.
+  - `POST /auth/refresh` — lee la cookie `sipeg-refresh`, rota la sesion, emite un access token nuevo en el cuerpo y devuelve la cookie rotada; el token anterior queda invalido y tokens expirados, revocados o de cuentas desactivadas responden 401. Limite por sesion, no por IP.
+  - `POST /auth/logout` — invalida la sesion de la cookie y la borra; es idempotente. Al ser una cookie del navegador, cierra la sesion en todas las pestanas. El access token ya emitido sigue stateless hasta vencer.
   - `POST /auth/register` — crea una cuenta no verificada con rol `USER`, rechaza campos de rol, estado o permisos y envia un enlace de verificacion con vigencia `AUTH_EMAIL_VERIFICATION_TTL` (24 h por defecto). Es la unica via de registro: las rutas nativas del proveedor no estan expuestas.
   - `POST /auth/verify-email` — confirma el email; tokens invalidos o vencidos responden 400 generico y el limite es 5 intentos/min por IP.
   - `POST /auth/forgot-password` — siempre responde el mismo 200 exista o no el email; limite independiente de 3 solicitudes/min por IP. El origin de `AUTH_PASSWORD_RESET_URL` debe estar en `CORS_ORIGIN` o `TRUSTED_ORIGINS`; si no coincide, la app no arranca.
   - `POST /auth/reset-password` — consume un token de un solo uso con vigencia `AUTH_PASSWORD_RESET_TTL` (1 h por defecto), actualiza el hash Argon2id y revoca todas las sesiones del usuario; tiene otro limite independiente de 3 intentos/min por IP.
-  - `POST /auth/change-password` — requiere Bearer token, contrasena actual y nueva de 12-20 caracteres, mas el `refreshToken` de la sesion actual; actualiza el hash Argon2id y revoca todas las demas sesiones conservando la actual; limite de 5 intentos/min por usuario.
+  - `POST /auth/change-password` — requiere Bearer token, contrasena actual y nueva de 12-20 caracteres, mas la cookie `sipeg-refresh` de la sesion actual; actualiza el hash Argon2id y revoca todas las demas sesiones conservando la actual; limite de 5 intentos/min por usuario.
 - Los access tokens ya emitidos son stateless y pueden conservar validez hasta `AUTH_TOKEN_TTL`: tras un reset se revocan todos los refresh tokens del usuario y tras un cambio de contrasena se revocan todos menos el de la sesion actual.
 - La entrega usa SMTP con TLS 1.2 minimo y no registra destinatarios, enlaces ni tokens. Desarrollo usa Mailpit; produccion requiere `MAIL_HOST` y `MAIL_FROM`, con `MAIL_USER`/`MAIL_PASSWORD` opcionales pero inseparables.
+- `login`, `refresh`, `logout` y `change-password` exigen que el `Origin`, si viene, este en `CORS_ORIGIN`/`TRUSTED_ORIGINS`; si no, responden 403 y registran `security.cors.denied`. Es la defensa CSRF que exige una cookie. Las peticiones sin `Origin` (curl, Postman, Bruno) se permiten.
 - Rutas privadas: `Authorization: Bearer <accessToken>`. `authenticate` recarga el usuario desde la BD y responde 403 si la cuenta fue desactivada, incluso con un JWT aun vigente.
 - Variables de entorno (sin prefijo del proveedor):
   - `AUTH_SECRET` (requerido, generar con `openssl rand -base64 32`)
   - `AUTH_URL` (default `http://localhost:3000`)
   - `AUTH_TOKEN_TTL` (default `15m`)
+  - `AUTH_REFRESH_COOKIE_SAME_SITE` (`lax|strict|none`, default `lax`; **obligatoria en produccion**): `lax`/`strict` si la API y el frontend comparten sitio, `none` si estan en sitios distintos, lo que exige HTTPS real
   - `AUTH_REFRESH_TTL` (default `7d`)
   - `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`
   - `AUTH_EMAIL_VERIFICATION_TTL` (default `24h`), `AUTH_PASSWORD_RESET_TTL` (default `1h`)
