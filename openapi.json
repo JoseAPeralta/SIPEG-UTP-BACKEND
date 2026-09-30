@@ -302,16 +302,10 @@
           "content": {
             "application/json": {
               "schema": {
+                "default": {},
                 "type": "object",
-                "properties": {
-                  "refreshToken": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "refreshToken"
-                ]
+                "properties": {},
+                "additionalProperties": {}
               }
             }
           }
@@ -391,16 +385,10 @@
           "content": {
             "application/json": {
               "schema": {
+                "default": {},
                 "type": "object",
-                "properties": {
-                  "refreshToken": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "refreshToken"
-                ]
+                "properties": {},
+                "additionalProperties": {}
               }
             }
           }
@@ -729,16 +717,11 @@
                     "type": "string",
                     "minLength": 12,
                     "maxLength": 20
-                  },
-                  "refreshToken": {
-                    "type": "string",
-                    "minLength": 1
                   }
                 },
                 "required": [
                   "currentPassword",
-                  "newPassword",
-                  "refreshToken"
+                  "newPassword"
                 ]
               }
             }
@@ -7658,15 +7641,11 @@
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
             "description": "ISO 8601 expiration timestamp of the access token."
           },
-          "refreshToken": {
-            "type": "string",
-            "description": "Opaque refresh token backed by a server-side session."
-          },
           "refreshTokenExpiresAt": {
             "type": "string",
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
-            "description": "ISO 8601 expiration timestamp of the refresh token."
+            "description": "ISO 8601 expiration timestamp of the refresh token. The token itself is delivered in an HttpOnly cookie, never in this body."
           },
           "tokenType": {
             "type": "string",
@@ -7676,12 +7655,11 @@
         "required": [
           "accessToken",
           "accessTokenExpiresAt",
-          "refreshToken",
           "refreshTokenExpiresAt",
           "tokenType"
         ],
         "additionalProperties": false,
-        "description": "Access and refresh token pair returned by the login and refresh flows."
+        "description": "Access token issued by the login and refresh flows. The refresh token travels in an HttpOnly cookie and is never exposed to JavaScript."
       },
       "ApiErrorResponse": {
         "type": "object",
