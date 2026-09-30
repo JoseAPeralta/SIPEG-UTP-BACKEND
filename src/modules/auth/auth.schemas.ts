@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/password.js';
+
 const trimmedString = z.string().trim();
+
+const passwordField = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH, 'Password must be at least 12 characters.')
+  .max(PASSWORD_MAX_LENGTH, 'Password must not exceed 20 characters.');
 
 export const loginSchema = z.object({
   body: z.object({
@@ -13,7 +20,7 @@ export const registerSchema = z.object({
   body: z
     .object({
       email: z.string().email('Invalid email format.'),
-      password: z.string().min(12, 'Password must be at least 12 characters.').max(128),
+      password: passwordField,
       firstName: trimmedString.min(2).max(100),
       lastName: trimmedString.min(2).max(100),
       identificationNumber: trimmedString.min(5).max(30),
@@ -38,7 +45,7 @@ export const forgotPasswordSchema = z.object({
 export const resetPasswordSchema = z.object({
   body: z.object({
     token: z.string().min(1, 'Reset token is required.'),
-    newPassword: z.string().min(12).max(128),
+    newPassword: passwordField,
   }),
 });
 
@@ -49,7 +56,7 @@ export const logoutSchema = z.object({
 export const changePasswordSchema = z.object({
   body: z.object({
     currentPassword: z.string().min(1, 'Current password is required.'),
-    newPassword: z.string().min(12, 'Password must be at least 12 characters.').max(128),
+    newPassword: passwordField,
     refreshToken: z.string().min(1, 'Refresh token is required.'),
   }),
 });

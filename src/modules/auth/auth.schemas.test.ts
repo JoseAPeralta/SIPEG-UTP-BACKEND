@@ -5,6 +5,7 @@ import {
   changePasswordSchema,
   registerResultSchema,
   registerSchema,
+  resetPasswordSchema,
 } from './auth.schemas.js';
 
 const authTokensPayload = {
@@ -49,6 +50,20 @@ describe('changePasswordSchema', () => {
     ).toThrow();
   });
 
+  it('rejects a new password longer than 20 characters', () => {
+    expect(() =>
+      changePasswordSchema.parse({ body: { ...validBody, newPassword: 'a'.repeat(21) } }),
+    ).toThrow('Password must not exceed 20 characters.');
+  });
+
+  it('accepts a new password of exactly 20 characters', () => {
+    const newPassword = 'a'.repeat(20);
+
+    expect(changePasswordSchema.parse({ body: { ...validBody, newPassword } })).toEqual({
+      body: { ...validBody, newPassword },
+    });
+  });
+
   it('rejects an empty current password', () => {
     expect(changePasswordSchema).toBeDefined();
     expect(() =>
@@ -83,6 +98,36 @@ describe('registerSchema', () => {
       ).toThrow();
     },
   );
+
+  it('rejects a password longer than 20 characters', () => {
+    expect(() =>
+      registerSchema.parse({ body: { ...validBody, password: 'a'.repeat(21) } }),
+    ).toThrow('Password must not exceed 20 characters.');
+  });
+
+  it('accepts a password of exactly 20 characters', () => {
+    const password = 'a'.repeat(20);
+
+    expect(registerSchema.parse({ body: { ...validBody, password } })).toEqual({
+      body: { ...validBody, password },
+    });
+  });
+});
+
+describe('resetPasswordSchema', () => {
+  it('accepts a new password of exactly 20 characters', () => {
+    const newPassword = 'a'.repeat(20);
+
+    expect(resetPasswordSchema.parse({ body: { token: 'reset-token', newPassword } })).toEqual({
+      body: { token: 'reset-token', newPassword },
+    });
+  });
+
+  it('rejects a new password longer than 20 characters', () => {
+    expect(() =>
+      resetPasswordSchema.parse({ body: { token: 'reset-token', newPassword: 'a'.repeat(21) } }),
+    ).toThrow('Password must not exceed 20 characters.');
+  });
 });
 
 describe('registerResultSchema', () => {

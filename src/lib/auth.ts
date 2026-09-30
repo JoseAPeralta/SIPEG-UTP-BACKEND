@@ -7,7 +7,12 @@ import { logger } from '../config/logger.js';
 import { env } from '../config/env.js';
 import { parseTtlToSeconds } from '../utils/ttl.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../modules/auth/auth.email.js';
-import { hashPassword, verifyPassword } from './password.js';
+import {
+  hashPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  verifyPassword,
+} from './password.js';
 
 const splitOrigins = (value: string): string[] =>
   value
@@ -24,6 +29,7 @@ const trustedOrigins = [
 const reportEmailDeliveryFailure = (): void => {
   logger.error({ event: 'mail.delivery.failed', logType: 'application' }, 'mail.delivery.failed');
 };
+
 
 export const auth = betterAuth({
   appName: 'SIPEG UTP Backend',
@@ -50,8 +56,8 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
-    minPasswordLength: 12,
-    maxPasswordLength: 128,
+    minPasswordLength: PASSWORD_MIN_LENGTH,
+    maxPasswordLength: PASSWORD_MAX_LENGTH,
     autoSignIn: false,
     resetPasswordTokenExpiresIn: parseTtlToSeconds(env.AUTH_PASSWORD_RESET_TTL),
     revokeSessionsOnPasswordReset: true,

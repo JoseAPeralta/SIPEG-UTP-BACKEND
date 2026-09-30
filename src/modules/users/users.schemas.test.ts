@@ -278,6 +278,20 @@ describe('createUserSchema', () => {
     expect(() => createUserSchema.parse({ body: { ...baseCreate, password: 'short' } })).toThrow();
   });
 
+  it('rejects a password longer than 20 characters', () => {
+    expect(() =>
+      createUserSchema.parse({ body: { ...baseCreate, password: 'a'.repeat(21) } }),
+    ).toThrow('Password must not exceed 20 characters.');
+  });
+
+  it('accepts a password of exactly 20 characters', () => {
+    const password = 'a'.repeat(20);
+
+    expect(createUserSchema.parse({ body: { ...baseCreate, password } }).body.password).toBe(
+      password,
+    );
+  });
+
   it('rejects an invalid email', () => {
     expect(() =>
       createUserSchema.parse({ body: { ...baseCreate, email: 'not-an-email' } }),
