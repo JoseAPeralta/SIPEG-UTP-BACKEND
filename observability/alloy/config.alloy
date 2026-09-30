@@ -1,6 +1,8 @@
 // Grafana Alloy -> Loki para SIPEG UTP.
 //
-// Imagen fijada: grafana/alloy:v1.20.0 (ver docs/adr/adr-0007-...).
+// Imagen fijada por tag y digest en compose.observability.yaml:
+// grafana/alloy:v1.20.0@sha256:f111cce8...4cd30. Tabla completa en
+// docs/adr/adr-0007-structured-logging-and-observability.md.
 // Lee los logs de los contenedores de los proyectos Compose `sipeg-utp-prod` y
 // `sipeg-utp-dev` a traves del `docker-socket-proxy` de solo lectura, y nunca
 // monta `/var/run/docker.sock` directamente.

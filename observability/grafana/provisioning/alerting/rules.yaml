@@ -1,0 +1,393 @@
+# Reglas de alerta de Grafana (SIPEG UTP).
+#
+# Provisionadas por archivo: `compose.observability.yaml` monta este directorio
+# en /etc/grafana/provisioning/alerting, junto a `datasources/` y `dashboards/`.
+# Se monta solo ese subdirectorio del arbol: montarlo entero taparia los
+# directorios de la imagen.
+#
+# A diferencia de los paneles, estas reglas NO se releen por sondeo: Grafana las
+# provisiona una vez al arrancar. Editar este archivo exige recrear el contenedor
+# (`docker compose -f compose.dev.yaml -f compose.observability.yaml up -d
+# --force-recreate grafana`) y revisar `docker compose logs grafana` en busca de
+# `finished to provision alerting`. Un archivo invalido hace fallar el servicio de
+# provisioning completo, asi que conviene validarlo antes de reiniciar.
+#
+# `folder` es el TITULO de la carpeta, no su UID: el formato v1 de Grafana
+# (AlertRuleGroupV1) no admite `folderUID`. Ademas el provisioning de alertas
+# corre ANTES que el de paneles (datasources -> plugins -> alerting -> paneles),
+# asi que en un volumen vacio esta es la parte que crea la carpeta `SIPEG UTP` y
+# el UID lo genera Grafana. Por eso `dashboards.yaml` ya no declara `folderUid`.
+#
+# NO hay contact point. Las alertas se evaluan y se ven en la UI
+# (http://127.0.0.1:GRAFANA_PORT/alerting/list), pero no notifican a nadie.
+# Anadirlo es una fase aparte.
+#
+# Umbrales calibrados contra la linea base medida de 24 h en el stack de
+# desarrollo (1460 accesos, 1 five-5xx, 0 fatales). Ver la seccion "Alertas" del
+# README y el ADR-0007.
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: sipeg-api
+    folder: 'SIPEG UTP'
+    # 1m frente a ventanas de 5m: una rafaga de 5 minutos produce varias
+    # evaluaciones seguidas, asi que `for: 0s` no produce una sola notificacion
+    # sino la que dura la ventana. 5 consultas por minuto contra Loki es carga
+    # despreciable para el volumen del despliegue.
+    interval: 1m
+    rules:
+      # ---------------------------------------------------------------
+      # 1. Fatal. Cualquier muerte del proceso, o arranque sin JWKS.
+      # ---------------------------------------------------------------
+      - uid: sipeg-fatal
+        title: 'Proceso: evento fatal'
+        condition: B
+        for: 0s
+        noDataState: OK
+        # Una consulta que falla no puede leerse como "todo bien": con Loki caido
+        # las cinco reglas pasan a Alerting, que es el fallo ruidoso buscado.
+        execErrState: Alerting
+        dashboardUid: sipeg-errors
+        panelId: 4
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Evento fatal de la API (o JWKS no disponible al arrancar)'
+          description: >-
+            La API emitio app.fatal o app.jwks.failed en los ultimos 5 minutos.
+            app.fatal es una excepcion no capturada: el proceso muere y el
+            contenedor se reinicia. app.jwks.failed impide firmar access tokens,
+            asi que aunque el proceso viva la API no autentica a nadie.
+            Umbral >0 porque un solo evento ya es accionable.
+            Panel: Errors > Fallos fatales. Correlacion: en Grafana, filtrar por
+            requestId del arranque fallido.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 'sum(count_over_time({service="sipeg-utp-backend", log_type="infrastructure"} | event=~"app[.]fatal|app[.]jwks[.]failed" [5m])) or vector(0)'
+              datasource:
+                type: loki
+                uid: loki
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 0
+
+      # ---------------------------------------------------------------
+      # 2. Errores inesperados de la aplicacion.
+      # ---------------------------------------------------------------
+      - uid: sipeg-unexpected-errors
+        title: 'Errores inesperados de la aplicacion'
+        condition: B
+        for: 0s
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-errors
+        panelId: 1
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Mas de 5 errores inesperados en 5 minutos'
+          description: >-
+            http.error.unexpected solo lo emite errorHandler, es decir fallos que
+            la aplicacion no previo. Un cuerpo JSON malformado ya NO aparece aqui:
+            responde 400 sin log de error. Umbral 5 en 5 min para que un pico
+            puntual no avise y una excepcion sostenida si.
+            Panel: Errors > Errores inesperados. Para el detalle por tipo, el
+            panel de barras agrupa por event y err_type.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 'sum(count_over_time({service="sipeg-utp-backend", log_type="application"} | event="http.error.unexpected" [5m])) or vector(0)'
+              datasource:
+                type: loki
+                uid: loki
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 5
+
+      # ---------------------------------------------------------------
+      # 3. Respuestas 5xx en el access log.
+      # ---------------------------------------------------------------
+      - uid: sipeg-5xx
+        title: 'Respuestas 5xx'
+        condition: B
+        for: 0s
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-errors
+        panelId: 7
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Mas de 10 respuestas 5xx en 5 minutos'
+          description: >-
+            Cuenta el access log, no los eventos de error, asi que ve tambien los
+            5xx que no pasan por errorHandler. Se espera que correlate 1 a 1 con
+            la alerta de errores inesperados: si diverge, la causa es un 5xx
+            emitido por otro punto de la cadena.
+            Panel: Errors > 5xx en el tiempo, y 5xx por ruta para localizar el
+            recurso. El requestId de la linea correlaciona con el error.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 'sum(count_over_time({service="sipeg-utp-backend", log_type="access"} | statusCode=~"5.." [5m])) or vector(0)'
+              datasource:
+                type: loki
+                uid: loki
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 10
+
+      # ---------------------------------------------------------------
+      # 4. Fallos de autenticacion.
+      # ---------------------------------------------------------------
+      - uid: sipeg-auth-failures
+        title: 'Fallos de autenticacion'
+        condition: B
+        for: 0s
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-security
+        panelId: 6
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Mas de 20 intentos de login fallidos en 5 minutos'
+          description: >-
+            Solo auth.login.failed. Los tokens invalidos y los 403 son señales
+            distintas (probe vs. usuario legitimo sin permiso) y tienen sus
+            propios paneles. Umbral 20 en 5 min: por encima del limitador de 30
+            intentos por minuto y IP, de modo que un atacante desde una sola IP
+            se topa antes con el limitador que con esta alerta.
+            Panel: Security > Loginos exitosos vs fallidos, y Fallos de login por
+            actor (pseudonimo HMAC, nunca el correo en claro).
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 'sum(count_over_time({service="sipeg-utp-backend", log_type="security"} | event="auth.login.failed" [5m])) or vector(0)'
+              datasource:
+                type: loki
+                uid: loki
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 20
+
+      # ---------------------------------------------------------------
+      # 5. Rate limits excedidos.
+      # ---------------------------------------------------------------
+      - uid: sipeg-rate-limits
+        title: 'Rate limits excedidos'
+        condition: B
+        # 2 min sostenido: es la unica regla con `for`, y no por suavizar el
+        # pico sino porque su umbral depende de una premisa que todavia no se
+        # cumple en produccion (ver description).
+        for: 2m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-security
+        panelId: 4
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Mas de 30 rate limits en 5 minutos, sostenidos 2 minutos'
+          description: >-
+            Umbral 30 en lugar de los 10 del plan original, y `for: 2m`, por
+            una dependencia que hoy no se cumple en produccion: los limitadores
+            por IP (30/min en login y registro) se agrupan por IP, y detras de un
+            proxy todos los clientes comparten una mientras ese proxy no envie
+            X-Forwarded-For de forma fiable. Con el valor de 10 la alerta
+            quedaria permanentemente disparada en ese escenario. Hay que
+            recalibrarla en cuanto exista el proxy TLS (ADR-0007, Puertos
+            Publicados) y se pueda confirmar la cadena de reenvio.
+            Ademas 10 rate limits en 5 min es trafico normal de una institucion
+            con usuarios compartidos: un formulario de forgot-password reenviado
+            agota el bucket de 3/min por correo.
+            Panel: Security > Rate limits por limitador, que dice que endpoint
+            esta exhausting.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 'sum(count_over_time({service="sipeg-utp-backend", log_type="security"} | event="rate_limit.exceeded" [5m])) or vector(0)'
+              datasource:
+                type: loki
+                uid: loki
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 30

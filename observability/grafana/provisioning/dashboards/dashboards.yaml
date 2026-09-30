@@ -1,0 +1,42 @@
+# Provision de dashboards para Grafana (SIPEG UTP).
+#
+# Montado desde compose.observability.yaml en
+# /etc/grafana/provisioning/dashboards, junto a `datasources/`. Se monta solo ese
+# subdirectorio: montar el arbol /etc/grafana/provisioning completo taparia los
+# directorios de la imagen.
+#
+# Los JSON viven en /etc/grafana/dashboards, fuera de /var/lib/grafana a
+# proposito: ese path es el home del volumen `grafana_data` (estado y base SQLite
+# de Grafana) y anidar un bind mount de solo lectura dentro dejaria la
+# configuracion y el estado en el mismo sitio.
+
+apiVersion: 1
+
+providers:
+  # <string> nombre unico del provider.
+  - name: 'sipeg'
+    orgId: 1
+    # Carpeta fija en lugar de `foldersFromFilesStructure`: el TITULO es la unica
+    # identidad estable, porque es lo unico que comparten los dos provisionadores.
+    # El de alertas corre antes que este (datasources -> plugins -> alerting ->
+    # paneles) y su formato v1 no admite `folderUID`, solo `folder` por titulo, de
+    # modo que en un volumen vacio el UID lo genera Grafana al crear la carpeta
+    # desde `alerting/rules.yaml`. Declarar aqui un `folderUid` fijo del
+    # repositorio no lo haria mas estable, solo una ilusion.
+    folder: 'SIPEG UTP'
+    type: file
+    # Sin `disableDeletion`: borrar un JSON del repositorio debe borrar el panel,
+    # igual que el datasource tiene `prune: true`.
+    disableDeletion: false
+    # Mayor que 10 a proposito. Con 10 o menos Grafana se apoya en eventos del
+    # sistema de archivos, y la documentacion advierte que con bind mounts de
+    # Docker esos eventos pueden no llegar al contenedor; por encima de 10 sondea
+    # el directorio, que es lo que hace fiable el ciclo editar -> guardar ->
+    # recargar el panel.
+    updateIntervalSeconds: 30
+    # Coherente con `editable: false` del datasource: la configuracion es
+    # declarativa y versionada, no se edita desde la UI. Un cambio hecho en el
+    # panel se perderia en el siguiente arranque.
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards
