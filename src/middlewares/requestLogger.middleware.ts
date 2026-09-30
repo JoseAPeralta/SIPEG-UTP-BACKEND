@@ -21,14 +21,45 @@ export function accessLogLevel(statusCode: number): 'info' | 'warn' | 'error' {
   return 'info';
 }
 
+const capturedRouteTemplates = new WeakMap<Request, string>();
+
+/**
+ * Express asigna `req.route` en el instante en que una ruta hace match, y en ese
+ * momento `req.baseUrl` todavia vale el prefijo del montaje. Para toda respuesta
+ * que nace dentro de la cadena (401, 403, 429, error de validacion) el router se
+ * desenrolla de forma sincrona antes de que `res` emita `finish`, y Express
+ * restaura `req.baseUrl` a ''. Leerlo en el handler de `finish` producia
+ * plantillas sin el prefijo: un 401 sobre `/api/v1/careers` se registraba como
+ * `/careers`, y el trafico de un mismo endpoint quedava partido en dos series al
+ * agregar por ruta en Grafana.
+ *
+ * `req.route` es una propiedad propia, `configurable` y asignable, asi que
+ * interceptar la asignacion es la unica forma de leer el valor mientras sigue
+ * siendo valido. El getter se conserva para que el resto de la cadena siga
+ * viendo lo que Express escribio.
+ */
+export function captureRouteTemplate(req: Request): void {
+  let current: unknown;
+  Object.defineProperty(req, 'route', {
+    configurable: true,
+    enumerable: true,
+    get: () => current,
+    set: (value: unknown) => {
+      current = value;
+      const path = (value as { path?: unknown } | undefined)?.path;
+      if (typeof path === 'string') capturedRouteTemplates.set(req, `${req.baseUrl}${path}`);
+    },
+  });
+}
+
 export function routeTemplate(req: Request): string {
-  if (req.route) return `${req.baseUrl}${req.route.path}`;
-  return 'unmatched';
+  return capturedRouteTemplates.get(req) ?? 'unmatched';
 }
 
 export const requestLogger: RequestHandler = (req, res, next) => {
   const requestId = resolveRequestId(req, res);
   req.id = requestId;
+  captureRouteTemplate(req);
 
   const startedAt = process.hrtime.bigint();
   let logged = false;
@@ -52,9 +83,9 @@ export const requestLogger: RequestHandler = (req, res, next) => {
       aborted: aborted || undefined,
     };
 
-    if (aborted) log.warn(bindings, 'http.request.completed');
-    else if (res.statusCode === 429) log.warn(bindings, 'http.request.completed');
-    else if (res.statusCode >= 500) log.error(bindings, 'http.request.completed');
+    const level = aborted ? 'warn' : accessLogLevel(res.statusCode);
+    if (level === 'error') log.error(bindings, 'http.request.completed');
+    else if (level === 'warn') log.warn(bindings, 'http.request.completed');
     else log.info(bindings, 'http.request.completed');
   };
 

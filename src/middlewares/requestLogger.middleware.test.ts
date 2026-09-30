@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logger } from '../config/logger.js';
 import {
   accessLogLevel,
+  captureRouteTemplate,
   requestLogger,
   resolveRequestId,
   routeTemplate,
@@ -13,14 +14,15 @@ import {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// `route` y `baseUrl` no son opciones: la plantilla de ruta solo existe si se
+// reproduce el orden de Express con `matchRoute`, porque un `route` fijado antes
+// de que el middleware instale la captura nunca se registraria.
 interface MockRequestOptions {
   headers?: Record<string, string>;
   path?: string;
   method?: string;
   statusCode?: number;
   writableFinished?: boolean;
-  route?: { path: string };
-  baseUrl?: string;
 }
 
 function createReqRes(options?: MockRequestOptions) {
@@ -30,8 +32,7 @@ function createReqRes(options?: MockRequestOptions) {
     headers,
     method: options?.method ?? 'GET',
     path: options?.path ?? '/api/v1/users',
-    baseUrl: options?.baseUrl ?? '',
-    route: options?.route,
+    baseUrl: '',
   };
   const res = {
     statusCode: options?.statusCode ?? 200,
@@ -50,6 +51,20 @@ function createEmitterPair(options?: MockRequestOptions) {
   const resEmitter = new EventEmitter() as Response & EventEmitter;
   Object.assign(resEmitter, res);
   return { reqEmitter, resEmitter, headersSet };
+}
+
+/**
+ * Reproduce el orden real de Express: fija `baseUrl` al montaje y asigna
+ * `req.route` en el instante del match, con el prefijo todavia disponible.
+ */
+function matchRoute(req: Request, baseUrl: string, path: string): void {
+  req.baseUrl = baseUrl;
+  (req as { route?: unknown }).route = { path };
+}
+
+/** Lo que Express hace al desenrollar el router antes de emitir `finish`. */
+function unwindRouter(req: Request): void {
+  req.baseUrl = '';
 }
 
 describe('resolveRequestId', () => {
@@ -112,16 +127,41 @@ describe('accessLogLevel', () => {
 
 describe('routeTemplate', () => {
   it('returns unmatched when the request did not match a route', () => {
-    const { req } = createReqRes({ path: '/api/v1/nope' });
+    const { reqEmitter } = createEmitterPair({ path: '/api/v1/nope' });
 
-    expect(routeTemplate(req)).toBe('unmatched');
+    captureRouteTemplate(reqEmitter);
+
+    expect(routeTemplate(reqEmitter)).toBe('unmatched');
   });
 
-  it('returns the route template when a route matched', () => {
-    const { req } = createReqRes({ path: '/api/v1/users/123', baseUrl: '/api/v1' });
-    (req as { route?: unknown }).route = { path: '/users/:id' };
+  it('keeps the mount prefix even after Express restores baseUrl', () => {
+    const { reqEmitter } = createEmitterPair({ path: '/api/v1/users/123' });
 
-    expect(routeTemplate(req)).toBe('/api/v1/users/:id');
+    captureRouteTemplate(reqEmitter);
+    matchRoute(reqEmitter, '/api/v1', '/users/:id');
+    unwindRouter(reqEmitter);
+
+    expect(routeTemplate(reqEmitter)).toBe('/api/v1/users/:id');
+  });
+
+  it('stays readable for the rest of the chain after the capture', () => {
+    const { reqEmitter } = createEmitterPair();
+
+    captureRouteTemplate(reqEmitter);
+    matchRoute(reqEmitter, '/api/v1', '/careers');
+
+    expect(reqEmitter.route).toEqual({ path: '/careers' });
+  });
+
+  it('ignores a route assignment without a string path', () => {
+    const { reqEmitter } = createEmitterPair();
+
+    captureRouteTemplate(reqEmitter);
+    reqEmitter.baseUrl = '/api/v1';
+    (reqEmitter as { route?: unknown }).route = undefined;
+    (reqEmitter as { route?: unknown }).route = { path: 42 };
+
+    expect(routeTemplate(reqEmitter)).toBe('unmatched');
   });
 });
 
@@ -193,14 +233,13 @@ describe('requestLogger middleware', () => {
   it('does not log the query string', () => {
     const { reqEmitter, resEmitter } = createEmitterPair({
       path: '/api/v1/users/123?token=secret&page=2',
-      route: { path: '/users/:id' },
-      baseUrl: '/api/v1',
     });
     const next = vi.fn();
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
     requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/v1', '/users/:id');
     resEmitter.emit('finish');
 
     const logs = readAccessLogs(writeSpy);
@@ -286,5 +325,62 @@ describe('requestLogger middleware', () => {
     expect(logs).toHaveLength(1);
     expect(logs[0]?.['level']).toBe('warn');
     expect(logs[0]?.['statusCode']).toBe(429);
+  });
+
+  it('logs the full route template for a response born inside the chain', () => {
+    // `authenticate` responde 401 con `next(error)`, el router se desenrolla de
+    // forma sincrona y Express restaura `req.baseUrl` a '' antes de `finish`.
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      path: '/api/v1/audit-events',
+      statusCode: 401,
+    });
+    const next = vi.fn();
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/v1', '/audit-events');
+    unwindRouter(reqEmitter);
+    resEmitter.emit('finish');
+
+    const logs = readAccessLogs(writeSpy);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.['route']).toBe('/api/v1/audit-events');
+    expect(logs[0]?.['statusCode']).toBe(401);
+  });
+
+  it('logs the full route template for aborted requests', () => {
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      path: '/api/v1/activities',
+      writableFinished: false,
+    });
+    const next = vi.fn();
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/v1', '/activities');
+    unwindRouter(reqEmitter);
+    resEmitter.emit('close');
+
+    const logs = readAccessLogs(writeSpy);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.['route']).toBe('/api/v1/activities');
+    expect(logs[0]?.['aborted']).toBe(true);
+  });
+
+  it('logs the route template of a mount outside /api/v1', () => {
+    const { reqEmitter, resEmitter } = createEmitterPair({ path: '/api/auth/jwks' });
+    const next = vi.fn();
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/auth', '/jwks');
+    resEmitter.emit('finish');
+
+    const logs = readAccessLogs(writeSpy);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.['route']).toBe('/api/auth/jwks');
   });
 });
