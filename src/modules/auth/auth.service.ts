@@ -17,8 +17,6 @@ import type {
   ChangePasswordBody,
   ForgotPasswordBody,
   LoginBody,
-  LogoutBody,
-  RefreshBody,
   RegisterBody,
   ResetPasswordBody,
   VerifyEmailBody,
@@ -235,12 +233,16 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
   }
 };
 
-export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess> => {
+/**
+ * El token llega desde la cookie `HttpOnly`, no desde el body: asi el cliente no
+ * puede leerlo y las dos pestanas comparten la misma sesion por naturaleza.
+ */
+export const refreshAccessToken = async (refreshToken: string): Promise<AuthSuccess> => {
   try {
     const prisma = getPrismaClient();
     const now = new Date();
     const session = await prisma.session.findFirst({
-      where: { token: body.refreshToken },
+      where: { token: refreshToken },
       select: {
         expiresAt: true,
         userId: true,
@@ -263,7 +265,7 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
       throw new ApiError(401, 'Refresh token has expired.');
     }
     if (!session.user.isActive) {
-      await prisma.session.deleteMany({ where: { token: body.refreshToken } });
+      await prisma.session.deleteMany({ where: { token: refreshToken } });
       throw new ApiError(401, 'Refresh token is invalid.');
     }
     const accessToken = await signAccessJwt({
@@ -276,7 +278,7 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
     });
     const rotatedToken = randomBytes(32).toString('base64url');
     const rotated = await prisma.session.updateMany({
-      where: { token: body.refreshToken, expiresAt: { gt: now } },
+      where: { token: refreshToken, expiresAt: { gt: now } },
       data: { token: rotatedToken },
     });
     if (rotated.count !== 1) {
@@ -295,7 +297,16 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
   }
 };
 
-export const changePassword = async (userId: string, body: ChangePasswordBody): Promise<void> => {
+/**
+ * `refreshToken` es la credencial de la sesion actual, leida de la cookie. Se usa
+ * para conservarla mientras se revocan las demas: si se revocara tambien, el
+ * propio cambio de contrasena expulsaria al usuario.
+ */
+export const changePassword = async (
+  userId: string,
+  body: ChangePasswordBody,
+  refreshToken: string,
+): Promise<void> => {
   const prisma = getPrismaClient();
 
   const account = await prisma.account.findFirst({
@@ -308,7 +319,7 @@ export const changePassword = async (userId: string, body: ChangePasswordBody): 
   }
 
   const currentSession = await prisma.session.findFirst({
-    where: { token: body.refreshToken, userId },
+    where: { token: refreshToken, userId },
     select: { id: true },
   });
 
@@ -325,7 +336,7 @@ export const changePassword = async (userId: string, body: ChangePasswordBody): 
     });
 
     const revoked = await tx.session.deleteMany({
-      where: { userId, token: { not: body.refreshToken } },
+      where: { userId, token: { not: refreshToken } },
     });
 
     await writeAuditEvent(tx, {
@@ -356,11 +367,11 @@ export const changePassword = async (userId: string, body: ChangePasswordBody): 
   );
 };
 
-export const logoutUser = async (_body: LogoutBody): Promise<void> => {
+export const logoutUser = async (refreshToken: string): Promise<void> => {
   try {
     const prisma = getPrismaClient();
     await prisma.session.deleteMany({
-      where: { token: _body.refreshToken },
+      where: { token: refreshToken },
     });
     logger.info({ event: 'auth.session.revoked', logType: 'security' }, 'auth.session.revoked');
   } catch (error) {

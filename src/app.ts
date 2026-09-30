@@ -1,4 +1,5 @@
 import { apiReference } from '@scalar/express-api-reference';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -60,6 +61,12 @@ app.use(
 
 app.get('/api/auth/jwks', toNodeHandler(auth));
 app.all('/api/auth/*splat', notFoundHandler);
+
+// Necesario para leer la cookie de refresco en /api/v1/auth. `cookie-parser` no
+// expone su valor a la respuesta ni lo registra, y la cookie esta marcada como
+// HttpOnly, asi que el access log nunca la ve. Va despues de CORS para que un
+// origen no permitido se rechace antes de analizar cabeceras.
+app.use(cookieParser());
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
