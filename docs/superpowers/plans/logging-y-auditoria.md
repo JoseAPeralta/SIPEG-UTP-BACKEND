@@ -2416,7 +2416,8 @@ undefined to be '11111111-...'`), despues se unifico la funcion para que fije
 
 ## Fase 12 - Verificación Final
 
-- [ ] **T12.1. Suite completa.**
+- [x] **T12.1. Suite completa.**
+
   ```bash
   pnpm test
   pnpm run test:coverage
@@ -2425,7 +2426,25 @@ undefined to be '11111111-...'`), despues se unifico la funcion para que fije
   pnpm run format:check
   pnpm run build
   ```
-- [ ] **T12.2. Prisma y documentación.**
+
+  Verificado 2026-09-30. **1413/1413** (cero omitidas) con la base de pruebas de
+  auditoría activa, `typecheck`, `lint`, `build` y **`format:check` limpio en todo
+  el repositorio**, que era la deuda que las fases 1-4 dejaron abierta desde
+  T7.8 y que se había cerrado al reformatear los archivos tocados.
+
+  Cobertura: **94.11 %** de sentencias (2720/2890), **94.23 %** de líneas
+  (2648/2810), 93.89 % de funciones y **87.51 %** de ramas (1584/1810). Lo más
+  bajo es `src/utils/jwt-verifier.ts` (53 %), porque la verificación contra el
+  JWKS remoto necesita red o JWKS fijo, y `src/observability/check.ts` (79 %),
+  cuyas ramas restantes son las de los fallos que solo se dan con el stack caído.
+
+  `vitest.config.ts` **no define ningún umbral** de cobertura. No se añadieron:
+  fijarlos sin una línea base acordada puede romper el build, y el plan no los
+  pide. Queda como decisión pendiente si se quiere que una regresión de
+  cobertura falle en CI.
+
+- [x] **T12.2. Prisma y documentación.**
+
   ```bash
   pnpm prisma validate
   pnpm prisma format
@@ -2433,11 +2452,24 @@ undefined to be '11111111-...'`), despues se unifico la funcion para que fije
   pnpm run docs:generate
   pnpm run docs:check
   ```
-- [ ] **T12.3. Composición Docker.**
+
+  Verificado 2026-09-30: esquema válido, `format` **no produce cambios**,
+  cliente regenerado, y `openapi.json` al día. `git status` queda limpio tras las
+  seis órdenes: ninguno de estos comandos reintroduce drift.
+
+- [x] **T12.3. Composición Docker.**
+
   ```bash
   docker compose -f compose.prod.yaml -f compose.observability.yaml config
   ```
-- [ ] **T12.4. Pruebas de integración manuales.**
+
+  Verificado 2026-09-30 con `config --quiet`: las tres combinaciones salen 0.
+  `prod` + `observability` necesita cinco variables sin default
+  (`AUTH_SECRET`, `LOG_PSEUDONYMIZATION_KEY`, `GRAFANA_ADMIN_PASSWORD`,
+  `GRAFANA_SECRET_KEY`, `IMAGE_TAG`); con stubs, ninguna más. Sin ellas el fallo
+  sigue siendo el de `LOG_PSEUDONYMIZATION_KEY` que documenta T10.4c.
+
+- [x] **T12.4. Pruebas de integración manuales.**
   - Requests simultáneos no cruzan `requestId`.
   - Forzar 400, 401, 403, 404, 429 y 500 y verificar el evento correcto.
   - Buscar un request en Grafana por su `X-Request-ID`.
@@ -2451,22 +2483,166 @@ undefined to be '11111111-...'`), despues se unifico la funcion para que fije
     mutable.
   - Ejecutar `pnpm run api:run:smoke`.
 
+  Verificado 2026-09-30 contra el stack de desarrollo completo. Detalle por caso:
+
+  ##### T12.4a. Barrido de estados
+
+  Cada estado con su propio `X-Request-ID`, y cada línea buscada en Loki por ese
+  id:
+
+  | Estado | Respuesta | Eventos observados en Loki                                          |
+  | ------ | --------- | ------------------------------------------------------------------- |
+  | 400    | 400       | `http.request.completed` `info`/`access`, ruta `/api/v1/auth/login` |
+  | 401    | 401       | `http.request.completed` `info`/`access`, ruta `/api/v1/users/me`   |
+  | 403    | 403       | `authorization.denied` `warn`/`security` **y** el `access` 403      |
+  | 404    | 404       | `http.request.completed` `info`/`access`, `route: unmatched`        |
+  | 429    | 429       | `rate_limit.exceeded` `warn`/`security` **y** el `access` 429       |
+
+  El 404 registra `route: unmatched`, que es lo que T2.1 fija para rutas no
+  reconocidas. El 403 emite dos líneas: la denegación y el acceso, ambas
+  correlacionables por el mismo id. El barrido de 429 con 12 peticiones dio 3
+  x 400 y 9 x 429, y para ese único id: 3 líneas `info` y 18 `warn`, contando los
+  eventos de `rate_limit.exceeded` de las peticiones anteriores del mismo id.
+
+  Un detalle que distingue los dos 401: **sin cabecera `Authorization`** no hay
+  evento de seguridad, solo el `access` 401; **con un token inválido** sí, y es
+  `auth.token.invalid` `warn`/`security` más el `access` 401. Es la distinción
+  correcta: no se auditó el intento de adivinar un token que nunca se envió.
+
+  ##### T12.4b. Un 500 real
+
+  Recrear `api` con un `DATABASE_URL` a una base inexistente, mediante un
+  override temporal fuera del repo. La ruta `GET /api/v1/careers` responde:
+
+  ```text
+  HTTP/1.1 500 Internal Server Error
+  {"success":false,"message":"Internal server error.","errors":[]}
+  ```
+
+  en 16 ms, y Loki registra `http.error.unexpected` `error`/`application` más el
+  `access` 500, correlacionados por el `requestId`.
+
+  Sobre el filtrado: el cuerpo no lleva ni el mensaje de Prisma ni la ruta
+  interna. En el log del contenedor el nombre de la base sí aparece
+  (`Database sipeg_utp_inexistente does not exist...`), pero **como salida
+  directa de Prisma, no por nuestro logger**, y **la contraseña nunca aparece**
+  en ninguna línea. Nombre de base es configuración; la credencial es lo que no
+  debe filtrar, y no lo hace.
+
+  Nota sobre el método: la primera propuesta era `REVOKE SELECT ON careers FROM
+sipeg`, y **no habría funcionado**: `sipeg` es superusuario y en PostgreSQL un
+  superusuario omite toda verificación de permisos, así que el `REVOKE` era un
+  no-op silencioso. Se detectó antes de ejecutar y se cambió por el
+  `DATABASE_URL`, que no toca la base ni ningún otro contenedor.
+
+  ##### T12.4c. Loki caído y recuperación
+
+  Con `loki` detenido: `careers` 200, `health` 200 y `login` 200, con 20 ms de
+  latencia, y el log sigue saliendo por stdout del contenedor. Alloy acumuló 110
+  líneas de reintento, que es lo que fija `max_backoff_retries = 0`.
+
+  Tras `start loki`, la petición emitida **con Loki caído** apareció en Loki con
+  su línea `http.request.completed` intacta: el spool del driver de logs la
+  retuvo y la entregó al recuperar. Se cierra el criterio de que la API no
+  depende de Loki.
+
+  ##### T12.4d. Reinicio y una alerta que se disparó sola
+
+  `sipeg-fatal` pasó a `firing` por el `app.jwks.failed` del arranque contra la
+  base inexistente, y volvió a `inactive` por sí sola ~2 min después de
+  restaurar la base, con `health: ok` en todo el recorrido. Es la primera vez que
+  una alerta de este plan se dispara por una causa real y no por una prueba
+  dirigida, y confirma que el ciclo `inactive → firing → inactive` funciona sin
+  intervención.
+
+  ##### T12.4e. Secretos sintéticos
+
+  Cuatro marcadores reconocibles enviados por el cuerpo, `Authorization` y
+  `Cookie` en login fallido, petición autenticada falsa y registro: **0
+  ocurrencias** de los cuatro en `docker logs api` y **0** en Loki. El correo
+  tampoco aparece en claro: en su lugar está `actorPseudonym`, un HMAC de 64
+  caracteres. Y los eventos **sí** se emitieron para ese id (cuatro líneas:
+  `auth.login`-access 401, `auth.token.invalid`, `/users/me`-access 401 y
+  `/auth/register`-access 400), así que el cero es una redacción y no una ausencia
+  de registro.
+
+  ##### T12.4f. `requestId` no se cruza
+
+  48 peticiones simultáneas (`xargs -P 24`), 24 a `/api/v1/careers` y 24 a
+  `/api/v1/classrooms`, cada una con su UUID: 48/48 en 200 y 48 UUID distintos.
+  Contrastados en Loki uno a uno: los 48 ids presentes, **0 con ruta o estado
+  distinto del suyo** y **0 ids con más de una combinación ruta/estado**. El
+  `AsyncLocalStorage` aísla el contexto incluso con 24 en vuelo simultáneo.
+
+  ##### T12.4g. Rollback, revocación y smoke
+
+  La base aislada `sipeg_utp_audit_test` ya no existía, así que las 7 pruebas de
+  integración llevaban tiempo omitidas. Recreada, migrada con
+  `prisma migrate deploy` y ejecutadas con `AUDIT_TEST_DATABASE_URL`: **7/7**.
+  Cubren los dos casos que pedía T12.4: el rollback de la mutación cuando el
+  insert de auditoría falla en la base (y cuando el writer rechaza el payload), y
+  la durabilidad del historial, que concede un permiso, lo audita, **borra la
+  fila del permiso** y comprueba que el evento sobrevive. `UPDATE`, `DELETE` y
+  `TRUNCATE` sobre `audit_events` siguen rechazados por trigger.
+
+  `pnpm run api:run:smoke` en PASS.
+
+  ##### Desviaciones respecto de lo planificado
+  - **La retención no se puede verificar de punta a punta en desarrollo**, y se
+    verificó solo por configuración, como se decidió. La ventana de desarrollo es
+    de 168 h y `reject_old_samples_max_age` está en su default de 1 semana, así
+    que **ningún dato alcanza la edad necesaria para expirar**: el rechazo ocurre
+    antes que la retención. Probarlo exigiría un config de Loki de prueba con
+    retención y ventana de rechazo cortos. Lo que sí está verificado en vivo
+    (T9.1) es que el arranque elige compactor, que existe almacenamiento
+    persistente en el volumen `loki_data` y que `/config` reporta
+    `retention_period: 30d` con el `retention_stream` de 90 días para
+    `log_type="security"`.
+  - **`observability:check` con la ventana por defecto da rojo en desarrollo
+    tras cualquier recreación de `api`.** Confirmado de nuevo aquí, y en las dos
+    direcciones: largo da `11 pass, 1 fail` en `ingest.json-labels` porque la
+    ventana todavía abarca líneas de la era anterior, y `--window 3` da
+    `12 pass, 0 fail`. Es el desfase ya documentado en T10.5e.
+  - **La suite completa necesita `--testTimeout=30000` en este entorno.** Con el
+    default de 5000 ms y el `load average` entre 13 y 22 (varios `opencode` al
+    58-92 % de CPU sobre 8 núcleos), fallan por timeout entre 2 y 9 tests de
+    rutas que levantan la app entera, de forma intermitente y sin relación con el
+    código. Con margen de tiempo, 1413/1413. No se modificó la configuración de
+    Vitest porque el problema es del entorno, no del repositorio: es la quinta
+    vez que se documenta (T7.8, T8.6, T10.4e, T10.5e).
+  - **`AUDIT_TEST_DATABASE_URL` es manual.** Las 7 pruebas de integración siguen
+    siendo opt-in porque la suite del proyecto no usa base de datos real. Queda
+    como deuda: en CI, la base efímera de PostgreSQL es gratuita y permitiría no
+    perder esa cobertura.
+
 ---
 
 ## Duración Y Retención Propuesta
 
-| Datos                                 | Retención | Configuración                                 |
-| ------------------------------------- | --------: | --------------------------------------------- |
-| Logs de desarrollo                    |    7 días | `observability/loki/config.dev.yaml` (168 h)  |
-| Access/aplicación/infra de producción |   30 días | `loki/config.yaml` (`retention_period: 720h`) |
-| Eventos de seguridad                  |   90 días | `retention_stream` `log_type=security`        |
-| Auditoría PostgreSQL                  |  365 días | Política + procedimiento de purga controlada  |
+| Datos                                 | Retención | Configuración                                                |
+| ------------------------------------- | --------: | ------------------------------------------------------------ |
+| Logs de desarrollo                    |    7 días | `observability/loki/config.dev.yaml` (168 h)                 |
+| Access/aplicación/infra de producción |   30 días | `loki/config.yaml` (`retention_period: 720h`)                |
+| Eventos de seguridad                  |   90 días | `retention_stream` `log_type=security`                       |
+| Auditoría PostgreSQL                  |  365 días | Ratificado en T13.1; purga con `pnpm run prisma:purge:audit` |
 
-- [ ] **T13.1. Ratificar los 365 días de auditoría.**
+- [x] **T13.1. Ratificar los 365 días de auditoría.**
       No se encontró política de retención en el repositorio. Confirmar con política
       institucional/asesoría legal antes de automatizar la eliminación. Hasta
       entonces, no purgar automáticamente.
-- [ ] **T13.2. Definir el procedimiento de purga.**
+
+  **Ratificado 2026-09-30: 365 días.** Decisión institucional, documentada en
+  ADR-0008 bajo _Retención Y Purga_, no como constante repartida por el código.
+  Aplica solo a `audit_events`: los logs de Loki siguen su propia ventana (30
+  días global, 90 para seguridad). Mientras no exista normativa que la sustituya,
+  365 días es la política vigente.
+
+  Se descartó la migración: el corte se calcula sobre `occurred_at`, que ya está
+  indexado, así que cambiar la política es cambiar un número. Añadir
+  `retention_expires_at` costaría una migración y una columna en cada escritura
+  para comprar una flexibilidad que hoy no se usa.
+
+- [x] **T13.2. Definir el procedimiento de purga.**
       La aplicación no debe poder borrar auditoría (trigger append-only). La purga
       por retención será un procedimiento administrativo privilegiado y auditado.
       Restricción de diseño a resolver aquí: la migración
@@ -2482,21 +2658,127 @@ undefined to be '11111111-...'`), despues se unifico la funcion para que fije
       de T13.1 puede requerir una migración. No existe hoy ninguna función ni script
       de purga en `src/modules/audit/`.
 
+  Verificado 2026-09-30. `prisma/scripts/purge-audit-events.ts`, registrado como
+  `pnpm run prisma:purge:audit`, con 22 tests unitarios.
+
+  Decisiones tomadas antes de implementar:
+
+  | Decisión     | Valor                                               | Por qué                                                                                                                                                                                                                 |
+  | ------------ | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Dónde vive   | Script CLI manual                                   | La bitácora sigue siendo de solo lectura; un endpoint HTTP que destruye evidencia contradiría eso, y `pg_cron` automatizaría el borrado con el rol de la aplicación                                                     |
+  | Estrategia   | Por lotes transaccionales                           | Cada lote abre transacción, deshabilita triggers, borra y rehabilita en `finally`. Los triggers nunca quedan abiertos entre transacciones, así que un proceso que muera a la mitad deja la tabla igual de inmutable     |
+  | Respaldo     | Exportar y luego borrar                             | Un NDJSON comprimido con las filas exactas que se eliminan. `--archive` obligatorio y **rechazado dentro del proyecto**: un respaldo de auditoría en el repo acabaría en un commit                                      |
+  | Constancia   | Evento `audit.purged`                               | La única forma de que una intervención sobre el histórico sea detectable desde el propio histórico. Se escribe **después** de rehabilitar los triggers para que la fila sea legítima                                    |
+  | Esquema      | Sin migración                                       | El índice de `occurred_at` ya cubre el corte                                                                                                                                                                            |
+  | Habilitación | Simulación + `--apply` + `--operator` + `--archive` | Reutilizar el guard de `SEED_ALLOW_PRODUCTION` habría sido semánticamente incorrecto: el destino natural de esta operación es producción, y mezclar el flag de seeds con una operación legítima lo habría hecho confuso |
+
+  Verificación contra la base aislada `sipeg_utp_audit_test` con 435 filas sembradas
+  (400 antiguas de 1 a 400 días, 35 recientes):
+
+  - **Simulación**: 36 a purgar (366-400 días), 399 a conservar, rango exacto, y la
+    tabla quedó en 435 filas: no escribe nada.
+  - **Siete guards rechazan** con el motivo exacto: `--apply` sin `--operator`, sin
+    `--archive`, `--operator` con correo, `--operator` que parece secreto,
+    `--batch-size=0`, `--retention-days=-5` y `--archive` dentro del proyecto.
+  - **Purga real con `--batch-size=10`**: 36 purgados en 4 lotes
+    (10 + 10 + 10 + 6) y el `audit.purged` registrado.
+  - **Resultado**: la tabla quedó en 400 filas (399 + el evento), con 0 de las 36
+    antiguas. `DELETE` y `TRUNCATE` sobre `audit_events` volvieron a fallar con
+    `audit events are append-only`: los triggers quedaron **rehabilitados**.
+  - **Respaldo**: 36 líneas exactas, la primera `old-400`, y el rango coincide con
+    el que anuncia la simulación.
+  - **Evento**: `action=audit.purged`, `actor_type=SYSTEM`,
+    `resource_type=audit_log`, y `metadata` con `purgedRowCount: 36`,
+    `retentionDays: 365`, `cutoff: 2025-09-30T07:55:13.105Z` y
+    `operator: sistemas`.
+
+  Desviaciones respecto de lo planificado:
+
+  - **`--operator` no puede ser un correo**, lo que no estaba previsto al
+    redactar el plan. El valor pasa por `looksLikeSecret`, que rechaza la arroba:
+    escribir un email en la bitácora durable está prohibido por ADR-0008. Se
+    documenta como característica, con el identificador institucional como
+    alternativa, y hay dos tests que lo fijan.
+  - **El respaldo se serializa en memoria y se comprime con `gzipSync`, en vez de
+    un `pipeline` de streams.** La primera versión usó un generador asíncrono
+    como etapa de `pipeline`, que no es una etapa transform y falló con
+    `source is not iterable`. Como el script ya tiene todas las filas en memoria
+    para planificar, serializar es más simple y no introduce una diferencia de
+    escalado respecto de lo que ya existía.
+  - **El script no necesita exclusión de `tsconfig.build.json`.** A diferencia de
+    `src/docs/generate.ts` y `src/observability/check.ts`, que viven en `src/` y
+    hubo que excluir, este está en `prisma/scripts/`, y `tsconfig.build.json` solo
+    incluye `src/**`, así que nunca llega a `dist` ni a la imagen de runtime.
+  - **El rango de retención de la tabla es `Timestamptz` y el corte es UTC.** No
+    pasa por `src/utils/date.ts`: ADR-0002 aplica a fechas de calendario de
+    negocio, y una ventana de retención es un instante.
+
 ---
 
 ## Criterios De Finalización
 
-- [ ] Producción no contiene `console.*` en el runtime.
-- [ ] Todas las respuestas incluyen `X-Request-ID`.
-- [ ] Los 5xx son correlacionables sin filtrar detalles al cliente.
-- [ ] La app funciona con Loki caído (logs a stdout + rotación local).
-- [ ] No se registran cuerpos, credenciales, tokens ni datos personales directos.
-- [ ] Los eventos críticos de autorización y administración son atómicamente
+Estado 2026-09-30, tras T12.
+
+- [x] Producción no contiene `console.*` en el runtime.
+      Los dos únicos `console.*` de `src/` están en `src/docs/generate.ts` y
+      `src/observability/check.ts`, que son CLI y además están excluidos de
+      `tsconfig.build.json`, así que no viajan en la imagen.
+- [x] Todas las respuestas incluyen `X-Request-ID`.
+      Corregido en T10.5 (commit `e5ea14e`): antes solo se fijaba cuando el
+      servidor generaba el id. Verificado en vivo para 200, 400, 401, 403, 404,
+      429 y 500.
+- [x] Los 5xx son correlacionables sin filtrar detalles al cliente.
+      500 con `{"success":false,"message":"Internal server error.","errors":[]}`,
+      `http.error.unexpected` `error`/`application` y el `access` 500 con el
+      mismo `requestId`. El mensaje real de Prisma y la ruta interna no salen ni
+      en la respuesta ni en el log, y la contraseña de la base tampoco.
+- [x] La app funciona con Loki caído (logs a stdout + rotación local).
+      Con `loki` detenido, `careers`, `health` y `login` respondieron 200. Al
+      restaurarlo, la petición emitida durante la caída llegó a Loki desde el
+      spool.
+- [x] No se registran cuerpos, credenciales, tokens ni datos personales directos.
+      Cuatro marcadores sintéticos por cuerpo, `Authorization` y `Cookie`: 0
+      ocurrencias en Docker y en Loki, con los eventos presentes. El correo
+      viaja como `actorPseudonym` (HMAC), nunca en claro.
+- [x] Los eventos críticos de autorización y administración son atómicamente
       auditables.
-- [ ] `audit_events` es append-only a nivel de base de datos.
-- [ ] Loki tiene retención activa, almacenamiento persistente y acceso no público.
-- [ ] Grafana tiene paneles provisionados y alertas básicas.
-- [ ] La política de retención y acceso está documentada en ADR.
+      Verificado con la base real: la mutación se revierte cuando el insert de
+      auditoría falla en la base o cuando el writer rechaza el payload (T6.6,
+      T12.4g). Salvedad declarada en ADR-0008: los tres flujos de Better Auth
+      (`user.registered`, `auth.email_verified`, `auth.password_reset`) **no** son
+      atómicos con el proveedor y no se promete que lo sean.
+- [x] `audit_events` es append-only a nivel de base de datos.
+      `UPDATE`, `DELETE` y `TRUNCATE` rechazados por los triggers
+      `audit_events_prevent_mutation` y `audit_events_prevent_truncate`, y el
+      evento sobrevive al borrado de la fila que referencia.
+- [~] Loki tiene retención activa, almacenamiento persistente y acceso no público.
+  Almacenamiento persistente y acceso no público, verificados: volumen
+  `loki_data` y `expose` en vez de `ports` (solo Grafana publica, atado a
+  `127.0.0.1`). Retención activa verificada **solo por configuración y smoke
+  de arranque** (T9.1: eligen compactor, `retention_period: 30d`,
+  `retention_stream` de 90 días para seguridad). El **borrado por antigüedad
+  no es verificable en desarrollo** porque `reject_old_samples_max_age` (1
+  semana) rechaza antes que la ventana de 168 h pueda expirar nada.
+- [x] Grafana tiene paneles provisionados y alertas básicas.
+      Tres paneles y cinco reglas. `observability:check` da `12 pass, 0 fail` con
+      `--window 3`, y el disparo real se verificó dos veces: `sipeg-rate-limits`
+      en T10.5 y `sipeg-fatal` en T12.4d.
+- [x] La política de retención y acceso está documentada en ADR.
+      ADR-0007, secciones _Retención Consultable_ y _Puertos Publicados_.
+
+### Pendiente De Decisión Humana
+
+**Nada.** La fase 13 quedó resuelta el 2026-09-30: T13.1 ratificada en 365 días y
+T13.2 implementada como script CLI. Ambas decisiones y sus siete puntos de diseño
+están documentados en ADR-0008, sección _Retención Y Purga_.
+
+Lo único que sigue abierto es una **revisión periódica de la política** por si una
+normativa institucional o de asesoría legal la sustituye. No bloquea nada: hasta
+entonces rige 365 días.
+
+Sobre la automatización: la purga **no** es automática y no debe serlo sin revisar
+el ADR. Automatizarla con el rol de la aplicación haría que un error de
+configuración eliminara evidencia sin que nadie lo revisara.
 
 ---
 
