@@ -28,6 +28,7 @@
     "test:coverage": "vitest run --coverage",
     "docs:generate": "tsx src/docs/generate.ts",
     "docs:check": "tsx src/docs/generate.ts --check",
+    "observability:check": "tsx src/observability/check.ts",
     "api:collection:import": "bru import openapi --source openapi.json --output bruno --collection-name \"SIPEG UTP API\" --collection-format bru --group-by tags",
     "api:run": "pnpm --dir bruno exec bru run -r --env local",
     "api:run:smoke": "pnpm --dir bruno exec bru run Health --env local",
