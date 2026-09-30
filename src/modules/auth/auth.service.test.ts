@@ -9,11 +9,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 
-const { loggerInfo, loggerWarn } = vi.hoisted(() => ({ loggerInfo: vi.fn(), loggerWarn: vi.fn() }));
+const { loggerInfo, loggerWarn, loggerError, createRequestLogger } = vi.hoisted(() => {
+  const requestLogger = vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  }));
+  return {
+    loggerInfo: vi.fn(),
+    loggerWarn: vi.fn(),
+    loggerError: vi.fn(),
+    createRequestLogger: requestLogger,
+  };
+});
 
 vi.mock('../../config/logger.js', () => ({
-  logger: { error: vi.fn(), info: loggerInfo, warn: loggerWarn },
-  createChildLogger: vi.fn(() => ({ error: vi.fn(), info: loggerInfo, warn: loggerWarn })),
+  logger: { error: loggerError, info: loggerInfo, warn: loggerWarn },
+  createChildLogger: vi.fn(() => ({ error: loggerError, info: loggerInfo, warn: loggerWarn })),
+  createRequestLogger,
 }));
 
 interface AuthMock {
@@ -82,7 +95,8 @@ const loadService = async (authMock: AuthMock, prismaMock: PrismaMock) => {
     },
   }));
   vi.doMock('../../config/logger.js', () => ({
-    logger: { error: vi.fn(), info: loggerInfo, warn: loggerWarn },
+    logger: { error: loggerError, info: loggerInfo, warn: loggerWarn },
+    createRequestLogger,
   }));
   return import('./auth.service.js');
 };
@@ -105,6 +119,9 @@ const setupJwks = async (prismaMock: PrismaMock): Promise<void> => {
 
 let authMock: AuthMock;
 let prismaMock: PrismaMock;
+
+/** Valor distintivo: permite afirmar que el token no llega a la bitacora. */
+const TOKEN = 'reset-token-value-9f3a';
 
 const resetMocks = async (): Promise<void> => {
   process.env['NODE_ENV'] = 'test';
@@ -473,6 +490,98 @@ describe('auth service', () => {
     );
   });
 
+  it('register writes one user.registered event for a persisted user', async () => {
+    authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
+    prismaMock.user.findUnique.mockImplementation(
+      ({ where }: { where: Record<string, unknown> }) =>
+        'id' in where ? Promise.resolve({ id: 'u-new' }) : Promise.resolve(null),
+    );
+    const { registerUser } = await loadService(authMock, prismaMock);
+
+    await registerUser({
+      email: 'nuevo@utp.ac.pa',
+      password: 'strongpass1234',
+      firstName: 'Ana',
+      lastName: 'Perez',
+      identificationNumber: '8-123-4567',
+    });
+
+    expect(prismaMock.auditEvent.create).toHaveBeenCalledTimes(1);
+    const call = prismaMock.auditEvent.create.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(call.data['action']).toBe('user.registered');
+    expect(call.data['targetUserId']).toBe('u-new');
+    // Ni el correo ni la contrasena ni el numero de identidad llegan a la bitacora.
+    const persisted = JSON.stringify(call.data);
+    expect(persisted).not.toContain('nuevo@utp.ac.pa');
+    expect(persisted).not.toContain('strongpass1234');
+    expect(persisted).not.toContain('8-123-4567');
+  });
+
+  it('register writes no event when the user is not persisted', async () => {
+    authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
+    prismaMock.user.findUnique.mockImplementation(
+      ({ where }: { where: Record<string, unknown> }) =>
+        'id' in where ? Promise.resolve(null) : Promise.resolve(null),
+    );
+    const { registerUser } = await loadService(authMock, prismaMock);
+
+    await expect(
+      registerUser({
+        email: 'nuevo@utp.ac.pa',
+        password: 'strongpass1234',
+        firstName: 'Ana',
+        lastName: 'Perez',
+        identificationNumber: '8-123-4567',
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('register writes no event when the signup is rejected', async () => {
+    const { APIError } = await import('better-auth/api');
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    authMock.api.signUpEmail.mockRejectedValue(
+      new APIError(422, { message: 'User already exists', code: 'USER_ALREADY_EXISTS' }),
+    );
+    const { registerUser } = await loadService(authMock, prismaMock);
+
+    await expect(
+      registerUser({
+        email: 'duplicado@utp.ac.pa',
+        password: 'strongpass1234',
+        firstName: 'Ana',
+        lastName: 'Perez',
+        identificationNumber: '8-123-4567',
+      }),
+    ).rejects.toMatchObject({ statusCode: 422 });
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('register completes even when the audit insert fails', async () => {
+    authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
+    prismaMock.user.findUnique.mockImplementation(
+      ({ where }: { where: Record<string, unknown> }) =>
+        'id' in where ? Promise.resolve({ id: 'u-new' }) : Promise.resolve(null),
+    );
+    prismaMock.auditEvent.create.mockRejectedValue(new Error('audit db down'));
+    const { registerUser } = await loadService(authMock, prismaMock);
+
+    const result = await registerUser({
+      email: 'nuevo@utp.ac.pa',
+      password: 'strongpass1234',
+      firstName: 'Ana',
+      lastName: 'Perez',
+      identificationNumber: '8-123-4567',
+    });
+
+    expect(result).toEqual({ userId: 'u-new' });
+    expect(createRequestLogger).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'audit.write.failed', targetUserId: 'u-new' }),
+    );
+  });
+
   it('register rejects duplicate identification before calling Better Auth', async () => {
     prismaMock.user.findUnique.mockImplementation(
       ({ where }: { where: Record<string, unknown> }) => {
@@ -805,6 +914,191 @@ describe('auth service', () => {
     expect(authMock.api.verifyEmail).toHaveBeenCalledWith(
       expect.objectContaining({ query: { token: 'verify-token' } }),
     );
+  });
+
+  it('verifyEmail writes one auth.email_verified event when the subject is identified', async () => {
+    authMock.api.verifyEmail.mockResolvedValue(undefined);
+    const { verifyEmail } = await loadService(authMock, prismaMock);
+    // Despues de loadService: el registro de modulos se reinicia ahi y el
+    // servicio solo comparte la instancia que se importa desde su mismo grafo.
+    const { captureAuthAuditSubject } = await import('./auth.audit.js');
+    authMock.api.verifyEmail.mockImplementation(async () => {
+      captureAuthAuditSubject('u-verified');
+      return undefined;
+    });
+
+    await verifyEmail({ token: 'verify-token' });
+
+    expect(prismaMock.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'auth.email_verified',
+        resourceType: 'user',
+        targetUserId: 'u-verified',
+      }),
+    });
+  });
+
+  it('verifyEmail writes no event when the provider identified no subject', async () => {
+    authMock.api.verifyEmail.mockResolvedValue(undefined);
+    const { verifyEmail } = await loadService(authMock, prismaMock);
+
+    await verifyEmail({ token: 'verify-token' });
+
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('verifyEmail writes no event when the token is rejected', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.verifyEmail.mockRejectedValue(
+      new APIError(401, { message: 'Token expired', code: 'TOKEN_EXPIRED' }),
+    );
+    const { verifyEmail } = await loadService(authMock, prismaMock);
+
+    await expect(verifyEmail({ token: 'expired-secret' })).rejects.toMatchObject({
+      statusCode: 400,
+    });
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('verifyEmail completes even when the audit insert fails', async () => {
+    authMock.api.verifyEmail.mockResolvedValue(undefined);
+    prismaMock.auditEvent.create.mockRejectedValue(new Error('audit db down'));
+    const { verifyEmail } = await loadService(authMock, prismaMock);
+    const { captureAuthAuditSubject } = await import('./auth.audit.js');
+    authMock.api.verifyEmail.mockImplementation(async () => {
+      captureAuthAuditSubject('u-verified');
+      return undefined;
+    });
+
+    await expect(verifyEmail({ token: 'verify-token' })).resolves.toBeUndefined();
+    expect(createRequestLogger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'audit.write.failed',
+        logType: 'application',
+        targetUserId: 'u-verified',
+      }),
+    );
+  });
+
+  it('resetPassword writes one auth.password_reset event with the subject from the hook', async () => {
+    authMock.api.resetPassword.mockResolvedValue(undefined);
+    const { resetPassword } = await loadService(authMock, prismaMock);
+    const { captureAuthAuditSubject } = await import('./auth.audit.js');
+    authMock.api.resetPassword.mockImplementation(async () => {
+      captureAuthAuditSubject('u-reset');
+      return undefined;
+    });
+
+    await resetPassword({ token: TOKEN, newPassword: 'newpass12345' });
+
+    expect(prismaMock.auditEvent.create).toHaveBeenCalledTimes(1);
+    const call = prismaMock.auditEvent.create.mock.calls[0]?.[0] as {
+      data: Record<string, unknown>;
+    };
+    expect(call.data['action']).toBe('auth.password_reset');
+    expect(call.data['targetUserId']).toBe('u-reset');
+    // Ni el token de un solo uso ni la contrasena nueva llegan a la bitacora.
+    const persisted = JSON.stringify(call.data);
+    expect(persisted).not.toContain(TOKEN);
+    expect(persisted).not.toContain('newpass12345');
+  });
+
+  it('resetPassword writes no event when the provider identifies no subject', async () => {
+    authMock.api.resetPassword.mockResolvedValue(undefined);
+    const { resetPassword } = await loadService(authMock, prismaMock);
+
+    await resetPassword({ token: 't', newPassword: 'newpass12345' });
+
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('resetPassword writes no event when the token is rejected', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.resetPassword.mockRejectedValue(
+      new APIError(401, { message: 'Token expired', code: 'TOKEN_EXPIRED' }),
+    );
+    const { resetPassword } = await loadService(authMock, prismaMock);
+
+    await expect(
+      resetPassword({ token: 'expired-secret', newPassword: 'newpass12345' }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('resetPassword completes even when the audit insert fails', async () => {
+    authMock.api.resetPassword.mockResolvedValue(undefined);
+    prismaMock.auditEvent.create.mockRejectedValue(new Error('audit db down'));
+    const { resetPassword } = await loadService(authMock, prismaMock);
+    const { captureAuthAuditSubject } = await import('./auth.audit.js');
+    authMock.api.resetPassword.mockImplementation(async () => {
+      captureAuthAuditSubject('u-reset');
+      return undefined;
+    });
+
+    await expect(
+      resetPassword({ token: 't', newPassword: 'newpass12345' }),
+    ).resolves.toBeUndefined();
+    expect(createRequestLogger).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'audit.write.failed',
+        logType: 'application',
+        targetUserId: 'u-reset',
+      }),
+    );
+  });
+
+  it('resetPassword logs a security event and writes no audit event when the token is rejected', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.resetPassword.mockRejectedValue(
+      new APIError(401, { message: 'Token expired', code: 'TOKEN_EXPIRED' }),
+    );
+    const { resetPassword } = await loadService(authMock, prismaMock);
+
+    await expect(
+      resetPassword({ token: TOKEN, newPassword: 'newpass12345' }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    // Fallos van al canal de seguridad (Loki), nunca a la bitacora durable.
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'auth.password_reset.failed', logType: 'security' }),
+      'auth.password_reset.failed',
+    );
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('verifyEmail logs a security event and writes no audit event when the token is rejected', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.verifyEmail.mockRejectedValue(
+      new APIError(401, { message: 'Token expired', code: 'TOKEN_EXPIRED' }),
+    );
+    const { verifyEmail } = await loadService(authMock, prismaMock);
+
+    await expect(verifyEmail({ token: 'expired-secret' })).rejects.toMatchObject({
+      statusCode: 400,
+    });
+
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'auth.email_verification.failed', logType: 'security' }),
+      'auth.email_verification.failed',
+    );
+    expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('never puts the rejected token or the new password in the security log', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.resetPassword.mockRejectedValue(
+      new APIError(401, { message: 'Token expired', code: 'TOKEN_EXPIRED' }),
+    );
+    const { resetPassword } = await loadService(authMock, prismaMock);
+
+    await expect(
+      resetPassword({ token: TOKEN, newPassword: 'newpass12345' }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    const logged = JSON.stringify(loggerWarn.mock.calls);
+    expect(logged).not.toContain(TOKEN);
+    expect(logged).not.toContain('newpass12345');
   });
 
   it('verifyEmail returns a generic error for an expired token', async () => {

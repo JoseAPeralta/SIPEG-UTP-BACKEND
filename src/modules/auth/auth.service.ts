@@ -12,6 +12,7 @@ import { writeAuditEvent } from '../audit/audit.service.js';
 import { pseudonymize } from '../../utils/pseudonymize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { parseTtlToMilliseconds } from '../../utils/ttl.js';
+import { recordAuthAuditEvent, withAuthAuditSubject } from './auth.audit.js';
 import type {
   ChangePasswordBody,
   ForgotPasswordBody,
@@ -205,6 +206,10 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
     if (!persisted) {
       throw new ApiError(409, 'Email is already registered.');
     }
+    // Tras confirmar la persistencia, no antes: auditar un alta que Better Auth
+    // llego a devolver pero que no esta en la base dejaria un evento sin sujeto
+    // real. El alta no es atomica con este insert (ADR-0008).
+    await recordAuthAuditEvent({ action: 'user.registered', userId: result.user.id });
     return { userId: result.user.id };
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -364,17 +369,36 @@ export const logoutUser = async (_body: LogoutBody): Promise<void> => {
 };
 
 export const verifyEmail = async (body: VerifyEmailBody): Promise<void> => {
+  let userId: string | undefined;
   try {
-    await auth.api.verifyEmail({
-      query: { token: body.token },
-      headers: betterAuthHeaders(),
-      asResponse: false,
-    });
+    const captured = await withAuthAuditSubject(() =>
+      auth.api.verifyEmail({
+        query: { token: body.token },
+        headers: betterAuthHeaders(),
+        asResponse: false,
+      }),
+    );
+    userId = captured.userId;
   } catch (error) {
     if (error instanceof APIError && (error.statusCode ?? 500) < 500) {
+      // Un token de verificacion rechazado es un intento fallido, no un evento
+      // durable: va al canal de seguridad, sin el token y sin el correo.
+      logger.warn(
+        { event: 'auth.email_verification.failed', logType: 'security' },
+        'auth.email_verification.failed',
+      );
       throw new ApiError(400, 'Email verification token is invalid or expired.');
     }
     throwBetterAuthError(error);
+    return;
+  }
+
+  // El hook `afterEmailVerification` solo corre en la transicion real: si el
+  // email ya estaba verificado, Better Auth retorna antes. Auditar despues de
+  // que la llamada resuelva evita registrar un evento por un reintento que no
+  // cambio nada, y evita auditar un token rechazado.
+  if (userId) {
+    await recordAuthAuditEvent({ action: 'auth.email_verified', userId });
   }
 };
 
@@ -394,16 +418,37 @@ export const requestPasswordReset = async (body: ForgotPasswordBody): Promise<vo
 };
 
 export const resetPassword = async (body: ResetPasswordBody): Promise<void> => {
+  let userId: string | undefined;
   try {
-    await auth.api.resetPassword({
-      body: { token: body.token, newPassword: body.newPassword },
-      headers: betterAuthHeaders(),
-      asResponse: false,
-    });
+    const captured = await withAuthAuditSubject(() =>
+      auth.api.resetPassword({
+        body: { token: body.token, newPassword: body.newPassword },
+        headers: betterAuthHeaders(),
+        asResponse: false,
+      }),
+    );
+    userId = captured.userId;
   } catch (error) {
     if (error instanceof APIError && (error.statusCode ?? 500) < 500) {
+      // Un token de reset rechazado es intento de adivinacion: va al canal de
+      // seguridad. Nunca a la bitacora durable, y nunca con el token ni la nueva
+      // contrasena.
+      logger.warn(
+        { event: 'auth.password_reset.failed', logType: 'security' },
+        'auth.password_reset.failed',
+      );
       throw new ApiError(400, 'Password reset token is invalid or expired.');
     }
     throwBetterAuthError(error);
+    return;
+  }
+
+  // A diferencia de `verifyEmail`, aqui el hook `onPasswordReset` corre DESPUES
+  // de cambiar la contrasena pero ANTES de revocar las sesiones. Por eso la
+  // escritura va aca: si el insert de auditoria fallara dentro del hook, la
+  // excepcion cortaria la revocacion y dejaria sesiones vivas con una contrasena
+  // que el titular ya dio por cambiada.
+  if (userId) {
+    await recordAuthAuditEvent({ action: 'auth.password_reset', userId });
   }
 };

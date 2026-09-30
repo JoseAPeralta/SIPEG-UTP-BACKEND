@@ -7,6 +7,7 @@ import { logger } from '../config/logger.js';
 import { env } from '../config/env.js';
 import { parseTtlToSeconds } from '../utils/ttl.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../modules/auth/auth.email.js';
+import { captureAuthAuditSubject } from '../modules/auth/auth.audit.js';
 import {
   hashPassword,
   PASSWORD_MAX_LENGTH,
@@ -30,6 +31,20 @@ const reportEmailDeliveryFailure = (): void => {
   logger.error({ event: 'mail.delivery.failed', logType: 'application' }, 'mail.delivery.failed');
 };
 
+/**
+ * Los hooks de Better Auth solo identifican al sujeto; no escriben auditoria.
+ *
+ * Anotan el `userId` en el marcador de la llamada en curso y el servicio lo
+ * consume despues, cuando la llamada del proveedor ya termino bien. La razon es
+ * que `onPasswordReset` corre DESPUES de cambiar la contrasena pero ANTES de
+ * revocar las sesiones: auditar ahi convertiria un fallo de la bitacora en
+ * sesiones sin revocar. El hook no escribe en base de datos y no captura errores,
+ * asi que nunca puede romper la autenticacion; si corre fuera de una llamada que
+ * capture, no hace nada.
+ */
+const captureAuditSubject = (user: { id: string }): void => {
+  captureAuthAuditSubject(user.id);
+};
 
 export const auth = betterAuth({
   appName: 'SIPEG UTP Backend',
@@ -61,6 +76,9 @@ export const auth = betterAuth({
     autoSignIn: false,
     resetPasswordTokenExpiresIn: parseTtlToSeconds(env.AUTH_PASSWORD_RESET_TTL),
     revokeSessionsOnPasswordReset: true,
+    onPasswordReset: async ({ user }) => {
+      captureAuditSubject(user);
+    },
     sendResetPassword: async ({ user, token }) => {
       void sendPasswordResetEmail(user.email, token).catch(reportEmailDeliveryFailure);
     },
@@ -73,6 +91,9 @@ export const auth = betterAuth({
     sendOnSignUp: true,
     autoSignInAfterVerification: false,
     expiresIn: parseTtlToSeconds(env.AUTH_EMAIL_VERIFICATION_TTL),
+    afterEmailVerification: async (user) => {
+      captureAuditSubject(user);
+    },
     sendVerificationEmail: async ({ user, token }) => {
       void sendVerificationEmail(user.email, token).catch(reportEmailDeliveryFailure);
     },
