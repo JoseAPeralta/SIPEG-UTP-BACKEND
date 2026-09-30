@@ -7179,7 +7179,8 @@
                 "classroom.availability_removed",
                 "user.registered",
                 "auth.email_verified",
-                "auth.password_reset"
+                "auth.password_reset",
+                "audit.purged"
               ]
             }
           },
@@ -7196,7 +7197,8 @@
                 "event_program",
                 "activity",
                 "classroom",
-                "career"
+                "career",
+                "audit_log"
               ]
             }
           },
