@@ -210,10 +210,17 @@ describe('auth routes', () => {
 
     const accessToken = response.body.data.accessToken as string;
     expect(response.body.success).toBe(true);
-    expect(response.body.data.refreshToken).toBe('refresh-token');
     expect(response.body.data.tokenType).toBe('Bearer');
     expect(decodeProtectedHeader(accessToken).alg).toBe('EdDSA');
     expect(JSON.stringify(response.body)).not.toContain('$argon2');
+
+    // El refresh token viaja en una cookie HttpOnly y NO en el body: asi
+    // JavaScript no puede leer la credencial de larga duracion.
+    expect(response.body.data.refreshToken).toBeUndefined();
+    const setCookie = String(response.headers['set-cookie']);
+    expect(setCookie).toContain('sipeg-refresh=refresh-token');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('Path=/api/v1/auth');
   });
 
   it('POST /login returns 400 on invalid body', async () => {
@@ -347,7 +354,7 @@ describe('auth routes', () => {
     const app = await loadApp(authMock);
     const response = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: 'invalid' })
+      .set('Cookie', 'sipeg-refresh=invalid')
       .expect(401);
     expect(response.body.success).toBe(false);
   });
@@ -356,7 +363,7 @@ describe('auth routes', () => {
     const app = await loadApp(authMock);
     const response = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: 'valid-token' })
+      .set('Cookie', 'sipeg-refresh=valid-token')
       .expect(200);
 
     const accessToken = response.body.data.accessToken as string;
@@ -386,7 +393,7 @@ describe('auth routes', () => {
 
     const response = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: 'expired-token' })
+      .set('Cookie', 'sipeg-refresh=expired-token')
       .expect(401);
     expect(response.body.message).toBe('Refresh token has expired.');
   });
@@ -416,18 +423,28 @@ describe('auth routes', () => {
 
     const first = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: 'old-token' })
+      .set('Cookie', 'sipeg-refresh=old-token')
       .expect(200);
-    const rotated = first.body.data.refreshToken as string;
+    // El token rotado llega en la Set-Cookie, no en el body: es lo que hara el
+    // navegador, y lo que le permite a la otra pestana reutilizar la sesion.
+    const rotated = /sipeg-refresh=([^;]+)/.exec(String(first.headers['set-cookie']))?.[1];
+    expect(rotated).toBeDefined();
     expect(rotated).not.toBe('old-token');
+    expect(first.body.data.refreshToken).toBeUndefined();
 
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: 'old-token' }).expect(401);
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: rotated }).expect(200);
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', 'sipeg-refresh=old-token')
+      .expect(401);
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', `sipeg-refresh=${rotated as string}`)
+      .expect(200);
   });
 
   it('POST /logout returns 200 even when session missing', async () => {
     const app = await loadApp(authMock);
-    await request(app).post('/api/v1/auth/logout').send({ refreshToken: 'r' }).expect(200);
+    await request(app).post('/api/v1/auth/logout').set('Cookie', 'sipeg-refresh=r').expect(200);
   });
 
   it('POST /logout revokes only the supplied refresh token', async () => {
@@ -446,19 +463,28 @@ describe('auth routes', () => {
       },
     });
 
-    await request(app).post('/api/v1/auth/logout').send({ refreshToken: 'session-a' }).expect(200);
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: 'session-a' }).expect(401);
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: 'session-b' }).expect(200);
+    await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', 'sipeg-refresh=session-a')
+      .expect(200);
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', 'sipeg-refresh=session-a')
+      .expect(401);
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', 'sipeg-refresh=session-b')
+      .expect(200);
   });
 
   it('POST /change-password returns 401 without a bearer token', async () => {
     const app = await loadApp(authMock);
     const response = await request(app)
       .post('/api/v1/auth/change-password')
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'currentpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(401);
     expect(response.body.success).toBe(false);
@@ -473,10 +499,10 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'wrongpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(400);
 
@@ -496,10 +522,10 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'currentpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(200);
 
@@ -532,10 +558,10 @@ describe('auth routes', () => {
     await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'currentpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(200);
 
@@ -552,10 +578,10 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'currentpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'foreign-session',
       })
       .expect(400);
 
@@ -571,10 +597,10 @@ describe('auth routes', () => {
       await request(app)
         .post('/api/v1/auth/change-password')
         .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', 'sipeg-refresh=session-current')
         .send({
           currentPassword: 'wrongpass123',
           newPassword: 'newstrongpass12',
-          refreshToken: 'session-current',
         })
         .expect(400);
     }
@@ -582,10 +608,10 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'wrongpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(429);
 
