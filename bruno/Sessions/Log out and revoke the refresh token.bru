@@ -9,18 +9,18 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/auth/logout
-  body: json
+  body: none
+
   auth: inherit
 }
 
-body:json {
-  {
-    "refreshToken": "{{refreshToken}}"
-  }
+headers {
+  Cookie: sipeg-refresh={{refreshCookie}}
 }
 
+
 script:pre-request {
-  bru.setVar("revokedRefreshToken", bru.getVar("refreshToken") ?? "");
+  bru.setVar("revokedRefreshCookie", bru.getVar("refreshCookie") ?? "");
 }
 
 tests {
@@ -40,7 +40,6 @@ example {
     mode: json
     body:json: {
       {
-        "refreshToken": ""
       }
     }
   }
@@ -78,7 +77,6 @@ example {
     mode: json
     body:json: {
       {
-        "refreshToken": ""
       }
     }
   }
