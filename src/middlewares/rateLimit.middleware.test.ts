@@ -183,4 +183,85 @@ describe('rate limit middleware', () => {
     expect(seenMax).toEqual([30]);
     expect((next.mock.calls[0]?.[0] as ApiError | undefined)?.statusCode).toBe(429);
   });
+
+  it('keys the refresh limiter by session so two tabs do not share a bucket', async () => {
+    vi.resetModules();
+    const keys: string[] = [];
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(
+        ({ keyGenerator, limit }) =>
+          (req: Request, _res: Response, next: (error?: unknown) => void) => {
+            keys.push(keyGenerator(req));
+            void limit;
+            next();
+          },
+      ),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { refreshRateLimit } = await import('./rateLimit.middleware.js');
+
+    const withCookie = (token: string) =>
+      buildReq({ cookies: { 'sipeg-refresh': token } } as unknown as Partial<Request>);
+
+    refreshRateLimit(withCookie('token-a'), buildRes(), vi.fn());
+    refreshRateLimit(withCookie('token-b'), buildRes(), vi.fn());
+    refreshRateLimit(withCookie('token-a'), buildRes(), vi.fn());
+
+    // La misma sesion cae en la misma clave; otra sesion, en otra. Asi cinco
+    // usuarios no comparten un cubo de cinco rotaciones por minuto.
+    expect(keys).toHaveLength(3);
+    expect(keys[0]).toBe(keys[2]);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it('never puts the raw refresh token in the limiter key', async () => {
+    vi.resetModules();
+    const keys: string[] = [];
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(
+        ({ keyGenerator }) =>
+          (req: Request, _res: Response, next: (error?: unknown) => void) => {
+            keys.push(keyGenerator(req));
+            next();
+          },
+      ),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { refreshRateLimit } = await import('./rateLimit.middleware.js');
+
+    refreshRateLimit(
+      buildReq({
+        cookies: { 'sipeg-refresh': 'token-ultra-secreto' },
+      } as unknown as Partial<Request>),
+      buildRes(),
+      vi.fn(),
+    );
+
+    // La clave vive en memoria del limiter y puede acabar en un volcado: se
+    // hashea para que la credencial no sea recuperable desde ahi.
+    expect(keys[0]).not.toContain('ultra-secreto');
+    expect(keys[0]).toMatch(/^session:[0-9a-f]{32}$/);
+  });
+
+  it('falls back to the IP when the refresh arrives without a cookie', async () => {
+    vi.resetModules();
+    const keys: string[] = [];
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(
+        ({ keyGenerator }) =>
+          (req: Request, _res: Response, next: (error?: unknown) => void) => {
+            keys.push(keyGenerator(req));
+            next();
+          },
+      ),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { refreshRateLimit } = await import('./rateLimit.middleware.js');
+
+    refreshRateLimit(buildReq(), buildRes(), vi.fn());
+
+    // Sin cookie no hay sesion que usar como clave, pero una peticion anonima
+    // tampoco debe desaparecer del control de tasa.
+    expect(keys[0]).toBe('none:127.0.0.1');
+  });
 });
