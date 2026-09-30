@@ -16,6 +16,7 @@ const expectedOperations = [
   'GET /api/v1/users/me',
   'PATCH /api/v1/users/me',
   'GET /api/v1/users/me/permissions',
+  'GET /api/v1/users/me/certificates',
   'GET /api/v1/admin/users',
   'POST /api/v1/admin/users',
   'GET /api/v1/admin/users/{id}',
@@ -104,6 +105,27 @@ describe('openApiDocument', () => {
     const pathItem = openApiDocument.paths?.['/api/v1/users/me'];
 
     expect(pathItem?.patch?.responses?.['409']).toBeDefined();
+  });
+
+  it('documents my certificates as a private paginated operation', () => {
+    const operation = openApiDocument.paths?.['/api/v1/users/me/certificates']?.get;
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(operation?.tags).toEqual(['Certificates']);
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.parameters?.length).toBeGreaterThan(0);
+  });
+
+  it('does not document a storage field on the certificate summary', () => {
+    expect(openApiDocument.components?.schemas).toHaveProperty('CertificateSummary');
+    expect(openApiDocument.components?.schemas).toHaveProperty('PaginatedMyCertificates');
+
+    const summary = JSON.stringify(openApiDocument.components?.schemas?.['CertificateSummary']);
+
+    expect(summary).not.to.include('pdfUrl');
+    expect(summary).not.to.include('attendanceId');
   });
 
   it('keeps public operations without bearer security', () => {

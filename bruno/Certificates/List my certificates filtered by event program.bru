@@ -1,0 +1,37 @@
+meta {
+  name: List my certificates filtered by event program
+  type: http
+  seq: 3
+  tags: [
+    Certificates
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/certificates?eventProgramId={{certificateEventProgramId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("only the certificates of the requested program come back", function () {
+    expect(res.getStatus()).to.equal(200);
+    const data = res.getBody().data;
+    expect(data.total).to.be.at.least(1);
+    expect(data.items.length).to.be.at.least(1);
+    expect(
+      data.items.every(function (item) {
+        return item.eventProgram.id === bru.getEnvVar("certificateEventProgramId");
+      })
+    ).to.equal(true);
+  });
+
+  test("the filter narrows the unfiltered listing", function () {
+    const data = res.getBody().data;
+    expect(data.total).to.be.below(bru.getVar("myCertificateCount"));
+  });
+}
