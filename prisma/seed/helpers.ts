@@ -1,4 +1,4 @@
-import { hashPassword } from '../../src/lib/password.js';
+import { hashPassword, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../src/lib/password.js';
 import { startOfInstitutionalDay } from '../../src/utils/date.js';
 
 export const SEED_PREFIX = 'seed';
@@ -56,8 +56,10 @@ export const resolveDemoPassword = (): string => {
 
   const password = process.env['SEED_DEMO_PASSWORD'] ?? DEFAULT_DEMO_PASSWORD;
 
-  if (password.length < 12 || password.length > 128) {
-    throw new Error('SEED_DEMO_PASSWORD must be between 12 and 128 characters.');
+  if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
+    throw new Error(
+      `SEED_DEMO_PASSWORD must be between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`,
+    );
   }
 
   return password;
@@ -88,8 +90,10 @@ export const readInitialAdminConfig = (
     );
   }
 
-  if (password.length < 12 || password.length > 128) {
-    throw new Error('SEED_ADMIN_PASSWORD must be between 12 and 128 characters.');
+  if (password.length < PASSWORD_MIN_LENGTH || password.length > PASSWORD_MAX_LENGTH) {
+    throw new Error(
+      `SEED_ADMIN_PASSWORD must be between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters.`,
+    );
   }
 
   return {
