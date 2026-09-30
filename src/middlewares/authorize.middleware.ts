@@ -75,6 +75,16 @@ export const requirePermission = (
 
       const scope = resolveScope ? await resolveScope(req) : undefined;
       if (!scope) {
+        // Sin scope no hay nada que autorizar, pero el 403 sigue siendo una
+        // denegacion: se registra con el permiso pedido para que el panel de
+        // seguridad pueda explicarla. Los ids del scope no se emiten porque no
+        // se conocen, que es justamente la causa de la denegacion.
+        createRequestLogger({
+          event: 'authorization.denied',
+          logType: 'security',
+          actorPseudonym: pseudonymize(user.id),
+          requiredPermission: permission,
+        }).warn('authorization.denied');
         throw new ApiError(403, 'Insufficient privileges for this resource.');
       }
 

@@ -1,14 +1,15 @@
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+const { loggerError, loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+  const loggerError = vi.fn();
   const loggerWarn = vi.fn();
   const createRequestLoggerSpy = vi.fn(() => ({
-    error: vi.fn(),
+    error: loggerError,
     info: vi.fn(),
     warn: loggerWarn,
   }));
-  return { loggerWarn, createRequestLoggerSpy };
+  return { loggerError, loggerWarn, createRequestLoggerSpy };
 });
 
 vi.mock('./config/logger.js', () => ({
@@ -186,5 +187,33 @@ describe('Better Auth native surface', () => {
       message: `Route ${path} not found.`,
       errors: [],
     });
+  });
+});
+
+describe('cuerpo de peticion malformado', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('./lib/auth.js');
+    vi.doUnmock('./config/prisma.js');
+    loggerError.mockClear();
+  });
+
+  it('responde 400 y no emite http.error.unexpected cuando el JSON esta truncado', async () => {
+    const { app } = await loadApp();
+
+    const response = await request(app)
+      .post('/api/v1/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{"email": "admin@sipeg.local"')
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'Malformed request body.',
+      errors: [],
+    });
+    expect(response.headers['x-request-id']).toBeDefined();
+    expect(JSON.stringify(response.body)).not.toContain('admin@sipeg.local');
+    expect(loggerError).not.toHaveBeenCalled();
   });
 });
