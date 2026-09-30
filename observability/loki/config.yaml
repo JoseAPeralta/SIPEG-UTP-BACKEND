@@ -1,6 +1,8 @@
 # Loki monolitico (single binary) para SIPEG UTP.
 #
-# Imagen fijada: grafana/loki:3.7.8 (sin `latest`; ver docs/adr/adr-0007-structured-logging-and-observability.md).
+# Imagen fijada por tag y digest en compose.observability.yaml:
+# grafana/loki:3.7.8@sha256:1107dd52...f0193. Tabla completa en
+# docs/adr/adr-0007-structured-logging-and-observability.md.
 # Invocacion esperada: -config.file=/etc/loki/config.yaml
 # Desarrollo: observability/loki/config.dev.yaml (7 dias). Si cambias retencion o
 # schema, cambia ambos archivos.
@@ -77,10 +79,21 @@ limits_config:
     - selector: '{log_type="security"}'
       priority: 1
       period: 2160h
-  # Valores por default conservados a proposito, sin fijar:
+  # El default de Loki es `30d1h`, que deja los 90 dias de seguridad como dato
+  # almacenado pero NO consultable de un tiron: una consulta de 90 dias falla con
+  # `the query time range exceeds the limit`. Se sube al mismo valor que
+  # `retention_stream` para que el panel de seguridad pueda mirar la ventana
+  # completa. Una consulta de 90 dias escanea 90 dias de logs, asi que acotar el
+  # rango en el selector de tiempo sigue siendo lo correcto para investigar.
+  # En desarrollo no hace falta: la retencion es de 7 dias, muy por debajo del
+  # default de 30 dias (ver observability/loki/config.dev.yaml).
+  max_query_length: 2160h
+  # Otros valores por default conservados a proposito, sin fijar:
   # ingestion_rate_mb 4 / ingestion_burst_size_mb 6 / max_streams_per_user 5000 /
-  # reject_old_samples_max_age 1w. Calibrar con linea base real antes de tocarlos,
-  # igual que los umbrales de alerta (T10.4).
+  # reject_old_samples_max_age 1w / max_query_series 500. Calibrar con linea base
+  # real antes de tocarlos, igual que los umbrales de alerta (T10.4).
+  # `max_query_series` solo afecta a consultas de metrica sin agregar: los logs
+  # se devuelven como una linea por stream, no por linea de log.
 
 # Loki no ejecuta reglas: las alertas son de Grafana (T10.4).
 ruler:

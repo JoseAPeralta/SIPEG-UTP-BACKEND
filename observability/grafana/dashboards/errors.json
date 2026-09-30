@@ -1,0 +1,668 @@
+{
+  "uid": "sipeg-errors",
+  "title": "Errors",
+  "description": "Errores inesperados, 5xx por ruta, dependencias fallidas, ciclo de vida del proceso y correlacion por `X-Request-ID`. La bitacora durable de cambios sensibles no vive aqui: se consulta en `GET /api/v1/audit-events` (ADR-0008).",
+  "tags": ["sipeg", "loki", "errors"],
+  "editable": false,
+  "graphTooltip": 1,
+  "timezone": "utc",
+  "schemaVersion": 42,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["10s", "30s", "1m", "5m", "15m"]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Entorno",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values({service=\"sipeg-utp-backend\"}, environment)",
+        "query": {
+          "query": "label_values({service=\"sipeg-utp-backend\"}, environment)",
+          "refId": "LokiVariableQueryEditor-VariableQuery"
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "options": [],
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "request_id",
+        "label": "Request ID o expresion",
+        "type": "textbox",
+        "query": ".*",
+        "current": { "selected": true, "text": ".*", "value": ".*" },
+        "options": [{ "selected": true, "text": ".*", "value": ".*" }],
+        "hide": 0,
+        "skipUrlSync": false,
+        "description": "Pega el `X-Request-ID` de una peticion para ver todas sus lineas. Por defecto `.*` muestra la cola completa de la API. El valor se inserta tal cual en la consulta, asi que no debe llevar comillas."
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Errores inesperados",
+      "description": "Eventos `http.error.unexpected`: el `errorHandler` recibio algo que no es `ApiError` y respondio 500 sin filtrar detalles al cliente. `event` es structured metadata, asi que se filtra despues de la llave del selector, nunca dentro.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"application\"} | event=\"http.error.unexpected\" [$__auto])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "5xx en el rango",
+      "description": "Respuestas 5xx registradas en el access log. Es la metrica que consume la alerta de T10.4.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"5..\" [$__auto])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Inicios del proceso",
+      "description": "Cada `app.starting` es un arranque del proceso Node. En produccion equivale a reinicios del contenedor. En desarrollo esta inflado: `tsx watch` reinicia el proceso en cada cambio de archivo, asi que este numero no es comparable entre entornos.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"infrastructure\"} | event=\"app.starting\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Fallos fatales",
+      "description": "`app.fatal` (excepcion no capturada o promesa rechazada) y `app.jwks.failed` (la tabla `jwks` no se pudo preparar). Cualquiera de los dos deja la API sin tokens firmables: por eso el umbral es rojo desde el primer caso.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"infrastructure\"} | event=~\"app[.].fatal|app[.].jwks[.].failed\" [$__auto])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Errores inesperados por evento y tipo",
+      "description": "Agrupa por `event` y por `err_type`. `| json` aplana el objeto `err` de pino con `_`, asi que el serializador produce la etiqueta `err_type`; en produccion el serializador deja solo `type` (ADR-0007), asi que es la unica dimension del error que sobrevive sin exponer `message` ni `stack`.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{event}} / {{err_type}}",
+          "expr": "sum by (event, err_type) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"application\"} | json | __error__=\"\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "bargauge",
+      "title": "5xx por ruta",
+      "description": "Plantilla de ruta que produjo 5xx. A diferencia del panel homonimo de `API Overview`, aqui solo entran las respuestas fallidas, que suelen concentrarse en pocas rutas. `topk` no se puede aplicar sobre `unwrap`, por eso la latencia no se mezcla en este panel.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "continuous-GrYlRd" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{route}}",
+          "expr": "topk(10, sum by (route) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"5..\" [$__auto])))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "5xx en el tiempo",
+      "description": "5xx por paso de tiempo. Es la serie que consulta la alerta `> 10 respuestas 5xx en 5 min` de T10.4, expuesta aqui para poder calibrar el umbral contra una linea base real antes de escribir la regla.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": {
+              "mode": "dashed",
+              "color": { "fixedColor": "red", "mode": "fixed" }
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "red", "value": 10 }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum", "max"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "5xx",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"5..\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Ciclo de vida del proceso",
+      "description": "Eventos de arranque y apagado: `app.starting`, `app.listening`, `app.jwks.ready`, `app.shutdown.signal`, `app.shutdown.completed`, `app.shutdown.error`, `app.shutdown.forced`, `app.fatal`. Un `shutdown.signal` sin su `completed` seguido indica un cierre que no termino a tiempo y un `process.exit` forzado.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{event}}",
+          "expr": "sum by (event) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"infrastructure\"} | event=~\"app[.].*\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Dependencias: eventos de la aplicacion",
+      "description": "Fallos que la aplicacion reporta de sus dependencias: Prisma (`prisma.error`, `prisma.warn`) y el envio de correo (`mail.delivery.failed`, en `log_type=\"application\"`). No incluyen ni el destinatario ni el enlace, por la politica de no registrar datos personales. `mail.delivery.failed` se consulta con un `log_type` distinto al de Prisma, asi que son tres consultas y no un `by (event)` unico.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "prisma.error" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "prisma.warn" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "mail.delivery.failed" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "prisma.error",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"infrastructure\"} | event=\"prisma.error\" [$__auto]))"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "prisma.warn",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"infrastructure\"} | event=\"prisma.warn\" [$__auto]))"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "mail.delivery.failed",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"application\"} | event=\"mail.delivery.failed\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Fallos de PostgreSQL",
+      "description": "Lineas `FATAL`, `PANIC` o `ERROR` del contenedor de base de datos. Sus logs no son JSON: solo llevan la etiqueta `container`, y el nivel se filtra con un `|~` sobre el texto. `container` no puede ir en el selector con un valor catch-all: Loki rechaza un matcher vacio, asi que el nombre del servicio se escribe explicitamente.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 30 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({container=\"db\"} |~ \"FATAL|PANIC|ERROR\" [$__auto])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "logs",
+      "title": "Lineas de error de PostgreSQL",
+      "description": "Las mismas lineas del contador, en texto. `POSTGRES` escribe `LOG:`, `WARNING:`, `ERROR:`, `FATAL:` y `PANIC:`; los checkpoints y la salida del servidor salen como `LOG:` y no se cuentan como fallo.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 30 },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "direction": "backward",
+          "expr": "{container=\"db\"} |~ \"FATAL|PANIC|ERROR\""
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "logs",
+      "title": "Correlacion por requestId",
+      "description": "Pega un `X-Request-ID` en la variable de arriba para ver todas las lineas de esa peticion: su linea de acceso y cualquier evento de error o seguridad emitido bajo el mismo `requestId`. Con el valor por defecto `.*` muestra la cola de la API. Se incluyen todos los tipos de log a proposito: se entra por un 5xx y se necesita el contexto completo de la peticion, no solo el error.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 38 },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "direction": "backward",
+          "legendFormat": "__auto",
+          "expr": "{service=\"sipeg-utp-backend\", environment=~\"$environment\"} | requestId=~\"$request_id\""
+        }
+      ]
+    }
+  ]
+}
