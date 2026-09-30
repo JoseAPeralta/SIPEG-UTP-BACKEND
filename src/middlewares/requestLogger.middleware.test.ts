@@ -77,7 +77,7 @@ describe('resolveRequestId', () => {
     expect(headersSet['X-Request-ID']).toBe(requestId);
   });
 
-  it('reuses a valid UUID header without calling setHeader', () => {
+  it('reuses a valid UUID header and echoes it back so the client can correlate', () => {
     const { req, res, headersSet } = createReqRes({
       headers: { 'x-request-id': '11111111-2222-4333-8444-555555555555' },
     });
@@ -85,7 +85,7 @@ describe('resolveRequestId', () => {
     const requestId = resolveRequestId(req, res);
 
     expect(requestId).toBe('11111111-2222-4333-8444-555555555555');
-    expect(Object.hasOwn(headersSet, 'X-Request-ID')).toBe(false);
+    expect(headersSet['X-Request-ID']).toBe('11111111-2222-4333-8444-555555555555');
   });
 
   it('generates a new UUID when the header is not a UUID', () => {

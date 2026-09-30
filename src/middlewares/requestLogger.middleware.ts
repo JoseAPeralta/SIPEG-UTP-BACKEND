@@ -9,10 +9,11 @@ const HEALTH_CHECK_PATH = '/api/v1/health';
 
 export function resolveRequestId(req: Request, res: Response): string {
   const header = req.headers['x-request-id'];
-  if (typeof header === 'string' && UUID_PATTERN.test(header)) return header;
-  const generated = randomUUID();
-  res.setHeader('X-Request-ID', generated);
-  return generated;
+  const requestId = typeof header === 'string' && UUID_PATTERN.test(header) ? header : randomUUID();
+  // Siempre, tambien cuando el id viene del cliente: sin el eco, quien envia un
+  // `X-Request-ID` propio no recibe confirmacion de cual se correlaciono en Loki.
+  res.setHeader('X-Request-ID', requestId);
+  return requestId;
 }
 
 export function accessLogLevel(statusCode: number): 'info' | 'warn' | 'error' {
