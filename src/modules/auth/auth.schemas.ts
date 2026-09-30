@@ -31,7 +31,9 @@ export const registerSchema = z.object({
 });
 
 export const refreshSchema = z.object({
-  body: z.object({ refreshToken: z.string().min(1, 'Refresh token is required.') }),
+  // Sin cuerpo: el refresh token viaja en la cookie HttpOnly. Se acepta un body
+  // vacio o con claves desconocidas porque el cliente no necesita enviar nada.
+  body: z.object({}).loose().optional().default({}),
 });
 
 export const verifyEmailSchema = z.object({
@@ -50,14 +52,17 @@ export const resetPasswordSchema = z.object({
 });
 
 export const logoutSchema = z.object({
-  body: z.object({ refreshToken: z.string().min(1, 'Refresh token is required.') }),
+  // Sin cuerpo: el token viene de la cookie HttpOnly.
+  body: z.object({}).loose().optional().default({}),
 });
 
 export const changePasswordSchema = z.object({
+  // `refreshToken` ya no viaja en el body: la sesion actual se identifica con la
+  // cookie HttpOnly, que el servidor lee. Enviarla aqui la expondría a JavaScript
+  // sin ganar nada.
   body: z.object({
     currentPassword: z.string().min(1, 'Current password is required.'),
     newPassword: passwordField,
-    refreshToken: z.string().min(1, 'Refresh token is required.'),
   }),
 });
 
@@ -67,17 +72,20 @@ export const authTokensSchema = z
     accessTokenExpiresAt: z.iso
       .datetime()
       .meta({ description: 'ISO 8601 expiration timestamp of the access token.' }),
-    refreshToken: z.string().meta({
-      description: 'Opaque refresh token backed by a server-side session.',
+    refreshTokenExpiresAt: z.iso.datetime().meta({
+      description:
+        'ISO 8601 expiration timestamp of the refresh token. The token itself is delivered in an HttpOnly cookie, never in this body.',
     }),
-    refreshTokenExpiresAt: z.iso
-      .datetime()
-      .meta({ description: 'ISO 8601 expiration timestamp of the refresh token.' }),
     tokenType: z.literal('Bearer'),
   })
+  // Estricto a proposito: el refresh token viaja en la cookie HttpOnly y no debe
+  // poder reaparecer en el body. El contrato documentado sale con
+  // `additionalProperties: false`.
+  .strict()
   .meta({
     id: 'AuthTokens',
-    description: 'Access and refresh token pair returned by the login and refresh flows.',
+    description:
+      'Access token issued by the login and refresh flows. The refresh token travels in an HttpOnly cookie and is never exposed to JavaScript.',
   });
 
 export const registerResultSchema = z

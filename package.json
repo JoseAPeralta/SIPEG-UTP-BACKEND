@@ -54,6 +54,7 @@
     "@scalar/express-api-reference": "^0.10.19",
     "argon2": "^0.41.1",
     "better-auth": "^1.7.5",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -70,6 +71,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/argon2": "^0.15.4",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/express-rate-limit": "^6.0.2",

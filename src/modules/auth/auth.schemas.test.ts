@@ -11,7 +11,6 @@ import {
 const authTokensPayload = {
   accessToken: 'header.payload.signature',
   accessTokenExpiresAt: '2026-09-19T10:15:00.000Z',
-  refreshToken: 'session-token',
   refreshTokenExpiresAt: '2026-09-26T10:00:00.000Z',
   tokenType: 'Bearer',
 };
@@ -19,6 +18,14 @@ const authTokensPayload = {
 describe('authTokensSchema', () => {
   it('accepts the auth success payload', () => {
     expect(authTokensSchema.parse(authTokensPayload)).toEqual(authTokensPayload);
+  });
+
+  it('rejects a payload that still carries the refresh token in the body', () => {
+    // El token viaja en la cookie HttpOnly. Aceptarlo aqui reabriria la puerta
+    // a que un cliente lo lea y lo persista.
+    expect(() =>
+      authTokensSchema.parse({ ...authTokensPayload, refreshToken: 'session-token' }),
+    ).toThrow();
   });
 
   it('rejects a non ISO expiration timestamp', () => {
@@ -36,7 +43,6 @@ describe('changePasswordSchema', () => {
   const validBody = {
     currentPassword: 'currentpass123',
     newPassword: 'newstrongpass12',
-    refreshToken: 'session-token',
   };
 
   it('accepts a valid change password body', () => {
@@ -74,7 +80,7 @@ describe('changePasswordSchema', () => {
   it('rejects an empty refresh token', () => {
     expect(changePasswordSchema).toBeDefined();
     expect(() =>
-      changePasswordSchema.parse({ body: { ...validBody, refreshToken: '' } }),
+      changePasswordSchema.parse({ body: { ...validBody, currentPassword: '' } }),
     ).toThrow();
   });
 });
