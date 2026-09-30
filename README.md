@@ -67,9 +67,9 @@ docker compose -f compose.prod.yaml --env-file .env.prod up -d --build
 - El seed base es idempotente y no sobrescribe datos existentes: puedes re-ejecutarlo con `docker compose -f compose.prod.yaml --env-file .env.prod run --rm seed`.
 - La base de datos no publica puertos al host; solo es accesible por la red interna de Compose.
 - `DATABASE_URL` se construye automaticamente con host `db` a partir de `POSTGRES_DB`, `POSTGRES_USER` y `POSTGRES_PASSWORD`; no la definas en `.env.prod`.
-- Las variables obligatorias de Compose son: `CORS_ORIGIN`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`, `MAIL_HOST` y `MAIL_FROM`.
+- Las variables obligatorias de Compose son: `CORS_ORIGIN`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`, `MAIL_HOST`, `MAIL_FROM` e `IMAGE_TAG`.
 - Si `POSTGRES_PASSWORD` contiene caracteres especiales (`@ : / ? # %`), codificalos en porcentaje o usa solo caracteres alfanumericos.
-- `IMAGE_TAG` permite etiquetar la imagen de la API (por defecto `latest`).
+- `IMAGE_TAG` es obligatoria: etiqueta la imagen de la API y no tiene default, para que un despliegue posterior no sobrescriba sin querer la imagen verificada. Usa una version explicita, por ejemplo una fecha (`2026-09-29`) o la de `package.json`. La imagen se construye localmente y no admite digest, porque un digest solo existe en un registro; el tag es el unico control de reproducibilidad. Ver `docs/adr/adr-0007-structured-logging-and-observability.md` (IMP-003).
 - La API se detiene con `stop_grace_period: 15s`, mayor que el timeout interno de apagado ordenado.
 - Rendimiento por defecto para un servidor de 4 vCPU: `DATABASE_POOL_MAX=9` (`2 x vCPU + 1`, por instancia; la suma de `pool x instancias` no debe superar `max_connections` de Postgres), `UV_THREADPOOL_SIZE=4` y Argon2id `m=12288 KiB, t=3, p=1` (configuracion minima OWASP de 12 MiB con pico de 48 MiB a 4 hilos). Todos son configurables por entorno.
 
@@ -188,7 +188,7 @@ pnpm run api:run:smoke # seguro: solo GET /api/v1/health
 pnpm run api:run       # coleccion completa; contiene operaciones que modifican datos
 ```
 
-`pnpm run api:collection:import` sobrescribe la coleccion: despues de reimportar hay que restaurar el script post-response y las assertions de `Auth/Log in with email and password - admin.bru`, `Auth/Log in with email and password - user.bru` y `Auth/Log in with email and password - head.bru` (los tres capturan `token`/`refreshToken`), y ademas reordenar los requests de las carpetas `Admin`, `Careers`, `Classrooms` y `Organizational_Units` (el login de head debe quedar antes de los requests que esperan 403 y capturar la misma variable compartida). El folder `Sessions` (separado de `Auth` para no agotar el limite de 5 logins/min por email+IP) contiene su propio `Sessions/Log in as admin.bru` y los flujos de refresh/logout. Los scripts/assertions de `Sessions/Refresh the access token.bru` y `Sessions/Log out and revoke the refresh token.bru`, y los scripts/assertions de `Auth/Register a new user.bru`, `Auth/Register duplicate email returns 409.bru`, `Auth/Register duplicate identification returns 409.bru`, `Auth/Register rate limit returns 429.bru`, `Auth/Login wrong password returns 401.bru`, `Auth/Login unknown email returns 401.bru`, `Auth/Login rate limit returns 429.bru`, `Sessions/Refresh reused token returns 401.bru` y `Sessions/Logout revoked token returns 401.bru` tambien se restauran. No guardes tokens ni credenciales reales en archivos versionados; usa un archivo `*.private.bru`, ignorado por Git, o variables proporcionadas en runtime. El login tiene limite de 5 intentos por minuto.
+`pnpm run api:collection:import` sobrescribe la coleccion: despues de reimportar hay que restaurar el script post-response y las assertions de `Auth/Log in with email and password - admin.bru`, `Auth/Log in with email and password - user.bru` y `Auth/Log in with email and password - head.bru` (los tres capturan `token`/`refreshToken`), y ademas reordenar los requests de las carpetas `Admin`, `Careers`, `Classrooms` y `Organizational_Units` (el login de head debe quedar antes de los requests que esperan 403 y capturar la misma variable compartida). La carpeta `Certificates` es autocontenida: su propio `Certificates/Log in as a student with certificates.bru` captura `token`/`refreshToken` con un `X-Forwarded-For` propio, asi que no depende del orden ni agota el limite de logins de otra carpeta. El folder `Sessions` (separado de `Auth` para no agotar el limite de 5 logins/min por email+IP) contiene su propio `Sessions/Log in as admin.bru` y los flujos de refresh/logout. Los scripts/assertions de `Sessions/Refresh the access token.bru` y `Sessions/Log out and revoke the refresh token.bru`, y los scripts/assertions de `Auth/Register a new user.bru`, `Auth/Register duplicate email returns 409.bru`, `Auth/Register duplicate identification returns 409.bru`, `Auth/Register rate limit returns 429.bru`, `Auth/Login wrong password returns 401.bru`, `Auth/Login unknown email returns 401.bru`, `Auth/Login rate limit returns 429.bru`, `Sessions/Refresh reused token returns 401.bru` y `Sessions/Logout revoked token returns 401.bru` tambien se restauran. No guardes tokens ni credenciales reales en archivos versionados; usa un archivo `*.private.bru`, ignorado por Git, o variables proporcionadas en runtime. El login tiene limite de 5 intentos por minuto.
 
 Flujo de registro (fase 1.1) en Bruno: ejecuta `Auth/Register a new user` (genera `newUserEmail` y `newUserIdentification` en runtime, espera 201 y valida que no se filtre el hash), luego `Auth/Register duplicate email returns 409` y `Auth/Register duplicate identification returns 409`. Para el limite de tasa, espera a una ventana limpia y envia `Auth/Register rate limit returns 429` cuatro veces en menos de un minuto: el cuarto intento responde 429. El registro tiene limite de 3 intentos por minuto por IP.
 
@@ -243,7 +243,7 @@ El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET 
   - `POST /auth/verify-email` — confirma el email; tokens invalidos o vencidos responden 400 generico y el limite es 5 intentos/min por IP.
   - `POST /auth/forgot-password` — siempre responde el mismo 200 exista o no el email; limite independiente de 3 solicitudes/min por IP. El origin de `AUTH_PASSWORD_RESET_URL` debe estar en `CORS_ORIGIN` o `TRUSTED_ORIGINS`; si no coincide, la app no arranca.
   - `POST /auth/reset-password` — consume un token de un solo uso con vigencia `AUTH_PASSWORD_RESET_TTL` (1 h por defecto), actualiza el hash Argon2id y revoca todas las sesiones del usuario; tiene otro limite independiente de 3 intentos/min por IP.
-  - `POST /auth/change-password` — requiere Bearer token, contrasena actual y nueva de 12-128 caracteres, mas el `refreshToken` de la sesion actual; actualiza el hash Argon2id y revoca todas las demas sesiones conservando la actual; limite de 5 intentos/min por usuario.
+  - `POST /auth/change-password` — requiere Bearer token, contrasena actual y nueva de 12-20 caracteres, mas el `refreshToken` de la sesion actual; actualiza el hash Argon2id y revoca todas las demas sesiones conservando la actual; limite de 5 intentos/min por usuario.
 - Los access tokens ya emitidos son stateless y pueden conservar validez hasta `AUTH_TOKEN_TTL`: tras un reset se revocan todos los refresh tokens del usuario y tras un cambio de contrasena se revocan todos menos el de la sesion actual.
 - La entrega usa SMTP con TLS 1.2 minimo y no registra destinatarios, enlaces ni tokens. Desarrollo usa Mailpit; produccion requiere `MAIL_HOST` y `MAIL_FROM`, con `MAIL_USER`/`MAIL_PASSWORD` opcionales pero inseparables.
 - Rutas privadas: `Authorization: Bearer <accessToken>`. `authenticate` recarga el usuario desde la BD y responde 403 si la cuenta fue desactivada, incluso con un JWT aun vigente.
@@ -337,6 +337,14 @@ El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET 
 - `POST /api/v1/classrooms/{id}/availability` y `DELETE /api/v1/classrooms/{id}/availability/{availabilityId}` (solo `ADMIN`) gestionan ventanas semanales; se exige `startTime < endTime` y un solape con otra ventana del mismo día responde `409` (las ventanas adyacentes, como 07:00-12:00 y 12:00-17:00, conviven).
 - Las mutaciones devuelven el detalle completo del aula. La consistencia de reservas se apoya también en la restricción de exclusión `activities_classroom_no_overlap` de PostgreSQL.
 
+### Certificados
+
+- `GET /api/v1/users/me/certificates` (privado) lista los certificados del usuario autenticado, del más reciente al más antiguo. Cada item trae `id`, `code`, `issuedAt` (instante UTC), la actividad (`id`, `name`, `date`, `type`) y el programa de eventos (`id`, `name`).
+- Acepta paginación offset (`page`/`limit`, máximo 50) y filtros `eventProgramId`, `activityId` e `issuedFrom`/`issuedTo` (`YYYY-MM-DD`). El rango de emisión se interpreta en la zona institucional `America/Panama`: `issuedFrom` es inclusivo desde la medianoche del día y `issuedTo` cubre el día completo. `issuedFrom` posterior a `issuedTo` responde `400`.
+- El aislamiento es estructural: la consulta se acota al usuario del token y no hay forma de pedir los certificados de otra persona. Un `userId` en la query responde `400` por clave desconocida. Un filtro sin coincidencias responde `200` con `items: []` y `total: 0`; el listado propio nunca responde `404`. `ADMIN` tampoco lista ajenos por esta ruta: es de alcance propio.
+- La respuesta NO expone `pdfUrl` ni `attendanceId`. El campo de archivo llega con 10.3, cuando exista el endpoint de descarga y el almacenamiento de la Fase 6; hoy el seed escribe rutas placeholder sin archivo detrás.
+- Sin auditoría ni rate limit propio: es una lectura autenticada de datos propios, no una acción administrativa.
+
 ## Observabilidad Y Auditoria
 
 El backend emite logs estructurados (JSON de una linea) a stdout/stderr y registra
@@ -357,17 +365,44 @@ Mutacion sensible -> misma transaccion Prisma -> audit_events (PostgreSQL append
 
 - Cada respuesta incluye `X-Request-ID` (UUID aceptado o generado); usalo para
   correlacionar un acceso con su error en Grafana.
+- El access log registra la **plantilla de ruta** (`/api/v1/careers`, no
+  `/api/v1/careers/42`) y la captura en el instante en que Express hace match,
+  no al final de la respuesta: para toda respuesta que nace dentro de la cadena
+  (401, 403, 429, error de validacion) el router ya se desenrollo y `baseUrl`
+  vuelve a `''`. Sin esa captura, el mismo endpoint aparecia partido en dos
+  series al agregar por ruta. Ver `T10.1a` del plan.
 - Etiquetas Loki: `service`, `environment`, `log_type`, `level` y `container`
   (el nombre del servicio Compose). `requestId`, `event`, `route`, `method`,
   `statusCode`, `actorId`, IDs de recurso, IPs y trace IDs viven en el JSON y en
   structured metadata, nunca como labels. Los contenedores que no son JSON
   (por ejemplo `db`) solo llevan `container`.
 - Retencion: 30 dias para access/aplicacion/infraestructura y 90 dias para
-  `log_type="security"` (produccion); 7 dias en desarrollo.
+  `log_type="security"` (produccion); 7 dias en desarrollo. El selector de tiempo
+  de los paneles llega hasta 90 dias en produccion porque
+  `max_query_length: 2160h` esta alineado con `retention_stream`; sin eso, el
+  default de Loki (`30d1h`) rechazaba la consulta y los 90 dias eran datos no
+  consultables. Acotar el rango sigue siendo lo correcto para investigar.
 - La API funciona aunque Loki este caido: escribe a stdout y el driver `local`
   actua como buffer. La rotacion local (`max-size`/`max-file`) evita agotar disco.
+  Los tres compose declaran `x-logging` y lo aplican a cada servicio con
+  `logging: *logging`: `local`, `max-size: '20m'`, `max-file: '5'`, o sea 100 MB
+  por servicio. Sin eso el driver por defecto (`json-file` sin opciones) no rota
+  nunca y, como Alloy reintenta para siempre, una caida de Loki llenaria el disco.
+  El spool acota el disco pero no garantiza entrega: pasado ese tope se pierden
+  las lineas mas antiguas.
 - No se registran cuerpos, cabeceras `Authorization`/`Cookie`, tokens,
-  contrasenas, hashes, `DATABASE_URL`, queries Prisma ni datos de CV.
+  contrasenas, hashes, `DATABASE_URL`, queries Prisma ni datos de CV. Fuera de
+  produccion el serializador de errores conserva `message` y `stack` para
+  diagnosticar, pero descarta `err.body` y `err.headers`: es lo que
+  `body-parser` adjunta al error de un cuerpo invalido, y el pipeline de
+  desarrollo tambien ingiere esos logs en Loki.
+- Un cuerpo JSON malformado o demasiado grande responde **400** con el sobre
+  estandar (`{"success": false, "message": "Malformed request body.", "errors":
+[]}`) y **no** emite `http.error.unexpected`: es entrada invalida del cliente,
+  no un fallo de la aplicacion. Solo se honra un `status` 4xx entero del error;
+  un 5xx adjunto sigue siendo error inesperado con su log `error`. El mensaje de
+  la respuesta sale de una tabla cerrada por status y nunca del error, para no
+  filtrar nada del cuerpo recibido.
 
 Variables de entorno nuevas (ver `.env.example`):
 
@@ -375,10 +410,15 @@ Variables de entorno nuevas (ver `.env.example`):
   `LOG_SERVICE_NAME` (default `sipeg-utp-backend`) y `APP_VERSION`.
 - `LOG_PSEUDONYMIZATION_KEY` (obligatoria en produccion, minimo 32 caracteres):
   clave HMAC para pseudonimizar email/IP en eventos de seguridad.
+- `GRAFANA_ADMIN_PASSWORD` y `GRAFANA_SECRET_KEY` (obligatorias para levantar el
+  overlay de observabilidad, sin valor por defecto) y `GRAFANA_PORT` (default
+  `3001`, porque la API ya usa `3000` en el host).
 
-`compose.observability.yaml` es un overlay: Loki, `docker-socket-proxy` y Alloy
-(falta Grafana, T9.4). Loki y Alloy viven en su propia red `observability` y
-alcanzan los logs por el socket de Docker, no por la red de la aplicacion.
+`compose.observability.yaml` es un overlay: Loki, `docker-socket-proxy`, Alloy y
+Grafana. Loki y Alloy viven en su propia red `observability` y alcanzan los logs
+por el socket de Docker, no por la red de la aplicacion. Grafana si esta en esa
+red (para consultar a Loki) y es el unico servicio del overlay con puerto
+publicado.
 
 ```bash
 # Desarrollo (retencion de 7 dias):
@@ -393,19 +433,155 @@ docker compose -f compose.prod.yaml -f compose.observability.yaml --env-file .en
   `config.dev.yaml`.
 - El overlay fuerza `LOG_PRETTY=false` en el servicio `api`: `pino-pretty` no es
   JSON y sin JSON no hay etiquetas. En produccion no cambia nada.
-- Grafana quedara en `127.0.0.1` (o detras de un proxy con TLS); Loki y Alloy no
-  publican puertos.
+- Grafana queda en `http://127.0.0.1:3001` (o detras de un proxy con TLS); Loki y
+  Alloy no publican puertos. Se entra como el usuario admin con
+  `GRAFANA_ADMIN_PASSWORD`. El acceso anonimo y el registro de usuarios estan
+  deshabilitados: los logs incluyen eventos `log_type="security"`.
+- La API tambien va atada a `127.0.0.1:3000` en dev y produccion. En desarrollo la
+  alcanza el navegador como `http://localhost:3000`; en produccion el unico
+  cliente previsto es un proxy TLS en el host que **aun no existe**: hoy la API se
+  serviria en HTTP plano. Ver la seccion "Puertos Publicados" de
+  `docs/adr/adr-0007-structured-logging-and-observability.md`, que incluye la
+  condicion `trust proxy: 1` que ese proxy debe respetar.
+- `GRAFANA_ADMIN_PASSWORD` solo se aplica al inicializar un volumen vacio: si el
+  volumen `grafana_data` ya existe, cambiar la variable no cambia la contrasena.
+  `GRAFANA_SECRET_KEY` debe permanecer igual entre reinicios, o se invalidan las
+  sesiones abiertas.
+- El datasource Loki se provisiona por archivo desde
+  `observability/grafana/provisioning/datasources/loki.yaml`, con UID `loki` para
+  que los paneles y las alertas lo referencien de forma estable.
+- Los paneles se provisionan por archivo desde
+  `observability/grafana/provisioning/dashboards/dashboards.yaml`, que apunta a
+  `observability/grafana/dashboards/`. El provider declara la carpeta fija
+  `SIPEG UTP` con `folderUid: sipeg-utp` y `allowUiUpdates: false`: el panel se
+  edita en el repositorio, no en la UI, y el siguiente arranque manda.
+  `updateIntervalSeconds: 30` (no <=10) para que Grafana sondee el directorio en
+  vez de depender de eventos de inotify que un bind mount puede no propagar.
+  Verificado: guardar un panel nuevo aparece en menos de 45 s **sin reiniciar**
+  Grafana.
+  - `API Overview` (UID `sipeg-api-overview`):
+    `http://127.0.0.1:3001/d/sipeg-api-overview/api-overview`. Trae volumen,
+    distribucion por clase de estado, p50/p95 de latencia, rutas mas usadas y
+    requests abortados, con selector de entorno.
+  - `Errors` (UID `sipeg-errors`):
+    `http://127.0.0.1:3001/d/sipeg-errors/errors`. Errores inesperados, 5xx por
+    ruta, ciclo de vida del proceso, dependencias fallidas (Prisma, correo y
+    PostgreSQL) y un buscador por `X-Request-ID`. La bitacora durable de cambios
+    sensibles no se ve aqui: se consulta en `GET /api/v1/audit-events`.
+  - `Security` (UID `sipeg-security`):
+    `http://127.0.0.1:3001/d/sipeg-security/security`. Fallos de login, tokens
+    invalidos, denegaciones 403 (por ruta y por motivo), rate limits por
+    limitador, actores con mas fallos de login, cambios de contrasena y
+    revocacion de sesiones. Los actores aparecen como pseudonimo HMAC.
+  - Los paneles se montan en `/etc/grafana/dashboards`, **fuera** de
+    `/var/lib/grafana`: ese path es el home del volumen `grafana_data` y anidar
+    un bind mount de solo lectura dentro mezclaria configuracion y estado.
+  - La carpeta `SIPEG UTP` se identifica por **titulo**, no por UID. El
+    provisioning de alertas corre antes que el de paneles y su formato v1 solo
+    admite el titulo, de modo que el UID lo genera Grafana; por eso
+    `dashboards.yaml` no declara `folderUid`.
+- Las alertas se provisionan por archivo desde
+  `observability/grafana/provisioning/alerting/rules.yaml`, montado en
+  `/etc/grafana/provisioning/alerting`. Un grupo `sipeg-api` en la misma carpeta
+  `SIPEG UTP`, evaluado cada minuto contra el datasource `loki`:
+
+  | Regla                     | Condicion                                    | `for` | Explicacion                                                           |
+  | ------------------------- | -------------------------------------------- | ----- | --------------------------------------------------------------------- |
+  | `sipeg-fatal`             | `app.fatal` o `app.jwks.failed` > 0 en 5 min | `0s`  | muerte del proceso, o arranque sin JWKS (no se pueden firmar tokens)  |
+  | `sipeg-unexpected-errors` | `http.error.unexpected` > 5 en 5 min         | `0s`  | fallos que la aplicacion no previo                                    |
+  | `sipeg-5xx`               | respuestas 5xx > 10 en 5 min                 | `0s`  | cuenta el access log, incluye los 5xx que no pasan por `errorHandler` |
+  | `sipeg-auth-failures`     | `auth.login.failed` > 20 en 5 min            | `0s`  | intentos de login fallidos                                            |
+  | `sipeg-rate-limits`       | `rate_limit.exceeded` > 30 en 5 min          | `2m`  | ver la nota de umbral                                                 |
+  - Umbral de rate limits **30 y no 10**, con `for: 2m`: los limitadores por IP
+    (30/min en login y registro) se agrupan por IP, y detras de un proxy todos
+    los clientes comparten una mientras ese proxy no envie `X-Forwarded-For` de
+    forma fiable. Con 10, la alerta quedaria permanentemente disparada en ese
+    escenario. **Recalibrar en cuanto exista el proxy TLS** (seccion "Puertos
+    Publicados" del ADR-0007).
+  - `noDataState: OK` y `execErrState: Alerting`: un vector vacio se convierte en
+    `0` con `or vector(0)` (cero eventos es correcto), pero **una consulta que
+    falla no puede leerse como "todo bien"**: con Loki caido las cinco reglas
+    pasan a Alerting.
+  - **No hay contact point.** Las alertas se evalúan y se ven en
+    `http://127.0.0.1:GRAFANA_PORT/alerting/list`, pero no notifican a nadie.
+    Anadir entrega (SMTP) es una fase aparte.
+  - **A diferencia de los paneles, las alertas no se releen por sondeo.** Editar
+    `rules.yaml` exige recrear el contenedor
+    (`docker compose -f compose.dev.yaml -f compose.observability.yaml up -d
+--force-recreate grafana`) y revisar `docker compose logs grafana` en busca
+    de `finished to provision alerting`. Con `provenance: file` tampoco se
+    editan desde la UI.
+  - `GET /api/v1/provisioning/alert-rules` **no devuelve** `dashboardUid` ni
+    `panelId` aunque esten aplicados; para verlos hay que usar
+    `GET /api/v1/provisioning/alert-rules/export`.
+
+#### Verificar el stack de observabilidad
+
+```bash
+pnpm run observability:check                    # ventana de 15 min
+pnpm run observability:check -- --window 2     # ventana corta
+pnpm run observability:check -- --url http://127.0.0.1:3001
+```
+
+Habla con la **UI de Grafana** (no con Loki, que no publica puerto) usando
+`GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`. Imprime `PASS`/`FAIL`/`INFO` por
+comprobacion, el remedio de cada fallo y sale con codigo 1 si hay alguno. **Solo
+informa: no recrea nada.** 13 comprobaciones:
+
+| Comprobacion             | Que afirma                                                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `datasource.health`      | el datasource Loki responde `OK`                                                                                 |
+| `alerts.group`           | un unico grupo `sipeg-api`, en la carpeta por titulo y evaluado cada `1m`                                        |
+| `alerts.rules`           | las 5 reglas esperadas estan y no hay duplicadas                                                                 |
+| `alerts.condition`       | cada `condition` apunta a un `refId` declarado                                                                   |
+| `alerts.threshold-ref`   | ninguna etapa de umbral se referencia a si misma (el defecto que dejo passar en silencio el primer `rules.yaml`) |
+| `alerts.threshold-value` | los cinco umbrales son los declarados: cambiarlos a proposito obliga a actualizar tambien el verificador         |
+| `alerts.query`           | consultas instantaneas contra `loki` y con `or vector(0)`, que es lo que evita el estado `NoData`                |
+| `alerts.states`          | `noDataState: OK`, `execErrState: Alerting` y los cinco `for`                                                    |
+| `alerts.panel-link`      | cada regla enlaza al panel que la explica (**leido del export**, no del listado de reglas)                       |
+| `rules.health`           | las 5 evaluan con salud `ok`                                                                                     |
+| `rules.state`            | cuantas estan `inactive`/`pending`/`alerting` (**INFO**: que una dispare no es un fallo)                         |
+| `ingest.json-labels`     | la cadena JSON -> Alloy -> Loki esta viva: ningun stream de `api` llega sin la etiqueta `service`                |
+| `dashboards.folder`      | los tres paneles comparten carpeta con las alertas                                                               |
+
+- **`ingest.json-labels` es la que detecta el fallo silencioso del overlay.** Si
+  el servicio `api` se levanta sin
+  `compose.observability.yaml` corre con `LOG_PRETTY=true`, sus logs no son JSON
+  y llegan a Loki sin ninguna etiqueta: los servicios estan arriba, el
+  healthcheck en verde y la observabilidad no funciona. El sintoma es un stream
+  del contenedor `api` con la etiqueta `container` y nada mas.
+- La comprobacion mira una **ventana**, no todo el historico: streams sin
+  `service` de hace dias no producen fallos permanentes, y despues de arreglar la
+  causa sigue en rojo hasta que la ventana deja de abarcar las lineas viejas
+  (`--window 2` acorta la espera). Sin trafico en la ventana es `INFO`, no fallo.
+- Editar `rules.yaml` **exige recrear Grafana antes de correr esto**: el
+  verificador lee el estado ya aplicado, asi que comprueba lo que esta corriendo,
+  no lo que dice el archivo.
+
 - En Grafana, la consulta base en Loki es
   `{service="sipeg-utp-backend", environment="production"}` y la busqueda por
   peticion es `{service="sipeg-utp-backend"} |= "<X-Request-ID>"`, o el filtro
   indexado `| requestId="<X-Request-ID>"` (structured metadata).
+- `route`, `method` y `statusCode` son **structured metadata**, asi que se pueden
+  filtrar y agrupar con `| route="/api/v1/careers"` y `sum by (route) (...)`
+  sin `| json`. `| json` solo hace falta para campos que Alloy no promueve
+  (hoy `aborted`). Ojo: structured metadata no va en el selector de stream
+  (`{service="...", route="..."}` devuelve vacio); va siempre como filtro tras la
+  llave, o se agrupa con `by`.
+- `event` y `requestId` tambien son structured metadata. `| requestId="<uuid>"`
+  devuelve **todas** las lineas de esa peticion (acceso, error y seguridad), que
+  es como se correlaciona un 5xx con su causa. Para filtrar por expression,
+  `| requestId=~"<regex>"`.
+- `log_type` si es una etiqueta real (`access`, `application`, `security`,
+  `infrastructure`) y va **dentro** del selector de stream. `logType` es el
+  nombre del campo en el JSON y no se puede filtrar.
 - Acceso al Docker socket mediante `docker-socket-proxy` de solo lectura, nunca
   montando `/var/run/docker.sock` directamente en Alloy. `POST=0` deja pasar solo
   `GET`/`HEAD`; `NETWORKS=1` es necesario porque Alloy lista redes para resolver
   los nombres de red de cada contenedor.
 - `docker compose ... down` sobre el proyecto combinado tambien baja la aplicacion
   y borra sus volumenes: para retirar solo el stack de observabilidad, usa
-  `docker compose -f compose.dev.yaml -f compose.observability.yaml rm -sf loki alloy docker-socket-proxy`
+  `docker compose -f compose.dev.yaml -f compose.observability.yaml rm -sf loki alloy grafana docker-socket-proxy`
   (o `stop`).
 
 ### Auditoria
@@ -515,6 +691,7 @@ src/
 |   |-- activities/
 |   |-- auth/
 |   |-- authorization/
+|   |-- certificates/
 |   |-- event-programs/
 |   |-- health/
 |   `-- users/
