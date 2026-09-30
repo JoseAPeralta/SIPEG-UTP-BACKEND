@@ -100,6 +100,53 @@ Crear una bitacora durable append-only en PostgreSQL, separada de los logs:
     la respuesta del proveedor: auditar un alta que no llego a la base dejaria un
     evento sin sujeto real.
 
+### Retención Y Purga (ratificado 2026-09-30, T13)
+
+- **Retención: 365 días.** Es una **decisión institucional, no un dato técnico**, y
+  por eso vive aquí y no en el código. Aplica **solo** a `audit_events`: los logs
+  de Loki tienen su propia ventana (30 días global, 90 para
+  `log_type="security"`, ADR-0007) y no se ven afectados. Mientras no exista una
+  normativa que la sustituya, 365 días es la política vigente.
+- **Sin migración.** El corte se calcula sobre `occurred_at`, que ya está
+  indexado, así que cambiar la política es cambiar un número. Se descartó añadir
+  una columna `retention_expires_at`: costaría una migración y una columna en
+  cada escritura para comprar una flexibilidad que hoy no se usa.
+- **El corte es un instante en UTC.** `occurred_at` es `Timestamptz` y ADR-0002
+  limita `src/utils/date.ts` a las fechas de calendario de negocio. Una ventana de
+  retención es un instante, no un día hábil.
+- **Purga manual, por lotes transaccionales.** Vive en
+  `prisma/scripts/purge-audit-events.ts` (`pnpm run prisma:purge:audit`) y la
+  ejecuta un operador con acceso a la base. No hay endpoint HTTP: la bitácora
+  sigue siendo de solo lectura, y exponer una operación que destruye evidencia
+  contradiría esa decisión. Tampoco hay `pg_cron`: automatizar el borrado con el
+  rol de la aplicación haría que un error de configuración eliminara evidencia sin
+  que nadie lo revisara.
+  Cada lote abre su transacción, deshabilita los dos triggers, borra y los
+  rehabilita en `finally`. **Los triggers nunca quedan abiertos entre
+  transacciones**, de modo que un proceso que muera a la mitad deja la tabla igual
+  de inmutable. Es el mismo patrón que `activities_prevent_delete` y
+  `event_programs_prevent_delete` ya exigen en los scripts de limpieza.
+- **Se respalda antes de borrar.** Las filas exactas que se eliminan se vuelcan a
+  un NDJSON comprimido con `node:zlib`, sin dependencia nueva. `--archive` es
+  obligatorio en modo destructivo y **se rechaza si apunta dentro del proyecto**:
+  un respaldo de auditoría dentro del repo acabaría en un commit.
+- **La purga deja huella en la propia bitácora.** Escribe un evento
+  `audit.purged` (`actorType: SYSTEM`, `resourceType: audit_log`) **después** de
+  rehabilitar los triggers, para que la fila sea legítima. Sin esto, una
+  intervención sobre el histórico no sería detectable desde el histórico: el log
+  del contenedor vive 90 días y no es evidencia.
+- **`--operator` no puede ser un correo.** El valor pasa por el mismo validador que
+  cualquier otro de la bitácora, que rechaza la arroba y lo que parezca un
+  secreto. No es rigidez del formulario: es lo que impide que una dirección de
+  correo acabe en la bitácora durable. Debe usarse un identificador
+  institucional.
+
+**Lo que esta política NO cubre.** El borrado por antigüedad de los logs de Loki
+no lo aplica este procedimiento: lo hace el compactor según
+`retention_period` y `retention_stream`. En desarrollo **el borrado de Loki no es
+verificable** (T12.4), porque `reject_old_samples_max_age` (1 semana) rechaza
+antes de que la ventana de 168 h pueda expirar nada.
+
 ## Consequences
 
 ### Positive

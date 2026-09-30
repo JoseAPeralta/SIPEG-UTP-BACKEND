@@ -117,6 +117,7 @@ Luego restaura `backup.sql` en el nuevo volumen antes de levantar la API. El nom
 - `pnpm run prisma:seed`: siembra el catalogo de permisos y los datos de prueba completos (solo desarrollo; idempotente).
 - `pnpm run prisma:seed:base`: siembra el catalogo base de produccion (unidades, programas predeterminados, carreras, aulas y permisos) y el ADMIN inicial; crea solo lo que falta.
 - `pnpm run prisma:cleanup:dev`: purga los residuos de actividades que dejan las corridas de Bruno y las verificaciones. Ver `docs/er-diagram/ER-design-justification.md` seccion 4.4 para por que hace falta deshabilitar triggers.
+- `pnpm run prisma:purge:audit`: purga los eventos de `audit_events` que superan la retencion de 365 dias. Procedimiento manual y auditado; ver "Purgar auditoria por antiguedad" mas abajo.
 
 ### Purgar residuos de desarrollo
 
@@ -138,6 +139,32 @@ Reglas de seguridad que aplica:
 - **Triggers siempre rehabilitados.** El borrado deshabilita `activities_prevent_delete` y `event_programs_prevent_delete` dentro de una transaccion y los vuelve a habilitar en el `finally`, incluso si el borrado falla.
 
 El patron acepta sintaxis `LIKE` de PostgreSQL, con `%` y `_`.
+
+### Purgar auditoria por antiguedad
+
+`audit_events` es append-only: los triggers `audit_events_prevent_mutation` y `audit_events_prevent_truncate` rechazan cualquier `UPDATE`, `DELETE` o `TRUNCATE`, incluso por SQL directo. La retencion ratificada es de **365 dias** (ADR-0008) y se aplica con un procedimiento manual, nunca automatico:
+
+```bash
+# Simulacion: imprime conteos y rango, no escribe nada
+pnpm run prisma:purge:audit
+
+# Purga real: exige respaldo y atribucion
+pnpm run prisma:purge:audit -- --apply \
+  --operator=sistemas \
+  --archive=/var/backups/sipeg/audit-2026-09-30.ndjson.gz
+```
+
+Reglas de seguridad que aplica:
+
+- **Simulacion por defecto.** Sin `--apply` no escribe nada.
+- **El respaldo no es opcional.** `--apply` exige `--archive`, y la ruta se rechaza si cae dentro del proyecto: un respaldo de auditoria en el repo acabaria en un commit. El archivo es un NDJSON comprimido con las filas exactas que se eliminan.
+- **La purga es atribuible.** `--apply` exige `--operator`, y **no puede ser un correo**: el validador de la bitacora prohibe la arroba. Usa un identificador institucional.
+- **Por lotes transaccionales.** Cada lote abre su transaccion, deshabilita ambos triggers, borra y los rehabilita en el `finally`. Los triggers nunca quedan abiertos entre transacciones, asi que una interrupcion a la mitad deja la tabla igual de inmutable.
+- **La purga deja huella.** Escribe un evento `audit.purged` con el operador, el conteo y el corte, **despues** de rehabilitar los triggers. Sin eso, una intervencion sobre el historico no seria detectable desde el historico.
+- **Corte en UTC.** El corte se calcula sobre `occurred_at`, que es `Timestamptz`. No pasa por `src/utils/date.ts`, que es para fechas de calendario de negocio.
+- **Flags disponibles:** `--retention-days` (por defecto 365), `--batch-size` (por defecto 10000).
+
+Ejecutalo con la misma `DATABASE_URL` que la aplicacion. **No hay endpoint HTTP** para purgar: la bitacora es de solo lectura, y exponer una operacion que destruye evidencia lo contradiria.
 
 ## API Inicial
 
@@ -597,8 +624,11 @@ informa: no recrea nada.** 13 comprobaciones:
 - Los campos internos `grantedById`/`grantedAt` siguen sin exponerse en HTTP
   (ver `docs/adr/adr-0001-time-aware-collaboration-authorization.md`); la
   bitacora durable es la fuente de historial.
-- Retencion base propuesta: 365 dias, pendiente de ratificacion institucional. No
-  se automatiza la purga hasta entonces.
+- Retencion ratificada: **365 dias** (ADR-0008, seccion _Retencion Y Purga_). Es
+  una decision institucional, no un dato tecnico. La purga es **manual** con
+  `pnpm run prisma:purge:audit` y queda registrada como `audit.purged` en la propia
+  bitacora. No se automatiza: hacerlo con el rol de la aplicacion permitiria que un
+  error de configuracion eliminara evidencia sin revision.
 
 ## Datos De Prueba (Seed)
 
