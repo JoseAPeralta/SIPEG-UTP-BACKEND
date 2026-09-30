@@ -29,6 +29,14 @@ const REDACT_PATHS = [
   '*.refreshToken',
 ];
 
+/**
+ * Propiedades que `body-parser` y `http-errors` adjuntan al error y que nunca
+ * deben aterrizar en un log: `body` es el cuerpo crudo de la peticion y
+ * `headers` puede traer `authorization` o `cookie`. `redact` no las cubre porque
+ * sus rutas asumen `req.headers.*`, no `err.headers.*`.
+ */
+const ERROR_PAYLOAD_PROPERTIES = ['body', 'headers'] as const;
+
 export async function createLogger(options: CreateLoggerOptions): Promise<Logger> {
   const loggerOptions: LoggerOptions = {
     level: options.level,
@@ -55,6 +63,12 @@ export async function createLogger(options: CreateLoggerOptions): Promise<Logger
         const serialized = stdSerializers.err(error);
         if (options.environment === 'production') {
           return { type: serialized.type };
+        }
+        // Fuera de produccion se conserva `message` y `stack` para diagnosticar,
+        // pero no la carga util de la peticion. El pipeline de desarrollo tambien
+        // ingiere estos logs en Loki, asi que la exclusion no es solo local.
+        for (const property of ERROR_PAYLOAD_PROPERTIES) {
+          delete serialized[property];
         }
         return serialized;
       },

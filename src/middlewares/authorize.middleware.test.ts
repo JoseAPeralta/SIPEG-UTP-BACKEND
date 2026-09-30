@@ -279,6 +279,26 @@ describe('requirePermission middleware', () => {
 
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
+    // Sin este log el 403 solo era visible en el access log, sin motivo: el panel
+    // de seguridad no podia explicar por que se denego.
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'authorization.denied',
+        logType: 'security',
+        actorPseudonym: expect.any(String),
+        requiredPermission: 'report:view',
+      }),
+    );
+    expect(loggerWarn).toHaveBeenCalledWith('authorization.denied');
+    // El scope no se pudo resolver, asi que sus ids no se conocen: emitirlos
+    // seria inventarlos.
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.not.objectContaining({ eventProgramId: expect.anything() }),
+    );
+    expect(createRequestLoggerSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ activityId: expect.anything() }),
+    );
+    expect(service.getEffectivePermissions).not.toHaveBeenCalled();
   });
 
   it('requires an authenticated user', async () => {

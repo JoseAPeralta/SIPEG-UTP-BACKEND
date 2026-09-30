@@ -133,6 +133,25 @@ describe('logger', () => {
     });
   });
 
+  it('drops the request body and headers an http error carries outside production', async () => {
+    await withLogger('development', (log, output) => {
+      const error = Object.assign(new SyntaxError('Unexpected token } in JSON'), {
+        status: 400,
+        body: '{"email":"admin@sipeg.local","password":"hunter2"}',
+        headers: { authorization: 'Bearer secret' },
+      });
+      log.error(error, 'unexpected');
+      const parsed = JSON.parse(output().trim());
+      expect(parsed.err.body).toBeUndefined();
+      expect(parsed.err.headers).toBeUndefined();
+      expect(output()).not.toContain('hunter2');
+      expect(output()).not.toContain('Bearer secret');
+      // El resto del error sigue siendo util para diagnosticar.
+      expect(parsed.err.message).toBe('Unexpected token } in JSON');
+      expect(parsed.err.status).toBe(400);
+    });
+  });
+
   it('exposes requestId via createChildLogger', async () => {
     const { stream, output } = createMemoryStream();
     const log = await createLogger({
