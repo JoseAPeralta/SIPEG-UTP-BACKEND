@@ -1,0 +1,70 @@
+meta {
+  name: List my certificates
+  type: http
+  seq: 2
+  tags: [
+    Certificates
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/certificates?page=1&limit=20
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+script:post-response {
+  const data = res.getBody()?.data;
+
+  if (data) {
+    bru.setVar("myCertificateCount", data.total);
+  }
+}
+
+tests {
+  test("the student sees their own certificates, most recent first", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.page).to.equal(1);
+    expect(body.data.limit).to.equal(20);
+    expect(body.data.total).to.be.at.least(3);
+    expect(body.data.totalPages).to.be.at.least(1);
+    expect(body.data.items.length).to.be.at.least(3);
+  });
+
+  test("each item carries the certificate, its activity and its program", function () {
+    const first = res.getBody().data.items[0];
+    expect(first.id).to.be.a("string");
+    expect(first.code).to.be.a("string");
+    expect(first.issuedAt).to.be.a("string");
+    expect(first.activity.id).to.be.a("string");
+    expect(first.activity.name).to.be.a("string");
+    expect(first.activity.date).to.match(/^\d{4}-\d{2}-\d{2}$/);
+    expect(first.activity.type).to.be.a("string");
+    expect(first.eventProgram.id).to.be.a("string");
+    expect(first.eventProgram.name).to.be.a("string");
+  });
+
+  test("the ordering is descending by issuance", function () {
+    const issued = res
+      .getBody()
+      .data.items.map(function (item) {
+        return Date.parse(item.issuedAt);
+      });
+
+    for (let index = 1; index < issued.length; index += 1) {
+      expect(issued[index - 1] >= issued[index]).to.equal(true);
+    }
+  });
+
+  test("the listing does not expose storage or attendance internals", function () {
+    const serialized = JSON.stringify(res.getBody());
+    expect(serialized).to.not.include("pdfUrl");
+    expect(serialized).to.not.include("attendanceId");
+  });
+}

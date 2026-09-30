@@ -5,6 +5,7 @@ import { auditPaths } from '../modules/audit/audit.openapi.js';
 import { authPaths } from '../modules/auth/auth.openapi.js';
 import { authorizationPaths } from '../modules/authorization/authorization.openapi.js';
 import { careersPaths } from '../modules/careers/careers.openapi.js';
+import { certificatesPaths } from '../modules/certificates/certificates.openapi.js';
 import { classroomsPaths } from '../modules/classrooms/classrooms.openapi.js';
 import { eventProgramsPaths } from '../modules/event-programs/event-programs.openapi.js';
 import { organizationalUnitsPaths } from '../modules/organizational-units/organizational-units.openapi.js';
@@ -33,6 +34,7 @@ const document: ZodOpenApiObject = {
     },
     { name: 'Organizational Units', description: 'Organizational unit catalog and lifecycle.' },
     { name: 'Careers', description: 'Career catalog management.' },
+    { name: 'Certificates', description: 'Certificates issued to the authenticated user.' },
     { name: 'Classrooms', description: 'Classroom catalog, amenities and availability.' },
     { name: 'Audit', description: 'Read-only access to the durable audit log.' },
     { name: 'Health', description: 'Service health.' },
@@ -45,6 +47,7 @@ const document: ZodOpenApiObject = {
     ...eventProgramsPaths,
     ...organizationalUnitsPaths,
     ...careersPaths,
+    ...certificatesPaths,
     ...classroomsPaths,
     ...auditPaths,
     ...healthPaths,

@@ -1,0 +1,34 @@
+meta {
+  name: List my certificates with pagination
+  type: http
+  seq: 6
+  tags: [
+    Certificates
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/certificates?page=1&limit=1
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the page returns exactly one item and reports the whole total", function () {
+    expect(res.getStatus()).to.equal(200);
+    const data = res.getBody().data;
+    expect(data.page).to.equal(1);
+    expect(data.limit).to.equal(1);
+    expect(data.items.length).to.equal(1);
+    expect(data.total).to.equal(bru.getVar("myCertificateCount"));
+  });
+
+  test("totalPages matches the total for the requested limit", function () {
+    const data = res.getBody().data;
+    expect(data.totalPages).to.equal(Math.ceil(data.total / data.limit));
+  });
+}
