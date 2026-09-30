@@ -804,6 +804,9 @@ Pendientes accionables al cierre de la fase:
 | 8   | Exportacion Excel/PDF dentro del alcance            | 11   | Confirmar antes de agregar dependencias                    |
 | 9   | Unificar ubicacion de controllers/routes            | 0    | Migrar gradualmente a modulos autocontenidos               |
 | 10  | Bootstrap del primer ADMIN en produccion            | 2    | Resuelto: seed base `ensure` con `SEED_ADMIN_*` (ADR-0005) |
+| 11  | Modelo de despliegue: topologia, proxy TLS y dominios | 12   | Un host con proxy inverso y subdominios del mismo dominio registrable; detalle en `docs/despliegue.md` |
+| 12  | `AUTH_REFRESH_COOKIE_SAME_SITE` derivada de la topologia | 12   | `lax` si API y frontend comparten dominio registrable; `none` exige HTTPS real (`docs/despliegue.md`) |
+| 13  | Saltos de proxy delante de la API                      | 12   | Exactamente 1: `trust proxy = 1` esta fijo y de el depende `req.ip` en los limitadores (ADR-0007) |
 
 ## Orden resumido
 
