@@ -45,6 +45,10 @@
       "description": "Career catalog management."
     },
     {
+      "name": "Certificates",
+      "description": "Certificates issued to the authenticated user."
+    },
+    {
       "name": "Classrooms",
       "description": "Classroom catalog, amenities and availability."
     },
@@ -185,7 +189,7 @@
                   "password": {
                     "type": "string",
                     "minLength": 12,
-                    "maxLength": 128
+                    "maxLength": 20
                   },
                   "firstName": {
                     "type": "string",
@@ -634,7 +638,7 @@
                   "newPassword": {
                     "type": "string",
                     "minLength": 12,
-                    "maxLength": 128
+                    "maxLength": 20
                   }
                 },
                 "required": [
@@ -724,7 +728,7 @@
                   "newPassword": {
                     "type": "string",
                     "minLength": 12,
-                    "maxLength": 128
+                    "maxLength": 20
                   },
                   "refreshToken": {
                     "type": "string",
@@ -6045,6 +6049,130 @@
         }
       }
     },
+    "/api/v1/users/me/certificates": {
+      "get": {
+        "tags": [
+          "Certificates"
+        ],
+        "summary": "List my certificates",
+        "description": "Paginated list of the certificates issued to the authenticated user, most recently issued first. Each item carries the certificate code, its issuance instant and the activity and event program it attests. Storage paths and attendance internals are not exposed, because certificate download does not exist yet. Supports filters by event program, activity and an issuance date range interpreted in the institutional calendar (America/Panama).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "eventProgramId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "activityId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "issuedFrom",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "issuedTo",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of own certificates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaginatedMyCertificates"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/classrooms": {
       "get": {
         "tags": [
@@ -7048,7 +7176,10 @@
                 "classroom.amenity_added",
                 "classroom.amenity_removed",
                 "classroom.availability_added",
-                "classroom.availability_removed"
+                "classroom.availability_removed",
+                "user.registered",
+                "auth.email_verified",
+                "auth.password_reset"
               ]
             }
           },
@@ -7264,7 +7395,7 @@
           "password": {
             "type": "string",
             "minLength": 12,
-            "maxLength": 128
+            "maxLength": 20
           },
           "firstName": {
             "type": "string",
@@ -9209,6 +9340,134 @@
         ],
         "additionalProperties": false,
         "description": "Minimal reference to the organizational unit that owns a career."
+      },
+      "PaginatedMyCertificates": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CertificateSummary"
+            },
+            "description": "Certificates, most recently issued first."
+          },
+          "page": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total",
+          "totalPages"
+        ],
+        "additionalProperties": false,
+        "description": "Paginated list of the authenticated user certificates, ordered by issuedAt descending."
+      },
+      "CertificateSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Certificate identifier."
+          },
+          "code": {
+            "type": "string",
+            "description": "Unique certificate code shown on the document."
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "description": "Instant of issuance, in UTC."
+          },
+          "activity": {
+            "$ref": "#/components/schemas/CertificateActivity"
+          },
+          "eventProgram": {
+            "$ref": "#/components/schemas/CertificateEventProgram"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "issuedAt",
+          "activity",
+          "eventProgram"
+        ],
+        "additionalProperties": false,
+        "description": "Certificate owned by the authenticated user. Storage paths and attendance internals are not exposed."
+      },
+      "CertificateActivity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "description": "Institutional date in YYYY-MM-DD format."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "WORKSHOP",
+              "SEMINAR",
+              "TALK",
+              "CONFERENCE",
+              "PANEL",
+              "COURSE",
+              "COMPETITION",
+              "OTHER"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "date",
+          "type"
+        ],
+        "additionalProperties": false,
+        "description": "Activity the certificate attests."
+      },
+      "CertificateEventProgram": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false,
+        "description": "Event program that owns the activity the certificate attests."
       },
       "PaginatedClassrooms": {
         "type": "object",
