@@ -40,6 +40,10 @@ export const AUDIT_ACTIONS = [
   'classroom.amenity_removed',
   'classroom.availability_added',
   'classroom.availability_removed',
+  'user.registered',
+  'auth.email_verified',
+  'auth.password_reset',
+  'audit.purged',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -61,6 +65,7 @@ export const AUDIT_RESOURCE_TYPES = [
   'activity',
   'classroom',
   'career',
+  'audit_log',
 ] as const;
 
 export type AuditResourceType = (typeof AUDIT_RESOURCE_TYPES)[number];
@@ -164,6 +169,10 @@ export const AUDIT_ALLOWED_METADATA_KEYS = [
   'hasPeriod',
   'hasLabel',
   'changedFields',
+  'purgedRowCount',
+  'retentionDays',
+  'cutoff',
+  'operator',
 ] as const;
 
 const allowedMetadataKeys = new Set<string>(AUDIT_ALLOWED_METADATA_KEYS);

@@ -1,7 +1,7 @@
 import type { RequestHandler } from 'express';
 
 import { getPrismaClient } from '../config/prisma.js';
-import { logger } from '../config/logger.js';
+import { createRequestLogger } from '../config/logger.js';
 import { pseudonymize } from '../utils/pseudonymize.js';
 import { ApiError } from '../utils/ApiError.js';
 import { getJwtVerifier } from '../utils/jwt-verifier.js';
@@ -57,7 +57,9 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
     try {
       payload = await verifier.verify(token);
     } catch {
-      logger.warn({ event: 'auth.token.invalid' }, 'auth.token.invalid');
+      createRequestLogger({ event: 'auth.token.invalid', logType: 'security' }).warn(
+        'auth.token.invalid',
+      );
       throw new ApiError(401, 'Invalid or expired token.');
     }
 
@@ -66,10 +68,11 @@ export const authenticate: RequestHandler = async (req, _res, next) => {
       req.user = user;
     } catch (error) {
       if (error instanceof ApiError && error.statusCode === 403) {
-        logger.warn(
-          { event: 'auth.account.disabled', actorPseudonym: pseudonymize(payload.sub) },
-          'auth.account.disabled',
-        );
+        createRequestLogger({
+          event: 'auth.account.disabled',
+          logType: 'security',
+          actorPseudonym: pseudonymize(payload.sub),
+        }).warn('auth.account.disabled');
       }
       throw error;
     }

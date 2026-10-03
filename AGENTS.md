@@ -138,7 +138,7 @@ prisma/
 `-- seed.base.ts     # seed base de produccion
 ```
 
-> Estado actual: modulos `auth`, `authorization`, `users`, `event-programs`, `activities` y `health` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
+> Estado actual: modulos `auth`, `authorization`, `users`, `event-programs`, `activities`, `certificates` y `health` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
 
 Rules:
 
@@ -299,7 +299,7 @@ For errors:
 - `GET /api/v1/users/me/permissions?scope=program|activity&id=` expone los permisos efectivos propios con su envelope temporal y `origin` (`LOCAL`/`INHERITED`/`BOTH`).
 - Los listados de colaboradores exponen permisos efectivos con `origin` (`LOCAL`/`INHERITED`/`BOTH`), envelope fusionado y `effective: true`; los grants vencidos o futuros se omiten y `source` refleja la clase del grant activo (`OVERRIDE` local manda sobre `ROLE_DEFAULT`). Las respuestas de mutacion mantienen el `Collaborator` con grants locales.
 
-- Passwords: 12-128 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
+- Passwords: 12-20 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
 - **No devolver** password hashes, hashes Argon2, tokens internos, ni `name` (campo interno de Better Auth).
 - **No loguear** tokens, headers `Authorization`, passwords ni env vars con secretos.
 - En startup, `ensureJwks()` se asegura de que la tabla `jwks` tenga al menos una fila para firmar access tokens.
@@ -373,7 +373,7 @@ For errors:
 
 - Use the `multi-stage-dockerfile` skill when adding or changing Dockerfiles.
 - Use multi-stage builds: dependencies, build/test, then minimal runtime.
-- Pin base image versions instead of using floating tags.
+- Pin base image versions instead of using floating tags. In Compose files pin third-party images as `repo:tag@sha256:digest`, never `latest`; the table of images and its single exception (the locally built API image, which requires `IMAGE_TAG`) lives in `docs/adr/adr-0007-structured-logging-and-observability.md`.
 - Use a non-root runtime user.
 - Copy only required runtime artifacts.
 - Add `.dockerignore` when adding Docker support.

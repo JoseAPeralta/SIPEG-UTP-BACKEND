@@ -3,11 +3,20 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../utils/ApiError.js';
 
-const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
+const { loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+  const loggerWarn = vi.fn();
+  const createRequestLoggerSpy = vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: loggerWarn,
+  }));
+  return { loggerWarn, createRequestLoggerSpy };
+});
 
 vi.mock('../config/logger.js', () => ({
   logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
   createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+  createRequestLogger: createRequestLoggerSpy,
 }));
 
 const buildReq = (overrides: Partial<Request> = {}): Request =>
@@ -46,12 +55,17 @@ describe('rate limit middleware', () => {
     });
     const next = vi.fn();
     middleware(buildReq({ body: { email: 'user@example.com' }, ip: '1.2.3.4' }), buildRes(), next);
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'rate_limit.exceeded', limiter: 'login.email' }),
-      'rate_limit.exceeded',
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'rate_limit.exceeded',
+        logType: 'security',
+        limiter: 'login.email',
+      }),
     );
-    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('user@example.com');
-    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('1.2.3.4');
+    expect(loggerWarn).toHaveBeenCalledWith('rate_limit.exceeded');
+    const bindings = JSON.stringify(createRequestLoggerSpy.mock.calls);
+    expect(bindings).not.toContain('user@example.com');
+    expect(bindings).not.toContain('1.2.3.4');
   });
 
   it('prefers user id over ip when authenticated', async () => {
@@ -168,5 +182,86 @@ describe('rate limit middleware', () => {
 
     expect(seenMax).toEqual([30]);
     expect((next.mock.calls[0]?.[0] as ApiError | undefined)?.statusCode).toBe(429);
+  });
+
+  it('keys the refresh limiter by session so two tabs do not share a bucket', async () => {
+    vi.resetModules();
+    const keys: string[] = [];
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(
+        ({ keyGenerator, limit }) =>
+          (req: Request, _res: Response, next: (error?: unknown) => void) => {
+            keys.push(keyGenerator(req));
+            void limit;
+            next();
+          },
+      ),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { refreshRateLimit } = await import('./rateLimit.middleware.js');
+
+    const withCookie = (token: string) =>
+      buildReq({ cookies: { 'sipeg-refresh': token } } as unknown as Partial<Request>);
+
+    refreshRateLimit(withCookie('token-a'), buildRes(), vi.fn());
+    refreshRateLimit(withCookie('token-b'), buildRes(), vi.fn());
+    refreshRateLimit(withCookie('token-a'), buildRes(), vi.fn());
+
+    // La misma sesion cae en la misma clave; otra sesion, en otra. Asi cinco
+    // usuarios no comparten un cubo de cinco rotaciones por minuto.
+    expect(keys).toHaveLength(3);
+    expect(keys[0]).toBe(keys[2]);
+    expect(keys[0]).not.toBe(keys[1]);
+  });
+
+  it('never puts the raw refresh token in the limiter key', async () => {
+    vi.resetModules();
+    const keys: string[] = [];
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(
+        ({ keyGenerator }) =>
+          (req: Request, _res: Response, next: (error?: unknown) => void) => {
+            keys.push(keyGenerator(req));
+            next();
+          },
+      ),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { refreshRateLimit } = await import('./rateLimit.middleware.js');
+
+    refreshRateLimit(
+      buildReq({
+        cookies: { 'sipeg-refresh': 'token-ultra-secreto' },
+      } as unknown as Partial<Request>),
+      buildRes(),
+      vi.fn(),
+    );
+
+    // La clave vive en memoria del limiter y puede acabar en un volcado: se
+    // hashea para que la credencial no sea recuperable desde ahi.
+    expect(keys[0]).not.toContain('ultra-secreto');
+    expect(keys[0]).toMatch(/^session:[0-9a-f]{32}$/);
+  });
+
+  it('falls back to the IP when the refresh arrives without a cookie', async () => {
+    vi.resetModules();
+    const keys: string[] = [];
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn(
+        ({ keyGenerator }) =>
+          (req: Request, _res: Response, next: (error?: unknown) => void) => {
+            keys.push(keyGenerator(req));
+            next();
+          },
+      ),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { refreshRateLimit } = await import('./rateLimit.middleware.js');
+
+    refreshRateLimit(buildReq(), buildRes(), vi.fn());
+
+    // Sin cookie no hay sesion que usar como clave, pero una peticion anonima
+    // tampoco debe desaparecer del control de tasa.
+    expect(keys[0]).toBe('none:127.0.0.1');
   });
 });

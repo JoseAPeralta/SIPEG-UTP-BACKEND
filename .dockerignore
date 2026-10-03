@@ -33,6 +33,7 @@ docs
 CONTEXT.md
 AGENTS.md
 README.md
+observability
 skills-lock.json
 eslint.config.js
 prettier.config.js

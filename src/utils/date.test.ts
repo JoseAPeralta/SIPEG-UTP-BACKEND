@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getInstitutionalDateKey,
   getInstitutionalDayOfWeek,
+  getInstitutionalDayRange,
   INSTITUTIONAL_TIME_ZONE,
   startOfInstitutionalDay,
 } from './date.js';
@@ -47,5 +48,34 @@ describe('getInstitutionalDayOfWeek', () => {
 
   it('resolves dates independently from the process time zone', () => {
     expect(getInstitutionalDayOfWeek('2026-01-01')).toBe(4);
+  });
+});
+
+describe('getInstitutionalDayRange', () => {
+  it('resolves the institutional midnight of the requested day', () => {
+    const { start, endExclusive } = getInstitutionalDayRange('2026-08-26');
+
+    expect(start.toISOString()).toBe('2026-08-26T05:00:00.000Z');
+    expect(endExclusive.toISOString()).toBe('2026-08-27T05:00:00.000Z');
+  });
+
+  it('keeps consecutive days contiguous', () => {
+    const first = getInstitutionalDayRange('2026-08-26');
+    const second = getInstitutionalDayRange('2026-08-27');
+
+    expect(first.endExclusive.getTime()).toBe(second.start.getTime());
+  });
+
+  it('returns exactly 24 hours because Panama has no daylight saving time', () => {
+    const { start, endExclusive } = getInstitutionalDayRange('2026-12-31');
+
+    expect(endExclusive.getTime() - start.getTime()).toBe(24 * 60 * 60 * 1000);
+    expect(start.toISOString()).toBe('2026-12-31T05:00:00.000Z');
+  });
+
+  it('does not depend on the process time zone', () => {
+    expect(getInstitutionalDayRange('2026-01-01').start.toISOString()).toBe(
+      '2026-01-01T05:00:00.000Z',
+    );
   });
 });

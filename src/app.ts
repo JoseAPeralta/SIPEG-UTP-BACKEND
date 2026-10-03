@@ -1,4 +1,5 @@
 import { apiReference } from '@scalar/express-api-reference';
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
@@ -6,7 +7,7 @@ import { toNodeHandler } from 'better-auth/node';
 
 import { auth } from './lib/auth.js';
 import { env } from './config/env.js';
-import { logger } from './config/logger.js';
+import { createRequestLogger } from './config/logger.js';
 import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { notFoundHandler } from './middlewares/notFound.middleware.js';
@@ -48,7 +49,9 @@ app.use(
         return;
       }
 
-      logger.warn({ event: 'security.cors.denied', origin }, 'security.cors.denied');
+      createRequestLogger({ event: 'security.cors.denied', logType: 'security', origin }).warn(
+        'security.cors.denied',
+      );
       callback(new ApiError(403, 'CORS origin is not allowed.'));
     },
     credentials: true,
@@ -56,8 +59,14 @@ app.use(
   }),
 );
 
-app.post('/api/auth/sign-up/email', notFoundHandler);
-app.all('/api/auth/*splat', toNodeHandler(auth));
+app.get('/api/auth/jwks', toNodeHandler(auth));
+app.all('/api/auth/*splat', notFoundHandler);
+
+// Necesario para leer la cookie de refresco en /api/v1/auth. `cookie-parser` no
+// expone su valor a la respuesta ni lo registra, y la cookie esta marcada como
+// HttpOnly, asi que el access log nunca la ve. Va despues de CORS para que un
+// origen no permitido se rechace antes de analizar cabeceras.
+app.use(cookieParser());
 
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));

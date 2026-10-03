@@ -1,0 +1,737 @@
+{
+  "uid": "sipeg-security",
+  "title": "Security",
+  "description": "Fallos de login, tokens invalidos, denegaciones de autorizacion, rate limits, cuentas desactivadas, cambios de contrasena y revocacion de sesiones. Estos eventos se retienen 90 dias en produccion (`retention_stream` con `log_type=\"security\"`; ver el limite de longitud de consulta mas abajo). Los actores aparecen como pseudonimo HMAC, nunca como correo ni IP en claro.",
+  "tags": ["sipeg", "loki", "security"],
+  "editable": false,
+  "graphTooltip": 1,
+  "timezone": "utc",
+  "schemaVersion": 42,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["10s", "30s", "1m", "5m", "15m", "1h"]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Entorno",
+        "type": "query",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values({service=\"sipeg-utp-backend\"}, environment)",
+        "query": {
+          "query": "label_values({service=\"sipeg-utp-backend\"}, environment)",
+          "refId": "LokiVariableQueryEditor-VariableQuery"
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "options": [],
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "request_id",
+        "label": "Request ID o expresion",
+        "type": "textbox",
+        "query": ".*",
+        "current": { "selected": true, "text": ".*", "value": ".*" },
+        "options": [{ "selected": true, "text": ".*", "value": ".*" }],
+        "hide": 0,
+        "skipUrlSync": false,
+        "description": "Pega el `X-Request-ID` de una peticion para ver todas sus lineas, incluida la de seguridad. Por defecto `.*` muestra la cola de la API. El valor se inserta tal cual en la consulta, asi que no debe llevar comillas."
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Fallos de login",
+      "description": "`auth.login.failed`. El actor es el HMAC del correo normalizado que se intento usar, asi que el evento no revela si esa cuenta existe: es el mismo evento para correo inexistente y para contrasena incorrecta.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | event=\"auth.login.failed\" [$__auto])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Tokens invalidos",
+      "description": "`auth.token.invalid`: el JWT no supero la verificacion contra el JWKS, o expiro, o se recibio sin firma utilizable. El token no se registra nunca, ni un fragmento del.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 25 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | event=\"auth.token.invalid\" [$__auto])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Denegaciones 403",
+      "description": "Contadas desde el access log, o sea lo que de verdad vio el cliente. **No coincide** con el panel de motivos: una denegacion de CORS tambien es 403 y no emite `authorization.denied`. Para el motivo, ver el panel de denegaciones.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 25 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"403\" [$__auto])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Rate limits",
+      "description": "`rate_limit.exceeded`. Se registra el nombre del limitador, nunca su llave interna, porque la llave combina email e IP.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "__auto",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | event=\"rate_limit.exceeded\" [$__auto])) or vector(0)"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Eventos de seguridad por tipo",
+      "description": "Vista maestra: los 11 eventos de seguridad que emite la aplicacion. `auth.login.succeeded` y `auth.login.failed` son los unicos en `info`; el resto se emite en `warn`. `security.cors.denied` aparece aqui aunque no sea de autenticacion ni de autorizacion: es la frontera de configuracion. A diferencia de otros paneles, este no usa `| json` porque `event` si es structured metadata.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{event}}",
+          "expr": "sum by (event) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Logins: exitosos vs fallidos",
+      "description": "Es la serie que consulta la alerta `> 20 fallos de autenticacion en 5 min` de T10.4, expuesta para calibrar el umbral contra una linea base real. Un orden de magnitud mas de rojos que de verdes es la senal de fuerza bruta; tener mas verdes que rojos es normal en uso diario.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "auth.login.failed" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } },
+              { "id": "custom.lineWidth", "value": 1 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "auth.login.succeeded" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } },
+              { "id": "custom.lineWidth", "value": 1 }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum", "max"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "auth.login.succeeded",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | event=\"auth.login.succeeded\" [$__auto]))"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "auth.login.failed",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | event=\"auth.login.failed\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "403 por ruta",
+      "description": "Plantilla de ruta que devolvio 403. Se lee del access log, asi que no necesita `| json`. Sirve para ver que endpoint se esta probing: un volumen alto en rutas administrativas es informacion, no un fallo de la aplicacion.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{route}}",
+          "expr": "sum by (route) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"403\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Denegaciones por motivo",
+      "description": "`authorization.denied` agrupado por el motivo. Hoy solo hay dos formas: por rol (`requiredRole`/`actualRole`, de `requireAdmin`/`requireRole`, 23 usos) y por permiso (`requiredPermission` mas los ids de scope, de `requirePermission`, 23 usos). `requireOwnership` esta exportado pero sin usar, asi que su variante no aparece. Los campos del motivo no son structured metadata, por eso este panel si necesita `| json`. Ojo con el conteo: el numero de 403 del access log es mayor que el de este panel porque una denegacion de CORS tambien responde 403 sin emitir `authorization.denied`. Y una misma serie mezcla dos motivos de permiso: la denegacion por scope no resoluble y la de permiso insuficiente en un scope resuelto. Se distinguen en el panel de eventos en crudo: la primera no trae `eventProgramId`.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{requiredPermission}}{{requiredRole}}",
+          "expr": "sum by (event, requiredPermission, requiredRole, actualRole) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | json | event=\"authorization.denied\" | __error__=\"\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Fallos de login por actor",
+      "description": "Pseudonimo HMAC (`LOG_PSEUDONYMIZATION_KEY`) del correo con el que se intento entrar, con el top 10 de la ventana. Es la senal de fuerza bruta: muchos fallos concentrados en un mismo pseudonimo. El mismo pseudonimo se puede buscar en el panel de correlacion para ver si la peticion llego a autenticarse. No es un panel de tabla a proposito: `format: \"table\"` en Loki descarta la columna de etiqueta y dejaria el hash sin columna donde leerlo.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "continuous-GrYlRd" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{actorPseudonym}}",
+          "expr": "topk(10, sum by (actorPseudonym) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | json | event=\"auth.login.failed\" | __error__=\"\" [$__auto])))"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Rate limits por limitador",
+      "description": "Los nueve limitadores con nombre que expone la API: `login.ip` y `login.email` (30 y 5 por minuto), `register.ip` y `register.email` (30 y 3), `forgot_password.ip` y `forgot_password.email` (10 y 3), `reset_password` (3), `email_verification` (5) y `change_password` (5). Un `*.email` alto con `*.ip` bajo es trafico automatizado; los dos altos son un escaneo desde muchos origenes. `limiter` no es structured metadata, asi que este panel necesita `| json`.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "continuous-GrYlRd" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{limiter}}",
+          "expr": "sum by (limiter) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | json | event=\"rate_limit.exceeded\" | __error__=\"\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Contrasenas y revocacion de sesiones",
+      "description": "`auth.password.changed` y `auth.session.revoked`, los dos en `info` porque son acciones legitimas. El cambio de contrasena revoca ademas las otras sesiones del usuario, pero **cuantas** se revocaron no viaja a los logs: eso si queda en la bitacora durable, en el evento `auth.other_sessions_revoked` de `GET /api/v1/audit-events` (ADR-0008). Un pico de cambios de contrasena sin cambios de perfil alrededor es una senal de compromiso.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 30 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "auth.password.changed" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "auth.session.revoked" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "auth.password.changed",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | event=\"auth.password.changed\" [$__auto]))"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "legendFormat": "auth.session.revoked",
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"} | event=\"auth.session.revoked\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "logs",
+      "title": "Eventos de seguridad",
+      "description": "Todos los eventos de seguridad del rango, en texto. La vista para leer el detalle de un evento concreto: aqui si se ve el pseudonimo completo, el permiso pedido y los ids de scope. `prettifyLogMessage` esta activo porque las lineas son JSON de una sola linea y en crudo no se leen.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 38 },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "direction": "backward",
+          "legendFormat": "__auto",
+          "expr": "{service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"security\"}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "logs",
+      "title": "Correlacion por requestId",
+      "description": "Mismo panel que en `Errors`, aqui por simetria: una investigacion de seguridad empieza por un 403 o un 429 y hay que ver el contexto de esa peticion sin cambiar de dashboard. Se incluyen todos los tipos de log a proposito. Con el valor por defecto `.*` muestra la cola de la API. En produccion el rango del selector de tiempo puede llegar a 90 dias (`max_query_length: 2160h`), que es la retencion de `log_type=\"security\"`; acotarlo sigue siendo lo correcto para investigar.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 48 },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "direction": "backward",
+          "legendFormat": "__auto",
+          "expr": "{service=\"sipeg-utp-backend\", environment=~\"$environment\"} | requestId=~\"$request_id\""
+        }
+      ]
+    }
+  ]
+}

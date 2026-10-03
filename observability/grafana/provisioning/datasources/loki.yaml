@@ -1,0 +1,44 @@
+# Datasource Loki para Grafana (SIPEG UTP).
+#
+# Provisionada por archivo desde compose.observability.yaml, que monta solo este
+# directorio en /etc/grafana/provisioning/datasources. Montar el arbol completo
+# taparia los datasources de ejemplo que trae la imagen.
+#
+# Grafana corre en la red `observability`, donde Loki esta publicado en el puerto
+# 3100 sin salir al host: la URL interna es `http://loki:3100`.
+#
+# Loki corre con `auth_enabled: false` (tenant unico, ver
+# observability/loki/config.yaml), asi que no hay `X-Scope-OrgID` que enviar. Si
+# algun dia se activa la autenticacion multi-tenant de Loki, hay que anadir aqui
+# el tenant correspondiente y `httpHeaderName1: X-Scope-OrgID`.
+
+apiVersion: 1
+
+# Borra los datasources de este archivo que ya no esten declarados, para que
+# renombrar la entrada no deje una copia obsoleta apuntando al mismo Loki.
+prune: true
+
+datasources:
+  - name: Loki
+    # UID estable: los paneles de T10 y las reglas de alerta de T10.4 la referencian
+    # por UID, no por nombre, asi que cambiarlo rompe esas referencias.
+    uid: loki
+    type: loki
+    # `proxy`: Grafana consulta a Loki desde su propio contenedor. Es la unica
+    # opcion viable porque Loki no publica puertos al host y Grafana no comparte
+    # red con la aplicacion.
+    access: proxy
+    orgId: 1
+    url: http://loki:3100
+    # Fuente unica de logs: es la que se abre por defecto.
+    isDefault: true
+    # La configuracion es declarativa y versionada; no debe editarse desde la UI,
+    # porque el siguiente arranque volveria a aplicar este archivo.
+    editable: false
+    jsonData:
+      # Loki corre con `ruler.enable_api: false` (T9.1), asi que no recibe reglas
+      # ni es evaluado por el backend. Las alertas de T10.4 son reglas
+      # gestionadas por Grafana que consultan Loki como datasource normal, que es
+      # independiente de esta opcion.
+      manageAlerts: false
+      maxLines: 1000

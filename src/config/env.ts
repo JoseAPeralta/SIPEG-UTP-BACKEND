@@ -24,6 +24,11 @@ const envSchema = z
     AUTH_AUDIENCE: z.string().min(1).optional(),
     AUTH_TOKEN_TTL: ttlSchema.default('15m'),
     AUTH_REFRESH_TTL: ttlSchema.default('7d'),
+    // Donde vive el frontend respecto de la API. Mismo host exige `lax`; un
+    // frontend aparte (Workers, Vercel) exige `none`, que obliga a `Secure` y a
+    // validar el `Origin`. En produccion es obligatoria: descubrirlo con usuarios
+    // dentro seria una sesion que no persiste entre pestanas.
+    AUTH_REFRESH_COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).optional(),
     AUTH_EMAIL_VERIFICATION_URL: z.string().url().default('http://localhost:5173/verify-email'),
     AUTH_PASSWORD_RESET_URL: z.string().url().default('http://localhost:5173/reset-password'),
     AUTH_EMAIL_VERIFICATION_TTL: ttlSchema.default('24h'),
@@ -83,11 +88,35 @@ const envSchema = z
       });
     }
 
+    if (value.NODE_ENV === 'production' && value.AUTH_REFRESH_COOKIE_SAME_SITE === undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_REFRESH_COOKIE_SAME_SITE'],
+        message:
+          'AUTH_REFRESH_COOKIE_SAME_SITE is required in production. Use lax when the frontend is served from the same site as the API, and none when it is deployed separately.',
+      });
+    }
+
     if (Boolean(value.MAIL_USER) !== Boolean(value.MAIL_PASSWORD)) {
       context.addIssue({
         code: 'custom',
         path: ['MAIL_USER'],
         message: 'MAIL_USER and MAIL_PASSWORD must be provided together.',
+      });
+    }
+
+    const passwordResetOrigin = new URL(value.AUTH_PASSWORD_RESET_URL).origin;
+    const trustedOrigins = [...corsOrigins, ...(value.TRUSTED_ORIGINS?.split(',') ?? [])]
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+
+    if (!trustedOrigins.includes(passwordResetOrigin)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_PASSWORD_RESET_URL'],
+        message:
+          `AUTH_PASSWORD_RESET_URL origin (${passwordResetOrigin}) must be listed in ` +
+          'CORS_ORIGIN or TRUSTED_ORIGINS; the auth provider rejects it otherwise.',
       });
     }
 

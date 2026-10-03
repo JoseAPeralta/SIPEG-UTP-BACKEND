@@ -26,6 +26,18 @@ describe('password hashing', () => {
     await expect(hashPassword('short')).rejects.toThrow();
   });
 
+  it('rejects passwords longer than 20 chars', async () => {
+    await expect(hashPassword('a'.repeat(21))).rejects.toThrow(
+      'Password length must be between 12 and 20 characters.',
+    );
+  });
+
+  it('accepts a password of exactly 20 chars', async () => {
+    const password = 'a'.repeat(20);
+
+    expect(await verifyPassword(await hashPassword(password), password)).toBe(true);
+  });
+
   it('returns false on a malformed hash without throwing', async () => {
     expect(await verifyPassword('not-a-real-hash', 'whatever')).toBe(false);
   });
