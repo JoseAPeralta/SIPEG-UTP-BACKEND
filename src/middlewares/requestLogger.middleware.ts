@@ -1,7 +1,7 @@
 import type { Request, RequestHandler, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 
-import { createChildLogger } from '../config/logger.js';
+import { accessLogger, createChildLogger } from '../config/logger.js';
 import { runWithLogContext } from '../lib/log-context.js';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -69,22 +69,38 @@ export const requestLogger: RequestHandler = (req, res, next) => {
     if (logged) return;
     logged = true;
 
-    const isHealthCheck = !aborted && req.path === HEALTH_CHECK_PATH && res.statusCode < 500;
+    const route = routeTemplate(req);
+    const isHealthCheck =
+      !aborted &&
+      req.method === 'GET' &&
+      route === HEALTH_CHECK_PATH &&
+      res.statusCode >= 200 &&
+      res.statusCode < 400;
     if (isHealthCheck) return;
 
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
-    const log = createChildLogger({ requestId });
+    const log = createChildLogger({ requestId }, accessLogger);
+    const statusCode = aborted && !res.headersSent ? undefined : res.statusCode;
+    const requestKind =
+      route !== 'unmatched' ? 'matched' : req.method === 'OPTIONS' ? 'preflight' : 'unmatched';
     const bindings = {
       event: 'http.request.completed',
       logType: 'access',
       method: req.method,
-      route: routeTemplate(req),
-      statusCode: res.statusCode,
+      route,
+      requestKind,
+      outcome: aborted ? 'aborted' : 'completed',
+      statusCode,
       durationMs: Math.round(durationMs * 100) / 100,
       aborted: aborted || undefined,
     };
 
-    const level = aborted ? 'warn' : accessLogLevel(res.statusCode);
+    const level =
+      statusCode !== undefined && statusCode >= 500
+        ? 'error'
+        : aborted
+          ? 'warn'
+          : accessLogLevel(statusCode ?? res.statusCode);
     if (level === 'error') log.error(bindings, 'http.request.completed');
     else if (level === 'warn') log.warn(bindings, 'http.request.completed');
     else log.info(bindings, 'http.request.completed');

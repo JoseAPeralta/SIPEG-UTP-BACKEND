@@ -76,7 +76,7 @@ loki.source.docker "containers" {
 // ya desenvuelve el sobre `{"log":...}` de Docker, asi que NO se usa
 // `stage.docker`.
 loki.process "containers" {
-	forward_to = [loki.write.ssipeg.receiver]
+	forward_to = [loki.write.sipeg.receiver]
 
 	// Expresiones JMESPath; una expresion vacia significa "campo con el mismo
 	// nombre". Los campos que no existen (logs de `db` o `mailpit`) simplemente no
@@ -94,6 +94,8 @@ loki.process "containers" {
 			route       = "route",
 			statusCode  = "statusCode",
 			durationMs  = "durationMs",
+			outcome     = "outcome",
+			requestKind = "requestKind",
 		}
 	}
 
@@ -127,13 +129,15 @@ loki.process "containers" {
 			route      = "route",
 			statusCode = "statusCode",
 			durationMs = "durationMs",
+			outcome     = "outcome",
+			requestKind = "requestKind",
 		}
 	}
 }
 
 // ----------------------------------------------------------------------------
 // 4. Envio a Loki.
-loki.write "ssipeg" {
+loki.write "sipeg" {
 	endpoint {
 		url = "http://loki:3100/loki/api/v1/push"
 		// Sin `tenant_id`: Loki corre con `auth_enabled: false` y no espera

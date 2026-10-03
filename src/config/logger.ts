@@ -95,6 +95,21 @@ export const logger = await createLogger({
   pretty: env.LOG_PRETTY,
 });
 
+// Access events are the source for traffic counts and latency panels. They must
+// remain complete even when LOG_LEVEL is raised to reduce application noise.
+export const accessLogger = await createLogger({
+  level: env.NODE_ENV === 'test' ? env.LOG_LEVEL : 'info',
+  environment: env.NODE_ENV,
+  serviceName: env.LOG_SERVICE_NAME,
+  version: env.APP_VERSION,
+  pseudonymizationKey: env.LOG_PSEUDONYMIZATION_KEY,
+  pretty: env.LOG_PRETTY,
+});
+
+// Security telemetry shares the non-suppressible operational stream. Raising
+// LOG_LEVEL must not erase authentication or authorization evidence.
+export const securityLogger = accessLogger;
+
 export function createChildLogger(bindings: Record<string, string>, base: Logger = logger): Logger {
   return base.child(bindings);
 }
@@ -106,10 +121,8 @@ export function createChildLogger(bindings: Record<string, string>, base: Logger
  * correlatable with their access log line (`X-Request-ID`) without threading a
  * logger through every call.
  */
-export function createRequestLogger(
-  bindings: Record<string, unknown> = {},
-  base: Logger = logger,
-): Logger {
+export function createRequestLogger(bindings: Record<string, unknown> = {}, base?: Logger): Logger {
   const { requestId } = getLogContext();
-  return base.child(requestId ? { requestId, ...bindings } : bindings);
+  const target = base ?? (bindings['logType'] === 'security' ? securityLogger : logger);
+  return target.child(requestId ? { ...bindings, requestId } : bindings);
 }
