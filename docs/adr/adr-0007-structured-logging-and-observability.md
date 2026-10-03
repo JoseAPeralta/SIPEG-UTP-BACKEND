@@ -42,8 +42,10 @@ introducir un servicio gestionado externo en esta etapa.
 Adoptar un canal de logs operativos estructurados y una topologia de observabilidad
 autogestionada:
 
-- **Logger:** `pino` + `pino-http`. Una linea JSON por evento a `stdout`/`stderr`.
-  `LOG_LEVEL` controla el nivel; timestamp UTC ISO; campos base `service`,
+- **Logger:** `pino` + middleware HTTP propio. Una linea JSON por evento a
+  `stdout`/`stderr`. `LOG_LEVEL` controla aplicacion e infraestructura; `access`
+  y `security` conservan nivel minimo `info` para no perder metricas ni evidencia;
+  timestamp UTC ISO; campos base `service`,
   `version` y `environment`; serializador de errores que no expone `message` ni
   `stack` en produccion; redaccion de `authorization`, `cookie`, `password`,
   `token`, `refreshToken` y `accessToken`.
@@ -55,13 +57,13 @@ autogestionada:
 - **Tipos de log:** `access`, `application`, `security`, `infrastructure`. Los
   eventos de negocio no se infieren de logs.
 - **Niveles y HTTP:** 2xx/3xx/4xx esperado = `info`; 429 = `warn`; 5xx = `error`;
-  health checks exitosos excluidos; los eventos `security` no se apagan con
-  `LOG_LEVEL`.
+  solo `GET /api/v1/health` exitoso se excluye; los eventos `access` y `security`
+  no se apagan con `LOG_LEVEL`. Abortos sin cabeceras no inventan un status 200.
 - **Recoleccion:** `Grafana Alloy` descubre contenedores por Docker y envia a
   `Loki`. No se usa Promtail.
 - **Visualizacion:** `Grafana` con data source Loki provisionada por archivo,
   paneles `API Overview`, `Errors` y `Security` provisionados por archivo en la
-  carpeta fija `SIPEG UTP` (`folderUid: sipeg-utp`), y alertas basicas. El
+  carpeta fija `SIPEG UTP` identificada por titulo, y alertas basicas. El
   datasource y los paneles son declarativos y no editables desde la UI: la
   version que corre es la del repositorio.
 - **Cardinalidad:** etiquetas Loki permitidas solo `service`, `environment`,
@@ -97,11 +99,12 @@ autogestionada:
   un solo host.
 - **POS-005**: La redaccion y la ausencia de cuerpos/cabeceras reducen el riesgo
   de filtracion de credenciales y datos personales en logs.
-- **POS-006**: `LOG_LEVEL`, hoy inerte, pasa a tener efecto operativo real.
+- **POS-006**: `LOG_LEVEL`, hoy inerte, pasa a tener efecto operativo real sin
+  degradar conteos de trafico ni eventos de seguridad.
 
 ### Negative
 
-- **NEG-001**: Se agregan dependencias (`pino`, `pino-http`) y servicios de
+- **NEG-001**: Se agrega `pino` y servicios de
   infraestructura (Alloy, Loki, Grafana) con sus propios volumenes, variables y
   mantenimiento.
 - **NEG-002**: El `docker-socket-proxy` es un componente adicional que debe
@@ -113,6 +116,10 @@ autogestionada:
   datos nuevos.
 - **NEG-005**: Instrumentar `/api/auth/*` cubre la solicitud HTTP, pero no
   garantiza semantica de negocio del proveedor; esa frontera se documenta aparte.
+- **NEG-006**: El canal de observabilidad depende de que Docker entregue los
+  bind mounts del repositorio a los contenedores. En Docker Desktop sobre WSL2 ese
+  reparto puede romperse en silencio (ver "Brecha: Bind Mounts De Grafana En
+  WSL2"), y solo se recupera recreando el contenedor.
 
 ## Alternatives Considered
 
@@ -218,6 +225,49 @@ autogestionada:
     `maximum number of series (500) reached`. Por eso la comprobacion mira una
     **ventana** y distingue "sin trafico" (informativo) de "trafico que llega sin
     etiquetar" (fallo).
+- **IMP-012**: El logger interno del proveedor de autenticacion esta
+  **silenciado** (`logger: { disabled: true }` en `src/lib/auth.ts`). Escribe
+  texto plano por stdout, fuera de pino, asi que sus lineas no son JSON y Alloy
+  no les asigna `service` ni `log_type`: caen en un stream aparte del contenedor
+  `api` que no se puede filtrar en Grafana y hace fallar `ingest.json-labels`. Se
+  acepta la perdida de detalle porque la aplicacion ya emite el evento con mas
+  contexto y con el sujeto pseudonimo (`auth.login.failed`, `logType` `security`),
+  mientras que el "User not found" del proveedor repetia en claro un dato que el
+  modelo de seguridad evita exponer. El error real de autenticacion lo sigue
+  registrando `errorHandler` como `http.error.unexpected`. El unico texto plano
+  que queda es el banner de `tsx watch` en desarrollo, que no es de la aplicacion.
+- **IMP-013**: Cada access log declara `requestKind`
+  (`matched`/`preflight`/`unmatched`) y `outcome` (`completed`/`aborted`). Alloy
+  los promueve, junto a metodo, ruta, status y duracion, a structured metadata.
+  Grafana excluye abortos de status y percentiles, separa preflight/no enrutadas,
+  agrega frecuencia por `(method, route)` y muestra una cola descendente de
+  solicitudes. El verificador consulta las lineas del stream sin `service` para
+  tolerar unicamente el banner exacto de `tsx watch`, y valida el dashboard
+  aplicado via `/api/dashboards/uid/sipeg-api-overview`.
+
+## Brecha: Bind Mounts De Grafana En WSL2
+
+Docker Desktop expone los bind mounts que viven en una distro de WSL2 a la VM
+mediante un shim en
+`/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/<distro>/<hash>`. Ese shim
+puede dejar de resolver contra la distro despues de un reinicio de WSL o del
+propio Docker Desktop, y el contenedor ve un **directorio vacio** en lugar de los
+archivos: no hay error de arranque, no hay entrada de log y el healthcheck pasa.
+
+El fallo es silencioso por construccion del pipeline: Grafana provisiona
+datasources, paneles y alertas leyendo directorios, asi que un directorio vacio se
+confunde con "nada que provisionar". El resultado es que Loki y Alloy funcionan
+mientras Grafana queda sin datasource (las 5 alertas fallan con
+`failed to build query 'A': data source not found`) y sin paneles. Los montajes de
+`loki`, `alloy` y `api` pueden no estar afectados, de modo que el stack se ve sano
+a medias y el fallo se diagnostica tarde.
+
+Se documenta como brecha y no como decision porque el remedio no es del
+repositorio: recrear el contenedor de Grafana con
+`up -d --force-recreate grafana`. Un `restart` **no** sirve, porque reestablece el
+mismo shim roto. El sintoma, el diagnostico (`docker inspect` buscando un
+`Source` bajo `/run/desktop/mnt/host/`) y el remedio estan en el README, junto a
+`pnpm run observability:check`, que es quien detecta el efecto final.
 
 ## Imagenes Fijadas
 
@@ -444,6 +494,6 @@ cumplir, para que no se introduzca en silencio un fallo de seguridad:
 - **REF-001**: `docs/superpowers/plans/logging-y-auditoria.md` (plan de ejecucion).
 - **REF-002**: `docs/adr/adr-0008-durable-audit-events.md` (bitacora durable).
 - **REF-003**: OWASP Logging Cheat Sheet.
-- **REF-004**: Pino v10, pino-http, Grafana Alloy, Loki (retencion, cardinalidad,
+- **REF-004**: Pino v10, Grafana Alloy, Loki (retencion, cardinalidad,
   autenticacion) y Grafana Alerting.
 - **REF-005**: Docker `local` logging driver.
