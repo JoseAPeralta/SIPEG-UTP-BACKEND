@@ -42,7 +42,7 @@ const formatAuthSuccess = (
 
 const refreshCookiePolicy = resolveRefreshCookiePolicy(env);
 
-/** Sin cookie no hay nada que rotar ni cerrar. 401 explicito, nunca un 500. */
+/** Refresh y cambio de contrasena requieren la credencial de sesion. */
 const requireRefreshToken = (req: Parameters<typeof readRefreshToken>[0]): string => {
   const token = readRefreshToken(req);
 
@@ -87,9 +87,11 @@ export const refresh: RequestHandler = asyncHandler(async (req, res) => {
 });
 
 export const logout: RequestHandler = asyncHandler(async (req, res) => {
-  // Se limpia la cookie aunque la sesion ya no exista: sin ella, un logout
-  // repetido dejaria una credencial valida en el navegador sin poder usarla.
-  await logoutUser(requireRefreshToken(req)).catch(() => undefined);
+  const token = readRefreshToken(req);
+  if (token !== undefined) {
+    // Si falla la revocacion, propagar el error y conservar la cookie para reintentar.
+    await logoutUser(token);
+  }
   clearRefreshCookie(res);
   res.status(200).json(successResponse('Logout successful.', {}));
 });

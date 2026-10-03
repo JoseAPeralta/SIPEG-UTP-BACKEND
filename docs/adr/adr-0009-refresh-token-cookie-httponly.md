@@ -37,15 +37,15 @@ respuesta.
 
 ### Atributos de la cookie
 
-| Atributo | Valor | Motivo |
-| --- | --- | --- |
-| Nombre | `sipeg-refresh` | Nombre explicito del proyecto. |
-| `HttpOnly` | obligatorio | JavaScript no puede leerla; mitiga robo por XSS. |
-| `Path` | `/api/v1/auth` | Limita la exposicion: no viaja a las peticiones de negocio. |
-| `Domain` | ausente | Host-only. Evita ampliar el alcance a subdominios hermanos. |
-| `Secure` | `true` en produccion | Obligatorio con `SameSite=None`. |
-| `SameSite` | `AUTH_REFRESH_COOKIE_SAME_SITE` | Ver decision de topologia. |
-| `Max-Age` | expiracion real de la sesion | La cookie no sobrevive a la sesion que representa. |
+| Atributo   | Valor                           | Motivo                                                      |
+| ---------- | ------------------------------- | ----------------------------------------------------------- |
+| Nombre     | `sipeg-refresh`                 | Nombre explicito del proyecto.                              |
+| `HttpOnly` | obligatorio                     | JavaScript no puede leerla; mitiga robo por XSS.            |
+| `Path`     | `/api/v1/auth`                  | Limita la exposicion: no viaja a las peticiones de negocio. |
+| `Domain`   | ausente                         | Host-only. Evita ampliar el alcance a subdominios hermanos. |
+| `Secure`   | `true` en produccion            | Obligatorio con `SameSite=None`.                            |
+| `SameSite` | `AUTH_REFRESH_COOKIE_SAME_SITE` | Ver decision de topologia.                                  |
+| `Max-Age`  | expiracion real de la sesion    | La cookie no sobrevive a la sesion que representa.          |
 
 El cuerpo de `AuthTokens` queda en `accessToken`, `accessTokenExpiresAt`,
 `refreshTokenExpiresAt` y `tokenType`. El access token sigue siendo un JWT
@@ -91,13 +91,32 @@ login (5/min), que en una institucion concentre a varios usuarios tras una misma
 IP publica se traducía en un cierre de sesion masivo y no en una contencion real
 del abuso.
 
+### Sesion compartida y cierre efectivo
+
+La cookie pertenece al host y path dentro del perfil del navegador, no a una
+pestana ni a un puerto. En localhost, dos APIs con puertos distintos y el mismo
+nombre/path de cookie pueden sobrescribir la misma credencial. `127.0.0.1` y
+`localhost` no comparten cookie. Para cuentas independientes se usan perfiles
+separados; las llamadas del navegador incluyen `credentials: "include"`.
+
+`refresh` y `logout` admiten cuerpo omitido. Logout responde 200 y expira la
+cookie incluso cuando no se envia o la sesion ya no existe. Si la revocacion
+falla en el servidor, responde 500 y conserva la cookie para reintentar: no se
+anuncia un cierre exitoso. Borrar solo el estado local no revoca la sesion.
+Login, refresh y logout incluyen `Cache-Control: no-store`.
+
+La revocacion impide renovar esa sesion desde cualquier pestana que la comparta,
+pero los access JWT ya emitidos siguen vigentes hasta expirar. La actualizacion
+inmediata de la interfaz y el descarte del access token en las otras pestanas
+requieren coordinacion del cliente.
+
 ## Consequences
 
 ### Positive
 
 - La sesion se comparte entre pestanas sin volver a iniciar sesion.
 - Un XSS ya no puede exfiltrar la credencial de larga duracion.
-- Un logout cierra la sesion en todo el navegador, no solo en una pestana.
+- Un logout exitoso revoca la sesion de refresh compartida por las pestanas.
 
 ### Negative
 
