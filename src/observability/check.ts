@@ -80,12 +80,29 @@ export interface DashboardEntry {
   folderTitle?: string;
 }
 
+export interface DashboardTarget {
+  direction?: string;
+  expr?: string;
+}
+
+export interface DashboardPanel {
+  title?: string;
+  type?: string;
+  targets?: DashboardTarget[];
+}
+
+export interface DashboardResponse {
+  dashboard?: { panels?: DashboardPanel[] };
+}
+
 export interface Observation {
   datasourceHealth: DatasourceHealth;
   alertExport: AlertExport;
   promRules: PromResponse;
   dashboards: DashboardEntry[];
   apiStreams: Record<string, string>[];
+  apiUnstructuredLines: string[];
+  apiOverview: DashboardResponse;
   windowMinutes: number;
 }
 
@@ -394,6 +411,12 @@ export const verifyObservability = (observation: Observation): Finding[] => {
   const withService = observation.apiStreams.filter(
     (stream) => stream['service'] === EXPECTED.serviceLabel && stream['log_type'] !== undefined,
   );
+  const knownUnstructuredLines = observation.apiUnstructuredLines.filter(
+    (line) => line.trim() === '$ tsx watch src/server.ts',
+  );
+  const unexpectedUnstructuredLines = observation.apiUnstructuredLines.filter(
+    (line) => line.trim() !== '$ tsx watch src/server.ts',
+  );
   if (observation.apiStreams.length === 0) {
     findings.push(
       info(
@@ -403,14 +426,16 @@ export const verifyObservability = (observation: Observation): Finding[] => {
     );
   } else {
     findings.push(
-      withoutService.length === 0 && withService.length > 0
+      unexpectedUnstructuredLines.length === 0 &&
+        withService.length > 0 &&
+        (withoutService.length === 0 || knownUnstructuredLines.length > 0)
         ? pass(
             'ingest.json-labels',
-            `${withService.length} stream(s) de "${EXPECTED.apiContainer}" con service y log_type: la cadena JSON -> Alloy -> Loki esta viva.`,
+            `${withService.length} stream(s) de "${EXPECTED.apiContainer}" con service y log_type: la cadena JSON -> Alloy -> Loki esta viva.${knownUnstructuredLines.length > 0 ? ' El banner conocido de tsx watch se ignora.' : ''}`,
           )
         : fail(
             'ingest.json-labels',
-            `${withoutService.length} stream(s) del contenedor "${EXPECTED.apiContainer}" sin la etiqueta service, y ${withService.length} con service+log_type.`,
+            `${unexpectedUnstructuredLines.length} linea(s) no estructurada(s) inesperada(s), ${withoutService.length} stream(s) sin service y ${withService.length} con service+log_type.`,
             PRETTY_LOGS_HINT,
           ),
     );
@@ -438,6 +463,39 @@ export const verifyObservability = (observation: Observation): Finding[] => {
         ),
   );
 
+  const apiPanels = observation.apiOverview.dashboard?.panels ?? [];
+  const latestRequests = apiPanels.find((panel) => panel.title === 'Ultimas solicitudes');
+  const latestTarget = latestRequests?.targets?.[0];
+  const frequency = apiPanels.find((panel) => panel.title === 'Frecuencia por operacion');
+  const frequencyExpression = frequency?.targets?.[0]?.expr ?? '';
+  const dashboardProblems: string[] = [];
+  if (
+    latestRequests?.type !== 'logs' ||
+    latestTarget?.direction !== 'backward' ||
+    !latestTarget.expr?.includes('log_type="access"')
+  ) {
+    dashboardProblems.push('falta la cola descendente "Ultimas solicitudes" de access logs');
+  }
+  if (
+    !frequencyExpression.includes('sum by (method, route)') ||
+    frequencyExpression.includes('topk(') ||
+    !frequencyExpression.includes('requestKind="matched"')
+  ) {
+    dashboardProblems.push('la frecuencia no agrupa el inventario completo por method y route');
+  }
+  findings.push(
+    dashboardProblems.length === 0
+      ? pass(
+          'dashboards.api-traffic',
+          'API Overview expone solicitudes recientes y frecuencia completa por operacion.',
+        )
+      : fail(
+          'dashboards.api-traffic',
+          dashboardProblems.join('; '),
+          'Recrear Grafana despues de desplegar el dashboard provisionado.',
+        ),
+  );
+
   return findings;
 };
 
@@ -458,6 +516,13 @@ export const renderReport = (findings: Finding[]): string => {
 export interface SeriesResponse {
   status?: string;
   data?: Record<string, string>[];
+}
+
+export interface QueryRangeResponse {
+  status?: string;
+  data?: {
+    result?: Array<{ values?: Array<[string, string]> }>;
+  };
 }
 
 export interface Options {
@@ -522,24 +587,41 @@ const collectObservation = async (options: Options): Promise<Observation> => {
   seriesUrl.searchParams.append('match[]', `{container="${EXPECTED.apiContainer}"}`);
   seriesUrl.searchParams.append('start', `${startSeconds}000000000`);
   seriesUrl.searchParams.append('end', `${endSeconds}000000000`);
+  const unstructuredUrl = new URL(`${url}/api/datasources/proxy/uid/loki/loki/api/v1/query_range`);
+  unstructuredUrl.searchParams.set('query', `{container="${EXPECTED.apiContainer}",service=""}`);
+  unstructuredUrl.searchParams.set('start', `${startSeconds}000000000`);
+  unstructuredUrl.searchParams.set('end', `${endSeconds}000000000`);
+  unstructuredUrl.searchParams.set('direction', 'backward');
+  unstructuredUrl.searchParams.set('limit', '1000');
 
-  const [datasourceHealth, alertExport, promRules, dashboards, series] = await Promise.all([
-    getJson<DatasourceHealth>(`${url}/api/datasources/uid/loki/health`, authorization),
-    getJson<AlertExport>(
-      `${url}/api/v1/provisioning/alert-rules/export?format=json`,
-      authorization,
-    ),
-    getJson<PromResponse>(`${url}/api/prometheus/grafana/api/v1/rules`, authorization),
-    getJson<DashboardEntry[]>(`${url}/api/search?type=dash-db`, authorization),
-    getJson<SeriesResponse>(seriesUrl.toString(), authorization),
-  ]);
+  const [datasourceHealth, alertExport, promRules, dashboards, apiOverview, series, unstructured] =
+    await Promise.all([
+      getJson<DatasourceHealth>(`${url}/api/datasources/uid/loki/health`, authorization),
+      getJson<AlertExport>(
+        `${url}/api/v1/provisioning/alert-rules/export?format=json`,
+        authorization,
+      ),
+      getJson<PromResponse>(`${url}/api/prometheus/grafana/api/v1/rules`, authorization),
+      getJson<DashboardEntry[]>(`${url}/api/search?type=dash-db`, authorization),
+      getJson<DashboardResponse>(
+        `${url}/api/dashboards/uid/${EXPECTED.dashboards[0]}`,
+        authorization,
+      ),
+      getJson<SeriesResponse>(seriesUrl.toString(), authorization),
+      getJson<QueryRangeResponse>(unstructuredUrl.toString(), authorization),
+    ]);
 
   return {
     datasourceHealth,
     alertExport,
     promRules,
     dashboards,
+    apiOverview,
     apiStreams: series.data ?? [],
+    apiUnstructuredLines:
+      unstructured.data?.result?.flatMap((stream) =>
+        (stream.values ?? []).map(([, line]) => line),
+      ) ?? [],
     windowMinutes,
   };
 };
