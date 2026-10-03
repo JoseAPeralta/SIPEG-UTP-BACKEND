@@ -265,7 +265,9 @@ El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET 
 - Endpoints principales (`/api/v1/auth/*`):
   - `POST /auth/login` — devuelve el access token EdDSA en el cuerpo y el refresh token en la cookie `sipeg-refresh`; credenciales invalidas o cuenta desactivada responden 401 generico (`Invalid email or password`) sin revelar si el correo existe; una cuenta no verificada responde 403; limite de 5 intentos/min por IP.
   - `POST /auth/refresh` — lee la cookie `sipeg-refresh`, rota la sesion, emite un access token nuevo en el cuerpo y devuelve la cookie rotada; el token anterior queda invalido y tokens expirados, revocados o de cuentas desactivadas responden 401. Limite por sesion, no por IP.
-  - `POST /auth/logout` — invalida la sesion de la cookie y la borra; es idempotente. Al ser una cookie del navegador, cierra la sesion en todas las pestanas. El access token ya emitido sigue stateless hasta vencer.
+  - `POST /auth/logout` — invalida la sesion de la cookie y la borra; responde 200 incluso sin cookie o si la sesion ya no existe. Si falla la revocacion en el servidor, responde 500 y conserva la cookie para reintentar. El access token ya emitido sigue stateless hasta vencer; las otras pestanas deben descartar su estado local para reflejar el cierre inmediatamente.
+  - `refresh` y `logout` aceptan peticiones sin cuerpo; la credencial se envia solo en la cookie. `login`, `refresh` y `logout` incluyen `Cache-Control: no-store`.
+  - En un mismo perfil del navegador, la cookie se comparte entre pestanas y no se aisla por puerto: APIs en `localhost` con el mismo nombre y path pueden sobrescribirla aunque usen puertos distintos. `localhost` y `127.0.0.1` son hosts distintos. Usa `credentials: "include"` y un host consistente; para probar cuentas independientes, usa perfiles separados. Borrar el estado local no revoca la sesion: hay que completar `POST /auth/logout`.
   - `POST /auth/register` — crea una cuenta no verificada con rol `USER`, rechaza campos de rol, estado o permisos y envia un enlace de verificacion con vigencia `AUTH_EMAIL_VERIFICATION_TTL` (24 h por defecto). Es la unica via de registro: las rutas nativas del proveedor no estan expuestas.
   - `POST /auth/verify-email` — confirma el email; tokens invalidos o vencidos responden 400 generico y el limite es 5 intentos/min por IP.
   - `POST /auth/forgot-password` — siempre responde el mismo 200 exista o no el email; limite independiente de 3 solicitudes/min por IP. El origin de `AUTH_PASSWORD_RESET_URL` debe estar en `CORS_ORIGIN` o `TRUSTED_ORIGINS`; si no coincide, la app no arranca.
@@ -394,6 +396,9 @@ Mutacion sensible -> misma transaccion Prisma -> audit_events (PostgreSQL append
 
 - Cada respuesta incluye `X-Request-ID` (UUID aceptado o generado); usalo para
   correlacionar un acceso con su error en Grafana.
+- Los eventos `access` y `security` usan un logger operativo con nivel minimo
+  `info`, independiente de `LOG_LEVEL`: subir el nivel de la aplicacion no puede
+  borrar conteos HTTP ni evidencia de autenticacion/autorizacion.
 - El access log registra la **plantilla de ruta** (`/api/v1/careers`, no
   `/api/v1/careers/42`) y la captura en el instante en que Express hace match,
   no al final de la respuesta: para toda respuesta que nace dentro de la cadena
@@ -402,8 +407,10 @@ Mutacion sensible -> misma transaccion Prisma -> audit_events (PostgreSQL append
   series al agregar por ruta. Ver `T10.1a` del plan.
 - Etiquetas Loki: `service`, `environment`, `log_type`, `level` y `container`
   (el nombre del servicio Compose). `requestId`, `event`, `route`, `method`,
-  `statusCode`, `actorId`, IDs de recurso, IPs y trace IDs viven en el JSON y en
-  structured metadata, nunca como labels. Los contenedores que no son JSON
+  `statusCode`, `durationMs`, `outcome`, `requestKind`, `actorId`, IDs de recurso,
+  IPs y trace IDs viven en el JSON y en structured metadata, nunca como labels.
+  `requestKind` distingue `matched`, `preflight` y `unmatched`; `outcome`
+  distingue respuestas `completed` de conexiones `aborted`. Los contenedores que no son JSON
   (por ejemplo `db`) solo llevan `container`.
 - Retencion: 30 dias para access/aplicacion/infraestructura y 90 dias para
   `log_type="security"` (produccion); 7 dias en desarrollo. El selector de tiempo
@@ -435,7 +442,7 @@ Mutacion sensible -> misma transaccion Prisma -> audit_events (PostgreSQL append
 
 Variables de entorno nuevas (ver `.env.example`):
 
-- `LOG_LEVEL` (default `info`), `LOG_PRETTY` (solo desarrollo),
+- `LOG_LEVEL` (default `info`, solo aplicacion/infraestructura), `LOG_PRETTY` (solo desarrollo),
   `LOG_SERVICE_NAME` (default `sipeg-utp-backend`) y `APP_VERSION`.
 - `LOG_PSEUDONYMIZATION_KEY` (obligatoria en produccion, minimo 32 caracteres):
   clave HMAC para pseudonimizar email/IP en eventos de seguridad.
@@ -490,8 +497,10 @@ docker compose -f compose.prod.yaml -f compose.observability.yaml --env-file .en
   Grafana.
   - `API Overview` (UID `sipeg-api-overview`):
     `http://127.0.0.1:3001/d/sipeg-api-overview/api-overview`. Trae volumen,
-    distribucion por clase de estado, p50/p95 de latencia, rutas mas usadas y
-    requests abortados, con selector de entorno.
+    distribucion por clase de estado, p50/p95 de latencia, frecuencia completa
+    por metodo+ruta, preflight/no enrutadas, requests abortados y la cola de
+    solicitudes mas recientes. Los selectores de metodo y plantilla de ruta
+    permiten investigar una operacion concreta sin registrar IDs ni query strings.
   - `Errors` (UID `sipeg-errors`):
     `http://127.0.0.1:3001/d/sipeg-errors/errors`. Errores inesperados, 5xx por
     ruta, ciclo de vida del proceso, dependencias fallidas (Prisma, correo y
@@ -555,23 +564,24 @@ pnpm run observability:check -- --url http://127.0.0.1:3001
 Habla con la **UI de Grafana** (no con Loki, que no publica puerto) usando
 `GRAFANA_ADMIN_USER`/`GRAFANA_ADMIN_PASSWORD`. Imprime `PASS`/`FAIL`/`INFO` por
 comprobacion, el remedio de cada fallo y sale con codigo 1 si hay alguno. **Solo
-informa: no recrea nada.** 13 comprobaciones:
+informa: no recrea nada.** 14 comprobaciones:
 
-| Comprobacion             | Que afirma                                                                                                       |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `datasource.health`      | el datasource Loki responde `OK`                                                                                 |
-| `alerts.group`           | un unico grupo `sipeg-api`, en la carpeta por titulo y evaluado cada `1m`                                        |
-| `alerts.rules`           | las 5 reglas esperadas estan y no hay duplicadas                                                                 |
-| `alerts.condition`       | cada `condition` apunta a un `refId` declarado                                                                   |
-| `alerts.threshold-ref`   | ninguna etapa de umbral se referencia a si misma (el defecto que dejo passar en silencio el primer `rules.yaml`) |
-| `alerts.threshold-value` | los cinco umbrales son los declarados: cambiarlos a proposito obliga a actualizar tambien el verificador         |
-| `alerts.query`           | consultas instantaneas contra `loki` y con `or vector(0)`, que es lo que evita el estado `NoData`                |
-| `alerts.states`          | `noDataState: OK`, `execErrState: Alerting` y los cinco `for`                                                    |
-| `alerts.panel-link`      | cada regla enlaza al panel que la explica (**leido del export**, no del listado de reglas)                       |
-| `rules.health`           | las 5 evaluan con salud `ok`                                                                                     |
-| `rules.state`            | cuantas estan `inactive`/`pending`/`alerting` (**INFO**: que una dispare no es un fallo)                         |
-| `ingest.json-labels`     | la cadena JSON -> Alloy -> Loki esta viva: ningun stream de `api` llega sin la etiqueta `service`                |
-| `dashboards.folder`      | los tres paneles comparten carpeta con las alertas                                                               |
+| Comprobacion             | Que afirma                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `datasource.health`      | el datasource Loki responde `OK`                                                                                                     |
+| `alerts.group`           | un unico grupo `sipeg-api`, en la carpeta por titulo y evaluado cada `1m`                                                            |
+| `alerts.rules`           | las 5 reglas esperadas estan y no hay duplicadas                                                                                     |
+| `alerts.condition`       | cada `condition` apunta a un `refId` declarado                                                                                       |
+| `alerts.threshold-ref`   | ninguna etapa de umbral se referencia a si misma (el defecto que dejo passar en silencio el primer `rules.yaml`)                     |
+| `alerts.threshold-value` | los cinco umbrales son los declarados: cambiarlos a proposito obliga a actualizar tambien el verificador                             |
+| `alerts.query`           | consultas instantaneas contra `loki` y con `or vector(0)`, que es lo que evita el estado `NoData`                                    |
+| `alerts.states`          | `noDataState: OK`, `execErrState: Alerting` y los cinco `for`                                                                        |
+| `alerts.panel-link`      | cada regla enlaza al panel que la explica (**leido del export**, no del listado de reglas)                                           |
+| `rules.health`           | las 5 evaluan con salud `ok`                                                                                                         |
+| `rules.state`            | cuantas estan `inactive`/`pending`/`alerting` (**INFO**: que una dispare no es un fallo)                                             |
+| `ingest.json-labels`     | la cadena JSON -> Alloy -> Loki esta viva; tolera solo el banner conocido de `tsx watch` y rechaza las demas lineas no estructuradas |
+| `dashboards.folder`      | los tres paneles comparten carpeta con las alertas                                                                                   |
+| `dashboards.api-traffic` | `API Overview` aplicado conserva la cola de access logs y frecuencia completa por metodo+ruta                                        |
 
 - **`ingest.json-labels` es la que detecta el fallo silencioso del overlay.** Si
   el servicio `api` se levanta sin
@@ -583,6 +593,8 @@ informa: no recrea nada.** 13 comprobaciones:
   `service` de hace dias no producen fallos permanentes, y despues de arreglar la
   causa sigue en rojo hasta que la ventana deja de abarcar las lineas viejas
   (`--window 2` acorta la espera). Sin trafico en la ventana es `INFO`, no fallo.
+  El banner exacto `$ tsx watch src/server.ts` se inspecciona y tolera; cualquier
+  otra linea no estructurada de `api` sigue siendo fallo.
 - Editar `rules.yaml` **exige recrear Grafana antes de correr esto**: el
   verificador lee el estado ya aplicado, asi que comprueba lo que esta corriendo,
   no lo que dice el archivo.
@@ -591,10 +603,10 @@ informa: no recrea nada.** 13 comprobaciones:
   `{service="sipeg-utp-backend", environment="production"}` y la busqueda por
   peticion es `{service="sipeg-utp-backend"} |= "<X-Request-ID>"`, o el filtro
   indexado `| requestId="<X-Request-ID>"` (structured metadata).
-- `route`, `method` y `statusCode` son **structured metadata**, asi que se pueden
-  filtrar y agrupar con `| route="/api/v1/careers"` y `sum by (route) (...)`
-  sin `| json`. `| json` solo hace falta para campos que Alloy no promueve
-  (hoy `aborted`). Ojo: structured metadata no va en el selector de stream
+- `route`, `method`, `statusCode`, `durationMs`, `outcome` y `requestKind` son
+  **structured metadata**, asi que se pueden filtrar y agrupar con
+  `| route="/api/v1/careers"` y `sum by (method, route) (...)` sin `| json`.
+  Ojo: structured metadata no va en el selector de stream
   (`{service="...", route="..."}` devuelve vacio); va siempre como filtro tras la
   llave, o se agrupa con `by`.
 - `event` y `requestId` tambien son structured metadata. `| requestId="<uuid>"`
@@ -612,6 +624,64 @@ informa: no recrea nada.** 13 comprobaciones:
   y borra sus volumenes: para retirar solo el stack de observabilidad, usa
   `docker compose -f compose.dev.yaml -f compose.observability.yaml rm -sf loki alloy grafana docker-socket-proxy`
   (o `stop`).
+
+#### Grafana no encuentra sus archivos de provisioning (Docker Desktop sobre WSL2)
+
+Sintoma: Loki y Alloy funcionan (`/loki/api/v1/labels` responde, hay streams de
+`api` con `service` y `log_type`), pero en Grafana no hay datasource, no hay
+paneles y las 5 alertas fallan cada minuto con
+`failed to build query 'A': data source not found`. El contenedor de Grafana esta
+en verde y su healthcheck pasa.
+
+Causa: los cuatro bind mounts de provisioning de Grafana
+(`provisioning/datasources`, `provisioning/dashboards`, `provisioning/alerting` y
+`/etc/grafana/dashboards`) quedaron vacios dentro del contenedor. Docker Desktop
+los expone a la VM mediante un shim en
+`/run/desktop/mnt/host/wsl/docker-desktop-bind-mounts/<distro>/<hash>`, y ese shim
+puede dejar de resolver contra la distro de WSL despues de un reinicio de WSL o
+del propio Docker Desktop. Grafana arranca igual, lee directorios vacios y no
+provisiona nada, sin decir nada en los logs.
+
+Diagnostico:
+
+```bash
+docker inspect sipeg-utp-dev-grafana-1 --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'
+```
+
+Un `Source` bajo `/run/desktop/mnt/host/wsl/` y un `ls` vacio del destino dentro
+del contenedor confirman el fallo. Los montajes de `loki`, `alloy` y `api`
+pueden no estar afectados, asi que el stack puede verse sano a medias.
+
+Remedio: **recrear** el contenedor, no reiniciarlo. `restart` reestablece el
+mismo shim roto y vuelve a dejar los directorios vacios.
+
+```bash
+docker compose -f compose.dev.yaml -f compose.observability.yaml up -d --force-recreate grafana
+```
+
+Comprobar que los archivos llegaron y que el provisioning corrio:
+
+```bash
+docker compose -f compose.dev.yaml -f compose.observability.yaml exec grafana ls -l /etc/grafana/provisioning/datasources
+docker compose -f compose.dev.yaml -f compose.observability.yaml logs grafana | grep 'provision'
+```
+
+Deben aparecer `inserting datasource from configuration name=Loki uid=loki`,
+`finished to provision alerting` y `finished to provision dashboards`. Si ya
+existia en la base de Grafana un datasource con la URL vacia, creado desde la UI,
+`prune: true` no lo borra (solo limpia los que vienen de un archivo): se borra a
+mano con `DELETE /api/datasources/uid/<uid>` o se queda como datasource por
+defecto y Explore no muestra nada. Las alertas tardan un ciclo de `1m` en dejar de
+mostrar `health=error` de la ultima evaluacion fallida.
+
+- El banner `$ tsx watch src/server.ts` de desarrollo tambien llega sin
+  `service`, porque lo escribe `tsx` y no la aplicacion; `observability:check`
+  tolera solo esa linea exacta y sigue fallando ante cualquier otra. El logger interno de
+  Better Auth esta silenciado a proposito (`logger: { disabled: true }` en
+  `src/lib/auth.ts`) por lo mismo: escribia texto plano por stdout y sus lineas
+  caian en un stream sin `service` ni `log_type` que no se puede filtrar. El
+  detalle de un login fallido lo emite la aplicacion con `auth.login.failed` y
+  `logType="security"`.
 
 ### Auditoria
 
