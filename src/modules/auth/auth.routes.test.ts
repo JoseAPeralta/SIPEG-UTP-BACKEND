@@ -206,6 +206,7 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: 'a@b.com', password: 'strongpass1234' })
+      .expect('Cache-Control', 'no-store')
       .expect(200);
 
     const accessToken = response.body.data.accessToken as string;
@@ -228,6 +229,7 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: 'not-an-email' })
+      .expect('Cache-Control', 'no-store')
       .expect(400);
     expect(response.body.success).toBe(false);
   });
@@ -355,6 +357,7 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/refresh')
       .set('Cookie', 'sipeg-refresh=invalid')
+      .expect('Cache-Control', 'no-store')
       .expect(401);
     expect(response.body.success).toBe(false);
   });
@@ -364,6 +367,7 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/refresh')
       .set('Cookie', 'sipeg-refresh=valid-token')
+      .expect('Cache-Control', 'no-store')
       .expect(200);
 
     const accessToken = response.body.data.accessToken as string;
@@ -443,8 +447,50 @@ describe('auth routes', () => {
   });
 
   it('POST /logout returns 200 even when session missing', async () => {
+    const app = await loadApp(authMock, defaultFindUnique, {
+      deleteMany: () => Promise.resolve({ count: 0 }),
+    });
+    const response = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', 'sipeg-refresh=r')
+      .expect('Cache-Control', 'no-store')
+      .expect(200);
+    expect(String(response.headers['set-cookie'])).toContain('sipeg-refresh=;');
+  });
+
+  it('POST /logout is idempotent without a cookie or body and clears the cookie', async () => {
+    const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
+    const app = await loadApp(authMock, defaultFindUnique, { deleteMany });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .expect(200)
+        .expect('Cache-Control', 'no-store');
+      expect(response.body).toEqual({ success: true, message: 'Logout successful.', data: {} });
+      expect(String(response.headers['set-cookie'])).toContain('sipeg-refresh=;');
+      expect(String(response.headers['set-cookie'])).toContain('Path=/api/v1/auth');
+      expect(String(response.headers['set-cookie'])).toContain('Expires=Thu, 01 Jan 1970');
+    }
+    expect(deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('POST /logout reports revocation failures and preserves the cookie for retry', async () => {
+    const app = await loadApp(authMock, defaultFindUnique, {
+      deleteMany: () => Promise.reject(new Error('Database unavailable: private detail')),
+    });
+    const response = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', 'sipeg-refresh=session-a')
+      .expect(500);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body.success).toBe(false);
+    expect(JSON.stringify(response.body)).not.toContain('private detail');
+    expect(response.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('POST /refresh still requires a cookie when the body is omitted', async () => {
     const app = await loadApp(authMock);
-    await request(app).post('/api/v1/auth/logout').set('Cookie', 'sipeg-refresh=r').expect(200);
+    await request(app).post('/api/v1/auth/refresh').expect(401);
   });
 
   it('POST /logout revokes only the supplied refresh token', async () => {

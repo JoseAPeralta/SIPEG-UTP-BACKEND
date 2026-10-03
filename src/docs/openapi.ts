@@ -55,6 +55,13 @@ const document: ZodOpenApiObject = {
   components: {
     securitySchemes: {
       bearerAuth: bearerAuthSecurityScheme,
+      refreshCookie: {
+        type: 'apiKey',
+        in: 'cookie',
+        name: 'sipeg-refresh',
+        description:
+          'HttpOnly refresh cookie set by login and refresh. Browser requests require credentials: include.',
+      },
     },
   },
 };
