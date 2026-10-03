@@ -51,6 +51,14 @@ export const auth = betterAuth({
   secret: env.AUTH_SECRET,
   baseURL: env.AUTH_URL,
   trustedOrigins,
+  // El logger propio de Better Auth escribe texto plano por stdout, fuera de pino:
+  // esas lineas no son JSON, asi que Alloy no les pone `service` ni `logType` y
+  // caen en un stream aparte que no se puede filtrar en Grafana. Ademas su
+  // "User not found" en un login fallido duplica un evento que la aplicacion ya
+  // emite con mas contexto y con el sujeto pseudonimo (`auth.login.failed`,
+  // logType `security`). El error real de autenticacion sigue registrandolo
+  // `errorHandler` como `http.error.unexpected`.
+  logger: { disabled: true },
   database: prismaAdapter(getPrismaClient(), { provider: 'postgresql' }),
   advanced: {
     database: { joins: true },

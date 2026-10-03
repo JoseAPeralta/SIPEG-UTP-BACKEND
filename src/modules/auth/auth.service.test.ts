@@ -10,10 +10,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 
 const { loggerInfo, loggerWarn, loggerError, createRequestLogger } = vi.hoisted(() => {
+  const requestInfo = vi.fn();
+  const requestWarn = vi.fn();
   const requestLogger = vi.fn(() => ({
     error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
+    info: requestInfo,
+    warn: requestWarn,
   }));
   return {
     loggerInfo: vi.fn(),
@@ -862,15 +864,17 @@ describe('auth service', () => {
     const { loginWithPassword } = await loadService(authMock, prismaMock);
     await loginWithPassword({ email: 'a@b.com', password: 'strongpass1234' });
 
-    expect(loggerInfo).toHaveBeenCalledWith(
+    expect(createRequestLogger).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'auth.login.succeeded',
         logType: 'security',
         actorPseudonym: expect.any(String),
       }),
+    );
+    expect(createRequestLogger.mock.results.at(-1)?.value.info).toHaveBeenCalledWith(
       'auth.login.succeeded',
     );
-    expect(JSON.stringify(loggerInfo.mock.calls)).not.toContain('a@b.com');
+    expect(JSON.stringify(createRequestLogger.mock.calls)).not.toContain('a@b.com');
   });
 
   it('logs auth.login.failed with actorPseudonym on failed login', async () => {
@@ -881,15 +885,17 @@ describe('auth service', () => {
       statusCode: 401,
     });
 
-    expect(loggerWarn).toHaveBeenCalledWith(
+    expect(createRequestLogger).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'auth.login.failed',
         logType: 'security',
         actorPseudonym: expect.any(String),
       }),
+    );
+    expect(createRequestLogger.mock.results.at(-1)?.value.warn).toHaveBeenCalledWith(
       'auth.login.failed',
     );
-    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('a@b.com');
+    expect(JSON.stringify(createRequestLogger.mock.calls)).not.toContain('a@b.com');
   });
 
   it('logs auth.password.changed with actorPseudonym', async () => {
@@ -910,12 +916,14 @@ describe('auth service', () => {
       TOKEN,
     );
 
-    expect(loggerInfo).toHaveBeenCalledWith(
+    expect(createRequestLogger).toHaveBeenCalledWith(
       expect.objectContaining({
         event: 'auth.password.changed',
         logType: 'security',
         actorPseudonym: expect.any(String),
       }),
+    );
+    expect(createRequestLogger.mock.results.at(-1)?.value.info).toHaveBeenCalledWith(
       'auth.password.changed',
     );
   });
@@ -926,8 +934,10 @@ describe('auth service', () => {
     const { logoutUser } = await loadService(authMock, prismaMock);
     await logoutUser('refresh-1');
 
-    expect(loggerInfo).toHaveBeenCalledWith(
+    expect(createRequestLogger).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'auth.session.revoked', logType: 'security' }),
+    );
+    expect(createRequestLogger.mock.results.at(-1)?.value.info).toHaveBeenCalledWith(
       'auth.session.revoked',
     );
   });
@@ -1085,8 +1095,10 @@ describe('auth service', () => {
     ).rejects.toMatchObject({ statusCode: 400 });
 
     // Fallos van al canal de seguridad (Loki), nunca a la bitacora durable.
-    expect(loggerWarn).toHaveBeenCalledWith(
+    expect(createRequestLogger).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'auth.password_reset.failed', logType: 'security' }),
+    );
+    expect(createRequestLogger.mock.results.at(-1)?.value.warn).toHaveBeenCalledWith(
       'auth.password_reset.failed',
     );
     expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
@@ -1103,8 +1115,10 @@ describe('auth service', () => {
       statusCode: 400,
     });
 
-    expect(loggerWarn).toHaveBeenCalledWith(
+    expect(createRequestLogger).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'auth.email_verification.failed', logType: 'security' }),
+    );
+    expect(createRequestLogger.mock.results.at(-1)?.value.warn).toHaveBeenCalledWith(
       'auth.email_verification.failed',
     );
     expect(prismaMock.auditEvent.create).not.toHaveBeenCalled();
@@ -1121,7 +1135,7 @@ describe('auth service', () => {
       resetPassword({ token: TOKEN, newPassword: 'newpass12345' }),
     ).rejects.toMatchObject({ statusCode: 400 });
 
-    const logged = JSON.stringify(loggerWarn.mock.calls);
+    const logged = JSON.stringify(createRequestLogger.mock.calls);
     expect(logged).not.toContain(TOKEN);
     expect(logged).not.toContain('newpass12345');
   });

@@ -6,7 +6,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { runWithLogContext } from '../lib/log-context.js';
 import { env } from './env.js';
-import { createChildLogger, createLogger, createRequestLogger, logger } from './logger.js';
+import {
+  createChildLogger,
+  createLogger,
+  createRequestLogger,
+  logger,
+  securityLogger,
+} from './logger.js';
 
 function createMemoryStream() {
   const chunks: string[] = [];
@@ -223,6 +229,17 @@ describe('logger', () => {
     const parsed = JSON.parse(output().trim());
     expect('requestId' in parsed).toBe(false);
     expect(parsed.event).toBe('app.starting');
+  });
+
+  it('routes security events through a logger independent from LOG_LEVEL', () => {
+    const childSpy = vi.spyOn(securityLogger, 'child');
+    const originalLevel = logger.level;
+    logger.level = 'error';
+
+    createRequestLogger({ event: 'auth.login.failed', logType: 'security' });
+
+    expect(childSpy).toHaveBeenCalledWith({ event: 'auth.login.failed', logType: 'security' });
+    logger.level = originalLevel;
   });
 
   it('silences the ambient singleton in the test environment', () => {

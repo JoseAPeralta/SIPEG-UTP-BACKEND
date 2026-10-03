@@ -13,6 +13,7 @@ const { loggerError, loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
 });
 
 vi.mock('./config/logger.js', () => ({
+  accessLogger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
   logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
   createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
   createRequestLogger: createRequestLoggerSpy,

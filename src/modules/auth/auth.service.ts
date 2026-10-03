@@ -6,7 +6,7 @@ import { SignJWT, importJWK } from 'jose';
 import { env } from '../../config/env.js';
 import { auth } from '../../lib/auth.js';
 import { getPrismaClient } from '../../config/prisma.js';
-import { logger } from '../../config/logger.js';
+import { createRequestLogger } from '../../config/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { writeAuditEvent } from '../audit/audit.service.js';
 import { pseudonymize } from '../../utils/pseudonymize.js';
@@ -138,10 +138,11 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       isActive: user.isActive,
     });
     const refreshExpiresAt = await fetchSessionExpiry(result.token);
-    logger.info(
-      { event: 'auth.login.succeeded', logType: 'security', actorPseudonym: pseudonymize(user.id) },
-      'auth.login.succeeded',
-    );
+    createRequestLogger({
+      event: 'auth.login.succeeded',
+      logType: 'security',
+      actorPseudonym: pseudonymize(user.id),
+    }).info('auth.login.succeeded');
     return {
       accessToken,
       accessTokenExpiresAt: new Date(Date.now() + parseTtlToMilliseconds(env.AUTH_TOKEN_TTL)),
@@ -149,14 +150,11 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       refreshTokenExpiresAt: refreshExpiresAt,
     };
   } catch (error) {
-    logger.warn(
-      {
-        event: 'auth.login.failed',
-        logType: 'security',
-        actorPseudonym: pseudonymize(body.email.trim().toLowerCase()),
-      },
-      'auth.login.failed',
-    );
+    createRequestLogger({
+      event: 'auth.login.failed',
+      logType: 'security',
+      actorPseudonym: pseudonymize(body.email.trim().toLowerCase()),
+    }).warn('auth.login.failed');
     throwBetterAuthError(error);
     throw new Error('Failed to login.', { cause: error });
   }
@@ -361,22 +359,21 @@ export const changePassword = async (
     }
   });
 
-  logger.info(
-    { event: 'auth.password.changed', logType: 'security', actorPseudonym: pseudonymize(userId) },
-    'auth.password.changed',
-  );
+  createRequestLogger({
+    event: 'auth.password.changed',
+    logType: 'security',
+    actorPseudonym: pseudonymize(userId),
+  }).info('auth.password.changed');
 };
 
 export const logoutUser = async (refreshToken: string): Promise<void> => {
-  try {
-    const prisma = getPrismaClient();
-    await prisma.session.deleteMany({
-      where: { token: refreshToken },
-    });
-    logger.info({ event: 'auth.session.revoked', logType: 'security' }, 'auth.session.revoked');
-  } catch (error) {
-    throwBetterAuthError(error);
-  }
+  const prisma = getPrismaClient();
+  await prisma.session.deleteMany({
+    where: { token: refreshToken },
+  });
+  createRequestLogger({ event: 'auth.session.revoked', logType: 'security' }).info(
+    'auth.session.revoked',
+  );
 };
 
 export const verifyEmail = async (body: VerifyEmailBody): Promise<void> => {
@@ -394,10 +391,10 @@ export const verifyEmail = async (body: VerifyEmailBody): Promise<void> => {
     if (error instanceof APIError && (error.statusCode ?? 500) < 500) {
       // Un token de verificacion rechazado es un intento fallido, no un evento
       // durable: va al canal de seguridad, sin el token y sin el correo.
-      logger.warn(
-        { event: 'auth.email_verification.failed', logType: 'security' },
-        'auth.email_verification.failed',
-      );
+      createRequestLogger({
+        event: 'auth.email_verification.failed',
+        logType: 'security',
+      }).warn('auth.email_verification.failed');
       throw new ApiError(400, 'Email verification token is invalid or expired.');
     }
     throwBetterAuthError(error);
@@ -444,8 +441,7 @@ export const resetPassword = async (body: ResetPasswordBody): Promise<void> => {
       // Un token de reset rechazado es intento de adivinacion: va al canal de
       // seguridad. Nunca a la bitacora durable, y nunca con el token ni la nueva
       // contrasena.
-      logger.warn(
-        { event: 'auth.password_reset.failed', logType: 'security' },
+      createRequestLogger({ event: 'auth.password_reset.failed', logType: 'security' }).warn(
         'auth.password_reset.failed',
       );
       throw new ApiError(400, 'Password reset token is invalid or expired.');
