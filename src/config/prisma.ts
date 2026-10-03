@@ -36,10 +36,16 @@ const createPrismaClient = (): PrismaClient => {
   });
 
   client.$on('warn', (event) => {
-    logger.warn({ event: 'prisma.warn', message: event.message }, 'prisma.warn');
+    logger.warn(
+      { event: 'prisma.warn', logType: 'infrastructure', message: event.message },
+      'prisma.warn',
+    );
   });
   client.$on('error', (event) => {
-    logger.error({ event: 'prisma.error', message: event.message }, 'prisma.error');
+    logger.error(
+      { event: 'prisma.error', logType: 'infrastructure', message: event.message },
+      'prisma.error',
+    );
   });
 
   return client;

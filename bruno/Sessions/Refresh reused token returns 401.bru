@@ -9,15 +9,15 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/auth/refresh
-  body: json
+  body: none
+
   auth: inherit
 }
 
-body:json {
-  {
-    "refreshToken": "{{previousRefreshToken}}"
-  }
+headers {
+  Cookie: sipeg-refresh={{previousRefreshCookie}}
 }
+
 
 tests {
   test("reused refresh token returns 401", function () {

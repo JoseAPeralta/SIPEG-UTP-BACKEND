@@ -1,0 +1,152 @@
+// Grafana Alloy -> Loki para SIPEG UTP.
+//
+// Imagen fijada por tag y digest en compose.observability.yaml:
+// grafana/alloy:v1.20.0@sha256:f111cce8...4cd30. Tabla completa en
+// docs/adr/adr-0007-structured-logging-and-observability.md.
+// Lee los logs de los contenedores de los proyectos Compose `sipeg-utp-prod` y
+// `sipeg-utp-dev` a traves del `docker-socket-proxy` de solo lectura, y nunca
+// monta `/var/run/docker.sock` directamente.
+//
+// Requisitos del lado de la aplicacion (ver T9.2b del plan):
+//   - Una linea JSON por evento: en desarrollo la API debe correr con
+//     `LOG_PRETTY=false` (lo fuerza compose.observability.yaml para el servicio
+//     `api`), porque `pino-pretty` no es JSON y no se puede etiquetar.
+//   - `level` como texto, `logType` presente y `requestId` en los eventos que
+//     ocurren dentro de un request.
+
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+// ----------------------------------------------------------------------------
+// 1. Descubrimiento de contenedores.
+//
+// El filtro por proyecto va aqui, en discovery, y no en `loki.source.docker`:
+// las reglas de relabel de la fuente se aplican despues de arrancar el tailer,
+// asi que un `drop` ahi no evita la conexion ni corta la linea.
+discovery.docker "containers" {
+	host             = "tcp://docker-socket-proxy:2375"
+	refresh_interval = "1m"
+}
+
+discovery.relabel "containers" {
+	targets = discovery.docker.containers.targets
+
+	// Solo los dos proyectos de SIPEG. Los regex del relabel estan anclados.
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+		regex         = "^(sipeg-utp-prod|sipeg-utp-dev)$"
+		action        = "keep"
+	}
+
+	// Nunca recolectar el propio stack de observabilidad.
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "^(loki|alloy|grafana|docker-socket-proxy)$"
+		action        = "drop"
+	}
+
+	// `container` = nombre del servicio Compose. Nunca usar el nombre de
+	// instancia (`sipeg-utp-dev-api-1`): cambia en cada recreacion y abriria un
+	// stream nuevo por despliegue.
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "container"
+	}
+}
+
+// ----------------------------------------------------------------------------
+// 2. Lectura de logs. Necesita `__meta_docker_container_id`, que solo existe si
+// los targets vienen del discovery.
+//
+// `tcp://` a proposito: con `http://` Alloy instala su propio cliente con un
+// timeout igual a `refresh_interval`, que cortaria el `follow` largo cada 60 s.
+loki.source.docker "containers" {
+	host             = "tcp://docker-socket-proxy:2375"
+	targets          = discovery.relabel.containers.output
+	refresh_interval = "60s"
+	forward_to       = [loki.process.containers.receiver]
+}
+
+// ----------------------------------------------------------------------------
+// 3. Procesamiento de la linea.
+//
+// La linea que llega aqui es el stdout/stderr del contenedor: `loki.source.docker`
+// ya desenvuelve el sobre `{"log":...}` de Docker, asi que NO se usa
+// `stage.docker`.
+loki.process "containers" {
+	forward_to = [loki.write.sipeg.receiver]
+
+	// Expresiones JMESPath; una expresion vacia significa "campo con el mismo
+	// nombre". Los campos que no existen (logs de `db` o `mailpit`) simplemente no
+	// se extraen, y las etapas siguientes los omiten.
+	stage.json {
+		expressions = {
+			level       = "level",
+			time        = "time",
+			service     = "service",
+			environment = "environment",
+			logType     = "logType",
+			event       = "event",
+			requestId   = "requestId",
+			method      = "method",
+			route       = "route",
+			statusCode  = "statusCode",
+			durationMs  = "durationMs",
+			outcome     = "outcome",
+			requestKind = "requestKind",
+		}
+	}
+
+	// Timestamp de la aplicacion (UTC ISO) en lugar del de ingesta de Docker;
+	// si la linea no trae `time` se conserva el de Docker.
+	stage.timestamp {
+		source            = "time"
+		format            = "RFC3339"
+		action_on_failure = "fudge"
+	}
+
+	// Solo baja cardinalidad a etiquetas. Cada combinacion de valores abre un
+	// stream: `route` y `statusCode` se multiplicarian por ruta y por codigo.
+	stage.labels {
+		values = {
+			level       = "level",
+			service     = "service",
+			environment = "environment",
+			log_type    = "logType",
+		}
+	}
+
+	// Filtrable sin abrir un stream por valor: la busqueda por `X-Request-ID` y
+	// las agregaciones por evento no dependen de esto, pero si aceleran la
+	// consulta. Requiere `allow_structured_metadata` en Loki (T9.1).
+	stage.structured_metadata {
+		values = {
+			requestId  = "requestId",
+			event      = "event",
+			method     = "method",
+			route      = "route",
+			statusCode = "statusCode",
+			durationMs = "durationMs",
+			outcome     = "outcome",
+			requestKind = "requestKind",
+		}
+	}
+}
+
+// ----------------------------------------------------------------------------
+// 4. Envio a Loki.
+loki.write "sipeg" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+		// Sin `tenant_id`: Loki corre con `auth_enabled: false` y no espera
+		// `X-Scope-OrgID`.
+		// Reintentar para siempre. Si Loki esta caido, el spool del driver de logs
+		// de Docker (con su `max-size`/`max-file`) es el que acota el disco; perder
+		// logs aqui seria peor que esperar.
+		max_backoff_retries = 0
+		max_backoff_period  = "2m"
+		retry_on_http_429   = true
+	}
+}

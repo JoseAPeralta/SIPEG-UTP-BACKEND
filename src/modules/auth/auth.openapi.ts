@@ -24,6 +24,15 @@ const emptyDataSchema = z
   .object({})
   .meta({ id: 'EmptyData', description: 'Empty successful payload.' });
 
+const sessionHeaders = {
+  'Cache-Control': { schema: z.literal('no-store') },
+  'Set-Cookie': {
+    description:
+      'Sets or expires the sipeg-refresh cookie with Path=/api/v1/auth. The refresh token is never returned in JSON.',
+    schema: z.string(),
+  },
+};
+
 export const authPaths: ZodOpenApiPathsObject = {
   '/api/v1/auth/login': {
     post: {
@@ -35,13 +44,16 @@ export const authPaths: ZodOpenApiPathsObject = {
       },
       responses: {
         200: {
-          description: 'Authenticated. Returns an access/refresh token pair.',
+          description:
+            'Authenticated. Returns an access token in JSON and a refresh token in an HttpOnly cookie.',
+          headers: sessionHeaders,
           content: { 'application/json': { schema: apiSuccessResponse(authTokensSchema) } },
         },
         400: errorResponse,
         401: errorResponse,
         403: errorResponse,
         429: errorResponse,
+        500: errorResponse,
       },
     },
   },
@@ -70,18 +82,24 @@ export const authPaths: ZodOpenApiPathsObject = {
     post: {
       tags: ['Auth'],
       summary: 'Refresh the access token',
+      description:
+        'Reads and rotates the HttpOnly refresh cookie. No body is needed; a missing, expired or revoked cookie returns 401. Responses use Cache-Control: no-store.',
+      security: [{ refreshCookie: [] }],
       requestBody: {
-        required: true,
+        required: false,
         content: { 'application/json': { schema: refreshSchema.shape.body } },
       },
       responses: {
         200: {
-          description: 'New access/refresh token pair.',
+          description: 'New access token in JSON and rotated refresh token in the HttpOnly cookie.',
+          headers: sessionHeaders,
           content: { 'application/json': { schema: apiSuccessResponse(authTokensSchema) } },
         },
         400: errorResponse,
         401: errorResponse,
+        403: errorResponse,
         429: errorResponse,
+        500: errorResponse,
       },
     },
   },
@@ -89,16 +107,22 @@ export const authPaths: ZodOpenApiPathsObject = {
     post: {
       tags: ['Auth'],
       summary: 'Log out and revoke the refresh token',
+      description:
+        'Idempotent, including without a cookie or body. Revokes the supplied session and clears its cookie. A server revocation failure returns 500 and preserves the cookie for retry. Previously issued access JWTs remain valid until expiry. Responses use Cache-Control: no-store.',
+      security: [{ refreshCookie: [] }, {}],
       requestBody: {
-        required: true,
+        required: false,
         content: { 'application/json': { schema: logoutSchema.shape.body } },
       },
       responses: {
         200: {
-          description: 'Session revoked.',
+          description: 'Session revoked or already absent. Refresh cookie cleared.',
+          headers: sessionHeaders,
           content: { 'application/json': { schema: apiSuccessResponse(emptyDataSchema) } },
         },
         400: errorResponse,
+        403: errorResponse,
+        500: errorResponse,
       },
     },
   },
@@ -134,6 +158,7 @@ export const authPaths: ZodOpenApiPathsObject = {
           content: { 'application/json': { schema: apiSuccessResponse(emptyDataSchema) } },
         },
         400: errorResponse,
+        403: errorResponse,
         429: errorResponse,
       },
     },

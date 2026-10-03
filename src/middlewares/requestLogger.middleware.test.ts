@@ -3,9 +3,10 @@ import { EventEmitter } from 'node:events';
 import type { Request, Response } from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { logger } from '../config/logger.js';
+import { accessLogger, logger } from '../config/logger.js';
 import {
   accessLogLevel,
+  captureRouteTemplate,
   requestLogger,
   resolveRequestId,
   routeTemplate,
@@ -13,14 +14,16 @@ import {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+// `route` y `baseUrl` no son opciones: la plantilla de ruta solo existe si se
+// reproduce el orden de Express con `matchRoute`, porque un `route` fijado antes
+// de que el middleware instale la captura nunca se registraria.
 interface MockRequestOptions {
   headers?: Record<string, string>;
   path?: string;
   method?: string;
   statusCode?: number;
+  headersSent?: boolean;
   writableFinished?: boolean;
-  route?: { path: string };
-  baseUrl?: string;
 }
 
 function createReqRes(options?: MockRequestOptions) {
@@ -30,11 +33,11 @@ function createReqRes(options?: MockRequestOptions) {
     headers,
     method: options?.method ?? 'GET',
     path: options?.path ?? '/api/v1/users',
-    baseUrl: options?.baseUrl ?? '',
-    route: options?.route,
+    baseUrl: '',
   };
   const res = {
     statusCode: options?.statusCode ?? 200,
+    headersSent: options?.headersSent ?? true,
     writableFinished: options?.writableFinished ?? true,
     setHeader: (name: string, value: string) => {
       headersSet[name] = value;
@@ -52,6 +55,20 @@ function createEmitterPair(options?: MockRequestOptions) {
   return { reqEmitter, resEmitter, headersSet };
 }
 
+/**
+ * Reproduce el orden real de Express: fija `baseUrl` al montaje y asigna
+ * `req.route` en el instante del match, con el prefijo todavia disponible.
+ */
+function matchRoute(req: Request, baseUrl: string, path: string): void {
+  req.baseUrl = baseUrl;
+  (req as { route?: unknown }).route = { path };
+}
+
+/** Lo que Express hace al desenrollar el router antes de emitir `finish`. */
+function unwindRouter(req: Request): void {
+  req.baseUrl = '';
+}
+
 describe('resolveRequestId', () => {
   it('generates a UUID and sets the X-Request-ID header when no header is sent', () => {
     const { req, res, headersSet } = createReqRes();
@@ -62,7 +79,7 @@ describe('resolveRequestId', () => {
     expect(headersSet['X-Request-ID']).toBe(requestId);
   });
 
-  it('reuses a valid UUID header without calling setHeader', () => {
+  it('reuses a valid UUID header and echoes it back so the client can correlate', () => {
     const { req, res, headersSet } = createReqRes({
       headers: { 'x-request-id': '11111111-2222-4333-8444-555555555555' },
     });
@@ -70,7 +87,7 @@ describe('resolveRequestId', () => {
     const requestId = resolveRequestId(req, res);
 
     expect(requestId).toBe('11111111-2222-4333-8444-555555555555');
-    expect(Object.hasOwn(headersSet, 'X-Request-ID')).toBe(false);
+    expect(headersSet['X-Request-ID']).toBe('11111111-2222-4333-8444-555555555555');
   });
 
   it('generates a new UUID when the header is not a UUID', () => {
@@ -112,16 +129,41 @@ describe('accessLogLevel', () => {
 
 describe('routeTemplate', () => {
   it('returns unmatched when the request did not match a route', () => {
-    const { req } = createReqRes({ path: '/api/v1/nope' });
+    const { reqEmitter } = createEmitterPair({ path: '/api/v1/nope' });
 
-    expect(routeTemplate(req)).toBe('unmatched');
+    captureRouteTemplate(reqEmitter);
+
+    expect(routeTemplate(reqEmitter)).toBe('unmatched');
   });
 
-  it('returns the route template when a route matched', () => {
-    const { req } = createReqRes({ path: '/api/v1/users/123', baseUrl: '/api/v1' });
-    (req as { route?: unknown }).route = { path: '/users/:id' };
+  it('keeps the mount prefix even after Express restores baseUrl', () => {
+    const { reqEmitter } = createEmitterPair({ path: '/api/v1/users/123' });
 
-    expect(routeTemplate(req)).toBe('/api/v1/users/:id');
+    captureRouteTemplate(reqEmitter);
+    matchRoute(reqEmitter, '/api/v1', '/users/:id');
+    unwindRouter(reqEmitter);
+
+    expect(routeTemplate(reqEmitter)).toBe('/api/v1/users/:id');
+  });
+
+  it('stays readable for the rest of the chain after the capture', () => {
+    const { reqEmitter } = createEmitterPair();
+
+    captureRouteTemplate(reqEmitter);
+    matchRoute(reqEmitter, '/api/v1', '/careers');
+
+    expect(reqEmitter.route).toEqual({ path: '/careers' });
+  });
+
+  it('ignores a route assignment without a string path', () => {
+    const { reqEmitter } = createEmitterPair();
+
+    captureRouteTemplate(reqEmitter);
+    reqEmitter.baseUrl = '/api/v1';
+    (reqEmitter as { route?: unknown }).route = undefined;
+    (reqEmitter as { route?: unknown }).route = { path: 42 };
+
+    expect(routeTemplate(reqEmitter)).toBe('unmatched');
   });
 });
 
@@ -140,10 +182,12 @@ describe('requestLogger middleware', () => {
   // turns the ambient singleton back on for the duration of each test.
   beforeEach(() => {
     logger.level = 'info';
+    accessLogger.level = 'info';
   });
 
   afterEach(() => {
     logger.level = 'silent';
+    accessLogger.level = 'silent';
     vi.restoreAllMocks();
   });
 
@@ -167,6 +211,8 @@ describe('requestLogger middleware', () => {
       event: 'http.request.completed',
       method: 'GET',
       route: 'unmatched',
+      requestKind: 'unmatched',
+      outcome: 'completed',
       statusCode: 200,
     });
     expect(typeof logs[0]?.['durationMs']).toBe('number');
@@ -193,14 +239,13 @@ describe('requestLogger middleware', () => {
   it('does not log the query string', () => {
     const { reqEmitter, resEmitter } = createEmitterPair({
       path: '/api/v1/users/123?token=secret&page=2',
-      route: { path: '/users/:id' },
-      baseUrl: '/api/v1',
     });
     const next = vi.fn();
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
     requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/v1', '/users/:id');
     resEmitter.emit('finish');
 
     const logs = readAccessLogs(writeSpy);
@@ -217,9 +262,41 @@ describe('requestLogger middleware', () => {
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
 
     requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/v1', '/health');
     resEmitter.emit('finish');
 
     expect(readAccessLogs(writeSpy)).toHaveLength(0);
+  });
+
+  it('does not hide unsupported methods on the health path', () => {
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      method: 'POST',
+      path: '/api/v1/health',
+      statusCode: 404,
+    });
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, vi.fn());
+    resEmitter.emit('finish');
+
+    expect(readAccessLogs(writeSpy)).toHaveLength(1);
+  });
+
+  it('classifies CORS preflights separately from unmatched requests', () => {
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      method: 'OPTIONS',
+      path: '/api/v1/activities',
+      statusCode: 204,
+    });
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, vi.fn());
+    resEmitter.emit('finish');
+
+    expect(readAccessLogs(writeSpy)[0]).toMatchObject({
+      requestKind: 'preflight',
+      route: 'unmatched',
+    });
   });
 
   it('logs 5xx health checks as errors', () => {
@@ -237,11 +314,14 @@ describe('requestLogger middleware', () => {
     const logs = readAccessLogs(writeSpy);
     expect(logs).toHaveLength(1);
     expect(logs[0]?.['statusCode']).toBe(500);
-    expect(logs[0]?.['level']).toBe(50);
+    expect(logs[0]?.['level']).toBe('error');
   });
 
   it('logs aborted requests when the client closes before finish', () => {
-    const { reqEmitter, resEmitter } = createEmitterPair({ writableFinished: false });
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      headersSent: false,
+      writableFinished: false,
+    });
     const next = vi.fn();
 
     const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
@@ -252,7 +332,38 @@ describe('requestLogger middleware', () => {
     const logs = readAccessLogs(writeSpy);
     expect(logs).toHaveLength(1);
     expect(logs[0]?.['aborted']).toBe(true);
-    expect(logs[0]?.['level']).toBe(40);
+    expect(logs[0]?.['outcome']).toBe('aborted');
+    expect(logs[0]?.['statusCode']).toBeUndefined();
+    expect(logs[0]?.['level']).toBe('warn');
+  });
+
+  it('keeps error severity when a 5xx response is aborted after headers are sent', () => {
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      headersSent: true,
+      statusCode: 500,
+      writableFinished: false,
+    });
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, vi.fn());
+    resEmitter.emit('close');
+
+    expect(readAccessLogs(writeSpy)[0]).toMatchObject({
+      level: 'error',
+      outcome: 'aborted',
+      statusCode: 500,
+    });
+  });
+
+  it('keeps access telemetry at info when the application logger is set to error', () => {
+    const { reqEmitter, resEmitter } = createEmitterPair();
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    logger.level = 'error';
+
+    requestLogger(reqEmitter, resEmitter, vi.fn());
+    resEmitter.emit('finish');
+
+    expect(readAccessLogs(writeSpy)).toHaveLength(1);
   });
 
   it('emits only one access event when both finish and close fire', () => {
@@ -284,7 +395,65 @@ describe('requestLogger middleware', () => {
 
     const logs = readAccessLogs(writeSpy);
     expect(logs).toHaveLength(1);
-    expect(logs[0]?.['level']).toBe(40);
+    expect(logs[0]?.['level']).toBe('warn');
     expect(logs[0]?.['statusCode']).toBe(429);
+  });
+
+  it('logs the full route template for a response born inside the chain', () => {
+    // `authenticate` responde 401 con `next(error)`, el router se desenrolla de
+    // forma sincrona y Express restaura `req.baseUrl` a '' antes de `finish`.
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      path: '/api/v1/audit-events',
+      statusCode: 401,
+    });
+    const next = vi.fn();
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/v1', '/audit-events');
+    unwindRouter(reqEmitter);
+    resEmitter.emit('finish');
+
+    const logs = readAccessLogs(writeSpy);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.['route']).toBe('/api/v1/audit-events');
+    expect(logs[0]?.['requestKind']).toBe('matched');
+    expect(logs[0]?.['statusCode']).toBe(401);
+  });
+
+  it('logs the full route template for aborted requests', () => {
+    const { reqEmitter, resEmitter } = createEmitterPair({
+      path: '/api/v1/activities',
+      writableFinished: false,
+    });
+    const next = vi.fn();
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/v1', '/activities');
+    unwindRouter(reqEmitter);
+    resEmitter.emit('close');
+
+    const logs = readAccessLogs(writeSpy);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.['route']).toBe('/api/v1/activities');
+    expect(logs[0]?.['aborted']).toBe(true);
+  });
+
+  it('logs the route template of a mount outside /api/v1', () => {
+    const { reqEmitter, resEmitter } = createEmitterPair({ path: '/api/auth/jwks' });
+    const next = vi.fn();
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    requestLogger(reqEmitter, resEmitter, next);
+    matchRoute(reqEmitter, '/api/auth', '/jwks');
+    resEmitter.emit('finish');
+
+    const logs = readAccessLogs(writeSpy);
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.['route']).toBe('/api/auth/jwks');
   });
 });

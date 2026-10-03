@@ -3,7 +3,7 @@ import type { Request, RequestHandler } from 'express';
 import { getEffectivePermissions } from '../modules/authorization/authorization.service.js';
 import type { AuthorizationScope } from '../modules/authorization/authorization.types.js';
 import { PERMISSION_NAMES, type PermissionName } from '../modules/authorization/permissions.js';
-import { logger } from '../config/logger.js';
+import { createRequestLogger } from '../config/logger.js';
 import { pseudonymize } from '../utils/pseudonymize.js';
 import { ApiError } from '../utils/ApiError.js';
 import { requireAuthenticatedUser } from './authenticate.middleware.js';
@@ -19,15 +19,13 @@ export const requireRole = (...allowed: GlobalRole[]): RequestHandler => {
     try {
       const user = requireAuthenticatedUser(req);
       if (!allowed.includes(user.globalRole)) {
-        logger.warn(
-          {
-            event: 'authorization.denied',
-            actorPseudonym: pseudonymize(user.id),
-            requiredRole: allowed.join(','),
-            actualRole: user.globalRole,
-          },
-          'authorization.denied',
-        );
+        createRequestLogger({
+          event: 'authorization.denied',
+          logType: 'security',
+          actorPseudonym: pseudonymize(user.id),
+          requiredRole: allowed.join(','),
+          actualRole: user.globalRole,
+        }).warn('authorization.denied');
         throw new ApiError(403, 'Insufficient privileges for this resource.');
       }
       next();
@@ -47,10 +45,11 @@ export const requireOwnership = (
       const user = requireAuthenticatedUser(req);
       const ownerId = selector(req);
       if (!ownerId || ownerId !== user.id) {
-        logger.warn(
-          { event: 'authorization.denied', actorPseudonym: pseudonymize(user.id) },
-          'authorization.denied',
-        );
+        createRequestLogger({
+          event: 'authorization.denied',
+          logType: 'security',
+          actorPseudonym: pseudonymize(user.id),
+        }).warn('authorization.denied');
         throw new ApiError(403, 'You do not own this resource.');
       }
       next();
@@ -76,6 +75,16 @@ export const requirePermission = (
 
       const scope = resolveScope ? await resolveScope(req) : undefined;
       if (!scope) {
+        // Sin scope no hay nada que autorizar, pero el 403 sigue siendo una
+        // denegacion: se registra con el permiso pedido para que el panel de
+        // seguridad pueda explicarla. Los ids del scope no se emiten porque no
+        // se conocen, que es justamente la causa de la denegacion.
+        createRequestLogger({
+          event: 'authorization.denied',
+          logType: 'security',
+          actorPseudonym: pseudonymize(user.id),
+          requiredPermission: permission,
+        }).warn('authorization.denied');
         throw new ApiError(403, 'Insufficient privileges for this resource.');
       }
 
@@ -83,16 +92,14 @@ export const requirePermission = (
       req.authorization = { permissions };
 
       if (!permissions.has(permission)) {
-        logger.warn(
-          {
-            event: 'authorization.denied',
-            actorPseudonym: pseudonymize(user.id),
-            requiredPermission: permission,
-            eventProgramId: scope.eventProgramId,
-            activityId: scope.activityId,
-          },
-          'authorization.denied',
-        );
+        createRequestLogger({
+          event: 'authorization.denied',
+          logType: 'security',
+          actorPseudonym: pseudonymize(user.id),
+          requiredPermission: permission,
+          eventProgramId: scope.eventProgramId,
+          activityId: scope.activityId,
+        }).warn('authorization.denied');
         throw new ApiError(403, 'Insufficient privileges for this resource.');
       }
 

@@ -1,11 +1,22 @@
 import request from 'supertest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { loggerWarn } = vi.hoisted(() => ({ loggerWarn: vi.fn() }));
+const { loggerError, loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+  const loggerError = vi.fn();
+  const loggerWarn = vi.fn();
+  const createRequestLoggerSpy = vi.fn(() => ({
+    error: loggerError,
+    info: vi.fn(),
+    warn: loggerWarn,
+  }));
+  return { loggerError, loggerWarn, createRequestLoggerSpy };
+});
 
 vi.mock('./config/logger.js', () => ({
+  accessLogger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
   logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
   createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+  createRequestLogger: createRequestLoggerSpy,
 }));
 
 const loadApp = async (docsEnabled?: string) => {
@@ -24,6 +35,13 @@ const loadApp = async (docsEnabled?: string) => {
   vi.doMock('./lib/auth.js', () => ({
     auth: {
       options: { baseURL: 'http://localhost:3000' },
+      handler: vi.fn(
+        async () =>
+          new Response(JSON.stringify({ keys: [] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
       api: {
         signInEmail: vi.fn(),
         signUpEmail: vi.fn(),
@@ -94,10 +112,14 @@ describe('security middleware', () => {
       message: 'CORS origin is not allowed.',
       errors: [],
     });
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'security.cors.denied', origin: 'https://evil.example' }),
-      'security.cors.denied',
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'security.cors.denied',
+        logType: 'security',
+        origin: 'https://evil.example',
+      }),
     );
+    expect(loggerWarn).toHaveBeenCalledWith('security.cors.denied');
   });
 
   it('allows requests from the configured origin', async () => {
@@ -132,5 +154,67 @@ describe('security middleware', () => {
       message: 'Route /api/auth/sign-up/email not found.',
       errors: [],
     });
+  });
+});
+
+describe('Better Auth native surface', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('./lib/auth.js');
+    vi.doUnmock('./config/prisma.js');
+  });
+
+  it('serves the JWKS endpoint consumed by token verification and health checks', async () => {
+    const { app } = await loadApp();
+
+    const response = await request(app).get('/api/auth/jwks').expect(200);
+
+    expect(response.body).toEqual({ keys: [] });
+  });
+
+  it.each([
+    ['post', '/api/auth/request-password-reset'],
+    ['post', '/api/auth/reset-password'],
+    ['post', '/api/auth/verify-email'],
+    ['post', '/api/auth/sign-in/email'],
+    ['get', '/api/auth/get-session'],
+  ] as const)('does not expose the native %s %s endpoint', async (method, path) => {
+    const { app } = await loadApp();
+
+    const response = await request(app)[method](path).expect(404);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: `Route ${path} not found.`,
+      errors: [],
+    });
+  });
+});
+
+describe('cuerpo de peticion malformado', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('./lib/auth.js');
+    vi.doUnmock('./config/prisma.js');
+    loggerError.mockClear();
+  });
+
+  it('responde 400 y no emite http.error.unexpected cuando el JSON esta truncado', async () => {
+    const { app } = await loadApp();
+
+    const response = await request(app)
+      .post('/api/v1/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{"email": "admin@sipeg.local"')
+      .expect(400);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'Malformed request body.',
+      errors: [],
+    });
+    expect(response.headers['x-request-id']).toBeDefined();
+    expect(JSON.stringify(response.body)).not.toContain('admin@sipeg.local');
+    expect(loggerError).not.toHaveBeenCalled();
   });
 });

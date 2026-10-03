@@ -9,26 +9,34 @@ meta {
 
 post {
   url: {{baseUrl}}/api/v1/auth/refresh
-  body: json
+  body: none
+
   auth: inherit
 }
 
-body:json {
-  {
-    "refreshToken": "{{refreshToken}}"
-  }
+headers {
+  Cookie: sipeg-refresh={{refreshCookie}}
 }
 
+
 script:pre-request {
-  bru.setVar("previousRefreshToken", bru.getVar("refreshToken") ?? "");
+  bru.setVar("previousRefreshCookie", bru.getVar("refreshCookie") ?? "");
 }
 
 script:post-response {
+  // El refresh token viaja en Set-Cookie y no en el body: la API no lo expone.
+  const responseHeaders = res.getHeaders();
+  const rawCookie = responseHeaders["set-cookie"] ?? responseHeaders["Set-Cookie"];
+  const firstCookie = Array.isArray(rawCookie) ? rawCookie[0] : rawCookie;
+  const cookieValue = /sipeg-refresh=([^;]+)/.exec(firstCookie ?? "")?.[1];
+
+  if (cookieValue) {
+    bru.setVar("refreshCookie", cookieValue);
+  }
   const body = res.getBody();
 
-  if (body?.success && body.data?.refreshToken) {
+  if (body?.success && body.data?.accessToken) {
     bru.setVar("token", body.data.accessToken);
-    bru.setVar("refreshToken", body.data.refreshToken);
   }
 }
 
@@ -38,7 +46,6 @@ tests {
     const body = res.getBody();
     expect(body.success).to.equal(true);
     expect(body.data.tokenType).to.equal("Bearer");
-    expect(body.data.refreshToken).to.not.equal(bru.getVar("previousRefreshToken"));
     const [encodedHeader] = body.data.accessToken.split(".");
     const base64Header = encodedHeader.replace(/-/g, "+").replace(/_/g, "/");
     const header = JSON.parse(Buffer.from(base64Header, "base64").toString("utf8"));
@@ -56,7 +63,6 @@ example {
     mode: json
     body:json: {
       {
-        "refreshToken": ""
       }
     }
   }
@@ -80,7 +86,6 @@ example {
           "data": {
             "accessToken": "",
             "accessTokenExpiresAt": "",
-            "refreshToken": "",
             "refreshTokenExpiresAt": "",
             "tokenType": ""
           }
@@ -100,7 +105,6 @@ example {
     mode: json
     body:json: {
       {
-        "refreshToken": ""
       }
     }
   }
@@ -143,7 +147,6 @@ example {
     mode: json
     body:json: {
       {
-        "refreshToken": ""
       }
     }
   }
@@ -186,7 +189,6 @@ example {
     mode: json
     body:json: {
       {
-        "refreshToken": ""
       }
     }
   }

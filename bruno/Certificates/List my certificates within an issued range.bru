@@ -1,0 +1,46 @@
+meta {
+  name: List my certificates within an issued range
+  type: http
+  seq: 5
+  tags: [
+    Certificates
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/certificates?issuedFrom=2026-08-26&issuedTo=2026-09-07
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the issued range is accepted in the institutional calendar", function () {
+    expect(res.getStatus()).to.equal(200);
+    const data = res.getBody().data;
+    expect(data.total).to.be.at.least(1);
+    expect(data.items.length).to.be.at.least(1);
+  });
+
+  test("every returned issuance falls inside the requested institutional days", function () {
+    // 2026-08-26 00:00 y 2026-09-08 00:00 en America/Panama (UTC-5, sin DST).
+    const from = Date.parse("2026-08-26T05:00:00.000Z");
+    const to = Date.parse("2026-09-08T05:00:00.000Z");
+
+    expect(
+      res
+        .getBody()
+        .data.items.every(function (item) {
+          const issuedAt = Date.parse(item.issuedAt);
+          return issuedAt >= from && issuedAt < to;
+        })
+    ).to.equal(true);
+  });
+
+  test("the range does not widen the unfiltered listing", function () {
+    expect(res.getBody().data.total).to.be.at.most(bru.getVar("myCertificateCount"));
+  });
+}

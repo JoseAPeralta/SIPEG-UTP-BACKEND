@@ -1,0 +1,21 @@
+meta {
+  name: List my certificates without a token returns 401
+  type: http
+  seq: 8
+  tags: [
+    Certificates
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/certificates
+  body: none
+  auth: none
+}
+
+tests {
+  test("the listing is private", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}
