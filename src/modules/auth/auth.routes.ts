@@ -1,15 +1,18 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middlewares/authenticate.middleware.js';
+import { noStore } from '../../middlewares/noStore.middleware.js';
 import {
   changePasswordRateLimit,
   emailVerificationRateLimit,
   forgotPasswordRateLimit,
   loginRateLimit,
+  refreshRateLimit,
   registerRateLimit,
   resetPasswordRateLimit,
 } from '../../middlewares/rateLimit.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
+import { requireTrustedOrigin } from '../../middlewares/trustedOrigin.middleware.js';
 import {
   changePasswordHandler,
   forgotPasswordHandler,
@@ -33,10 +36,27 @@ import {
 
 export const authRoutes = Router();
 
-authRoutes.post('/auth/login', loginRateLimit, validate(loginSchema), login);
+authRoutes.post(
+  '/auth/login',
+  noStore,
+  requireTrustedOrigin,
+  loginRateLimit,
+  validate(loginSchema),
+  login,
+);
 authRoutes.post('/auth/register', registerRateLimit, validate(registerSchema), register);
-authRoutes.post('/auth/refresh', loginRateLimit, validate(refreshSchema), refresh);
-authRoutes.post('/auth/logout', validate(logoutSchema), logout);
+// `requireTrustedOrigin` va antes del limitador: un origen no permitido es un
+// intento, no trafico legitimo, y no debe gastar cuota ni quedar registrado como
+// un 429 por el frontend.
+authRoutes.post(
+  '/auth/refresh',
+  noStore,
+  requireTrustedOrigin,
+  refreshRateLimit,
+  validate(refreshSchema),
+  refresh,
+);
+authRoutes.post('/auth/logout', noStore, requireTrustedOrigin, validate(logoutSchema), logout);
 authRoutes.post(
   '/auth/verify-email',
   emailVerificationRateLimit,
@@ -57,8 +77,10 @@ authRoutes.post(
 );
 authRoutes.post(
   '/auth/change-password',
+  requireTrustedOrigin,
   authenticate,
   changePasswordRateLimit,
+  refreshRateLimit,
   validate(changePasswordSchema),
   changePasswordHandler,
 );

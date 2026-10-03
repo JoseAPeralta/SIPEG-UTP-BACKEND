@@ -1,0 +1,21 @@
+meta {
+  name: List audit events without a token returns 401
+  type: http
+  seq: 7
+  tags: [
+    Audit
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/audit-events
+  body: none
+  auth: none
+}
+
+tests {
+  test("anonymous requests cannot read the audit log", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

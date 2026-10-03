@@ -1,0 +1,46 @@
+meta {
+  name: Create a collaborator user
+  type: http
+  seq: 7
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/admin/users
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "email": "{{collaboratorUserEmail}}",
+    "password": "SipegCreado2026*",
+    "firstName": "Colaborador",
+    "lastName": "Bruno",
+    "identificationNumber": "{{collaboratorUserIdentification}}",
+    "globalRole": "USER",
+    "isActive": true
+  }
+}
+
+script:pre-request {
+  const suffix = bru.interpolate("{{$randomInt}}");
+  bru.setVar("collaboratorUserEmail", `creado.colab.${suffix}.${Date.now()}@utp.ac.pa`);
+  bru.setVar("collaboratorUserIdentification", `8-${Date.now()}-${suffix}`);
+}
+
+tests {
+  test("ADMIN creates a fresh user for the collaborator flow", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.id).to.be.a("string");
+    bru.setVar("collaboratorUserId", body.data.id);
+  });
+}

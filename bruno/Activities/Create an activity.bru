@@ -1,7 +1,7 @@
 meta {
   name: Create an activity
   type: http
-  seq: 2
+  seq: 8
   tags: [
     Activities
   ]
@@ -19,30 +19,68 @@ auth:bearer {
 
 body:json {
   {
-    "name": "",
-    "description": "",
-    "type": "WORKSHOP",
-    "date": "",
-    "startTime": "",
-    "endTime": "",
-    "maxCapacity": 0,
-    "bannerUrl": "",
-    "eventProgramId": "",
-    "classroomId": "",
+    "name": "Actividad temporal payload completo",
+    "description": "Cubre speaker, equipment and maxCapacity en una sola llamada.",
+    "type": "SEMINAR",
+    "date": "2026-12-16",
+    "startTime": "14:00",
+    "endTime": "16:00",
+    "maxCapacity": 40,
+    "eventProgramId": "seed_program_fic_default",
     "speakers": [
       {
-        "firstName": "",
-        "lastName": "",
-        "email": "",
-        "organization": ""
+        "firstName": "Ana",
+        "lastName": "Prueba",
+        "email": "ana.prueba@utp.ac.pa",
+        "organization": "Vicerrectoria de Investigacion"
       }
     ],
-    "equipment": []
+    "equipment": ["Proyector", "Pizarra inteligente"]
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.id) {
+    bru.setVar("fullPayloadActivityId", body.data.id);
   }
 }
 
 docs {
-  Creates an activity in DRAFT status inside an ACTIVE event program. Accepts inline speakers; a speaker is reused when the email matches an existing catalog entry and linked to a platform user when the email matches an account. Speakers do not need a platform account. Requires the activity:create permission on the target program (or the ADMIN role).
+  Creates an activity in DRAFT status inside an ACTIVE event program, exercising the full payload: speaker, equipment and maxCapacity. Requires the activity:create permission on the target program (or the ADMIN role). The activity stays DRAFT with no attendance, so the closing request deletes it through the API.
+}
+
+tests {
+  test("a DRAFT with the full payload is created", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.id).to.be.a("string");
+    expect(bru.getVar("fullPayloadActivityId")).to.equal(body.data.id);
+    expect(body.data.name).to.equal("Actividad temporal payload completo");
+    expect(body.data.type).to.equal("SEMINAR");
+    expect(body.data.status).to.equal("DRAFT");
+    expect(body.data.capacity).to.equal(40);
+    expect(body.data.enrolledCount).to.equal(0);
+    expect(body.data.checkedInCount).to.equal(0);
+  })
+
+  test("the speaker is linked through the minimal public summary", function () {
+    const body = res.getBody();
+    expect(body.data.speakers).to.have.lengthOf(1);
+    expect(body.data.speakers[0].firstName).to.equal("Ana");
+    expect(body.data.speakers[0].lastName).to.equal("Prueba");
+    expect(body.data.speakers[0].id).to.be.a("string");
+    expect(body.data.speakers[0]).to.not.have.property("email");
+    expect(body.data.speakers[0]).to.not.have.property("organization");
+  })
+
+  test("the equipment is normalized", function () {
+    const body = res.getBody();
+    expect(body.data.equipment).to.have.lengthOf(2);
+    expect(body.data.equipment).to.include("Proyector");
+  })
 }
 
 example {
@@ -55,25 +93,23 @@ example {
     mode: json
     body:json: {
       {
-        "name": "",
-        "description": "",
-        "type": "WORKSHOP",
-        "date": "",
-        "startTime": "",
-        "endTime": "",
-        "maxCapacity": 0,
-        "bannerUrl": "",
-        "eventProgramId": "",
-        "classroomId": "",
+        "name": "Actividad temporal payload completo",
+        "description": "Cubre speaker, equipment and maxCapacity en una sola llamada.",
+        "type": "SEMINAR",
+        "date": "2026-12-16",
+        "startTime": "14:00",
+        "endTime": "16:00",
+        "maxCapacity": 40,
+        "eventProgramId": "seed_program_fic_default",
         "speakers": [
           {
-            "firstName": "",
-            "lastName": "",
-            "email": "",
-            "organization": ""
+            "firstName": "Ana",
+            "lastName": "Prueba",
+            "email": "ana.prueba@utp.ac.pa",
+            "organization": "Vicerrectoria de Investigacion"
           }
         ],
-        "equipment": []
+        "equipment": ["Proyector", "Pizarra inteligente"]
       }
     }
   }
@@ -92,338 +128,37 @@ example {
       type: json
       content: '''
         {
-          "success": false,
-          "message": "",
+          "success": true,
+          "message": "Operation completed successfully.",
           "data": {
-            "id": "",
-            "name": "",
-            "description": "",
-            "type": "WORKSHOP",
-            "date": "",
-            "startTime": "",
-            "endTime": "",
-            "capacity": "",
-            "bannerUrl": "",
+            "id": "clx0000000000aaaaaaaaaaaaaaaa",
+            "name": "Actividad temporal payload completo",
+            "description": "Cubre speaker, equipment and maxCapacity en una sola llamada.",
+            "type": "SEMINAR",
+            "date": "2026-12-16",
+            "startTime": "14:00",
+            "endTime": "16:00",
+            "capacity": 40,
+            "bannerUrl": null,
             "status": "DRAFT",
-            "equipment": [],
-            "speakers": [],
-            "classroom": "",
+            "enrolledCount": 0,
+            "checkedInCount": 0,
+            "cancelReason": null,
+            "equipment": ["Proyector", "Pizarra inteligente"],
+            "speakers": [
+              {
+                "id": "clx0000000000bbbbbbbbbbbbbbbb",
+                "firstName": "Ana",
+                "lastName": "Prueba"
+              }
+            ],
+            "classroom": null,
             "eventProgram": {
-              "id": "",
-              "name": "",
-              "label": ""
-            },
-            "organizationalUnit": {
-              "type": "FACULTY",
-              "id": "",
-              "name": ""
+              "id": "seed_program_fic_default",
+              "name": "Facultad de Ingenieria en Sistemas",
+              "label": null
             }
           }
-        }
-      '''
-    }
-  }
-}
-
-example {
-  name: 400 Response
-  description: Error response.
-
-  request: {
-    url: {{baseUrl}}/api/v1/activities
-    method: POST
-    mode: json
-    body:json: {
-      {
-        "name": "",
-        "description": "",
-        "type": "WORKSHOP",
-        "date": "",
-        "startTime": "",
-        "endTime": "",
-        "maxCapacity": 0,
-        "bannerUrl": "",
-        "eventProgramId": "",
-        "classroomId": "",
-        "speakers": [
-          {
-            "firstName": "",
-            "lastName": "",
-            "email": "",
-            "organization": ""
-          }
-        ],
-        "equipment": []
-      }
-    }
-  }
-
-  response: {
-    headers: {
-      Content-Type: application/json
-    }
-
-    status: {
-      code: 400
-      text: Bad Request
-    }
-
-    body: {
-      type: json
-      content: '''
-        {
-          "success": false,
-          "message": "",
-          "errors": [
-            {
-              "field": "",
-              "message": ""
-            }
-          ]
-        }
-      '''
-    }
-  }
-}
-
-example {
-  name: 401 Response
-  description: Error response.
-
-  request: {
-    url: {{baseUrl}}/api/v1/activities
-    method: POST
-    mode: json
-    body:json: {
-      {
-        "name": "",
-        "description": "",
-        "type": "WORKSHOP",
-        "date": "",
-        "startTime": "",
-        "endTime": "",
-        "maxCapacity": 0,
-        "bannerUrl": "",
-        "eventProgramId": "",
-        "classroomId": "",
-        "speakers": [
-          {
-            "firstName": "",
-            "lastName": "",
-            "email": "",
-            "organization": ""
-          }
-        ],
-        "equipment": []
-      }
-    }
-  }
-
-  response: {
-    headers: {
-      Content-Type: application/json
-    }
-
-    status: {
-      code: 401
-      text: Unauthorized
-    }
-
-    body: {
-      type: json
-      content: '''
-        {
-          "success": false,
-          "message": "",
-          "errors": [
-            {
-              "field": "",
-              "message": ""
-            }
-          ]
-        }
-      '''
-    }
-  }
-}
-
-example {
-  name: 403 Response
-  description: Error response.
-
-  request: {
-    url: {{baseUrl}}/api/v1/activities
-    method: POST
-    mode: json
-    body:json: {
-      {
-        "name": "",
-        "description": "",
-        "type": "WORKSHOP",
-        "date": "",
-        "startTime": "",
-        "endTime": "",
-        "maxCapacity": 0,
-        "bannerUrl": "",
-        "eventProgramId": "",
-        "classroomId": "",
-        "speakers": [
-          {
-            "firstName": "",
-            "lastName": "",
-            "email": "",
-            "organization": ""
-          }
-        ],
-        "equipment": []
-      }
-    }
-  }
-
-  response: {
-    headers: {
-      Content-Type: application/json
-    }
-
-    status: {
-      code: 403
-      text: Forbidden
-    }
-
-    body: {
-      type: json
-      content: '''
-        {
-          "success": false,
-          "message": "",
-          "errors": [
-            {
-              "field": "",
-              "message": ""
-            }
-          ]
-        }
-      '''
-    }
-  }
-}
-
-example {
-  name: 404 Response
-  description: Error response.
-
-  request: {
-    url: {{baseUrl}}/api/v1/activities
-    method: POST
-    mode: json
-    body:json: {
-      {
-        "name": "",
-        "description": "",
-        "type": "WORKSHOP",
-        "date": "",
-        "startTime": "",
-        "endTime": "",
-        "maxCapacity": 0,
-        "bannerUrl": "",
-        "eventProgramId": "",
-        "classroomId": "",
-        "speakers": [
-          {
-            "firstName": "",
-            "lastName": "",
-            "email": "",
-            "organization": ""
-          }
-        ],
-        "equipment": []
-      }
-    }
-  }
-
-  response: {
-    headers: {
-      Content-Type: application/json
-    }
-
-    status: {
-      code: 404
-      text: Not Found
-    }
-
-    body: {
-      type: json
-      content: '''
-        {
-          "success": false,
-          "message": "",
-          "errors": [
-            {
-              "field": "",
-              "message": ""
-            }
-          ]
-        }
-      '''
-    }
-  }
-}
-
-example {
-  name: 500 Response
-  description: Error response.
-
-  request: {
-    url: {{baseUrl}}/api/v1/activities
-    method: POST
-    mode: json
-    body:json: {
-      {
-        "name": "",
-        "description": "",
-        "type": "WORKSHOP",
-        "date": "",
-        "startTime": "",
-        "endTime": "",
-        "maxCapacity": 0,
-        "bannerUrl": "",
-        "eventProgramId": "",
-        "classroomId": "",
-        "speakers": [
-          {
-            "firstName": "",
-            "lastName": "",
-            "email": "",
-            "organization": ""
-          }
-        ],
-        "equipment": []
-      }
-    }
-  }
-
-  response: {
-    headers: {
-      Content-Type: application/json
-    }
-
-    status: {
-      code: 500
-      text: Internal Server Error
-    }
-
-    body: {
-      type: json
-      content: '''
-        {
-          "success": false,
-          "message": "",
-          "errors": [
-            {
-              "field": "",
-              "message": ""
-            }
-          ]
         }
       '''
     }

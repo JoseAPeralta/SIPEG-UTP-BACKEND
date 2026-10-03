@@ -1,0 +1,24 @@
+meta {
+  name: List event programs with an invalid token returns 401
+  type: http
+  seq: 32
+  tags: [
+    Event_Programs
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: not-a-real-token
+}
+
+tests {
+  test("a present but invalid token is rejected", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

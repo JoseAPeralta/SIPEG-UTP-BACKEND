@@ -49,6 +49,10 @@ enum ActivityType {
   WORKSHOP
   SEMINAR
   TALK
+  CONFERENCE
+  PANEL
+  COURSE
+  COMPETITION
   OTHER
 }
 
@@ -77,6 +81,12 @@ enum AlertType {
 enum PermissionGrantSource {
   ROLE_DEFAULT
   OVERRIDE
+}
+
+enum AuditActorType {
+  USER
+  ANONYMOUS
+  SYSTEM
 }
 
 model User {
@@ -198,18 +208,19 @@ model EventProgram {
 }
 
 model Activity {
-  id          String         @id @default(cuid())
-  name        String         @db.VarChar(200)
-  description String?        @db.Text
-  type        ActivityType
-  date        DateTime       @db.Date
-  startTime   DateTime       @map("start_time") @db.Time(3)
-  endTime     DateTime       @map("end_time") @db.Time(3)
-  maxCapacity Int?           @map("max_capacity")
-  bannerUrl   String?        @map("banner_url") @db.VarChar(500)
-  status      ActivityStatus @default(DRAFT)
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id           String         @id @default(cuid())
+  name         String         @db.VarChar(200)
+  description  String?        @db.Text
+  type         ActivityType
+  date         DateTime       @db.Date
+  startTime    DateTime       @map("start_time") @db.Time(3)
+  endTime      DateTime       @map("end_time") @db.Time(3)
+  maxCapacity  Int?           @map("max_capacity")
+  bannerUrl    String?        @map("banner_url") @db.VarChar(500)
+  status       ActivityStatus @default(DRAFT)
+  cancelReason String?        @map("cancel_reason") @db.VarChar(500)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   eventProgramId String       @map("event_program_id")
   eventProgram   EventProgram @relation(fields: [eventProgramId], references: [id], onDelete: Restrict)
@@ -474,6 +485,29 @@ model Alert {
   @@index([activityId])
   @@index([certificateId])
   @@map("alerts")
+}
+
+model AuditEvent {
+  id           String         @id @default(cuid())
+  action       String         @db.VarChar(80)
+  occurredAt   DateTime       @default(now()) @map("occurred_at") @db.Timestamptz(3)
+  actorType    AuditActorType @default(USER) @map("actor_type")
+  actorId      String?        @map("actor_id")
+  resourceType String         @map("resource_type") @db.VarChar(50)
+  resourceId   String?        @map("resource_id")
+  scopeType    String?        @map("scope_type") @db.VarChar(30)
+  scopeId      String?        @map("scope_id")
+  targetUserId String?        @map("target_user_id")
+  requestId    String?        @map("request_id")
+  changes      Json?
+  metadata     Json?
+
+  @@index([resourceType, resourceId, occurredAt])
+  @@index([actorId, occurredAt])
+  @@index([action, occurredAt])
+  @@index([scopeType, scopeId, occurredAt])
+  @@index([occurredAt])
+  @@map("audit_events")
 }
 
 model Session {

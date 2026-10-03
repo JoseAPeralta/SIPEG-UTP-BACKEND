@@ -28,6 +28,7 @@
     "test:coverage": "vitest run --coverage",
     "docs:generate": "tsx src/docs/generate.ts",
     "docs:check": "tsx src/docs/generate.ts --check",
+    "observability:check": "tsx src/observability/check.ts",
     "api:collection:import": "bru import openapi --source openapi.json --output bruno --collection-name \"SIPEG UTP API\" --collection-format bru --group-by tags",
     "api:run": "pnpm --dir bruno exec bru run -r --env local",
     "api:run:smoke": "pnpm --dir bruno exec bru run Health --env local",
@@ -38,7 +39,9 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:status": "prisma migrate status",
     "prisma:seed": "prisma db seed",
-    "prisma:seed:base": "tsx prisma/seed.base.ts"
+    "prisma:seed:base": "tsx prisma/seed.base.ts",
+    "prisma:cleanup:dev": "tsx prisma/scripts/cleanup-dev-activities.ts",
+    "prisma:purge:audit": "tsx prisma/scripts/purge-audit-events.ts"
   },
   "engines": {
     "node": ">=24.0.0 <25"
@@ -51,6 +54,7 @@
     "@scalar/express-api-reference": "^0.10.19",
     "argon2": "^0.41.1",
     "better-auth": "^1.7.5",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
@@ -59,12 +63,14 @@
     "jose": "^6.2.12",
     "nodemailer": "^10.0.10",
     "pg": "^8.20.0",
+    "pino": "^10.3.1",
     "zod": "^4.4.3",
     "zod-openapi": "^6.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/argon2": "^0.15.4",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/express-rate-limit": "^6.0.2",
@@ -76,6 +82,7 @@
     "@vitest/coverage-v8": "^4.1.11",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
+    "pino-pretty": "^13.1.3",
     "prettier": "^3.8.3",
     "prisma": "^7.10.0",
     "supertest": "^7.2.2",

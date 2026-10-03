@@ -3,6 +3,22 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../utils/ApiError.js';
 
+const { loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+  const loggerWarn = vi.fn();
+  const createRequestLoggerSpy = vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: loggerWarn,
+  }));
+  return { loggerWarn, createRequestLoggerSpy };
+});
+
+vi.mock('../config/logger.js', () => ({
+  logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
+  createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+  createRequestLogger: createRequestLoggerSpy,
+}));
+
 const buildReq = (user?: Express.AuthenticatedUser) => ({ user }) as unknown as Request;
 
 const loadAuthz = async () => {
@@ -32,7 +48,7 @@ describe('authorize middleware', () => {
     expect(next).toHaveBeenCalledWith();
   });
 
-  it('denies USER for ADMIN role gate', async () => {
+  it('denies USER for ADMIN role gate and logs authorization.denied', async () => {
     const { requireRole } = await loadAuthz();
     const req = buildReq({
       id: 'u1',
@@ -46,9 +62,20 @@ describe('authorize middleware', () => {
     requireRole('ADMIN')(req, {} as Response, next);
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'authorization.denied',
+        logType: 'security',
+        actorPseudonym: expect.any(String),
+        requiredRole: 'ADMIN',
+        actualRole: 'USER',
+      }),
+    );
+    expect(loggerWarn).toHaveBeenCalledWith('authorization.denied');
+    expect(JSON.stringify(createRequestLoggerSpy.mock.calls)).not.toContain('a@b.com');
   });
 
-  it('ownership rejects when ids differ', async () => {
+  it('ownership rejects when ids differ and logs authorization.denied', async () => {
     const { requireOwnership } = await loadAuthz();
     const req = buildReq({
       id: 'u1',
@@ -67,6 +94,14 @@ describe('authorize middleware', () => {
     );
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'authorization.denied',
+        logType: 'security',
+        actorPseudonym: expect.any(String),
+      }),
+    );
+    expect(loggerWarn).toHaveBeenCalledWith('authorization.denied');
   });
 
   it('ownership allows when ids match', async () => {
@@ -121,7 +156,7 @@ describe('requirePermission middleware', () => {
     vi.doUnmock('../modules/authorization/authorization.service.js');
   });
 
-  it('denies when the user lacks the required permission', async () => {
+  it('denies when the user lacks the required permission and logs authorization.denied', async () => {
     const service = { getEffectivePermissions: vi.fn().mockResolvedValue(new Set()) };
     const { requirePermission } = await loadPermissionMiddleware(service);
     const req = buildReq({
@@ -142,6 +177,17 @@ describe('requirePermission middleware', () => {
 
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'authorization.denied',
+        logType: 'security',
+        actorPseudonym: expect.any(String),
+        requiredPermission: 'activity:update',
+        eventProgramId: 'p1',
+      }),
+    );
+    expect(loggerWarn).toHaveBeenCalledWith('authorization.denied');
+    expect(JSON.stringify(createRequestLoggerSpy.mock.calls)).not.toContain('a@b.com');
   });
 
   it('allows when the resolver finds the permission', async () => {
@@ -233,6 +279,26 @@ describe('requirePermission middleware', () => {
 
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
+    // Sin este log el 403 solo era visible en el access log, sin motivo: el panel
+    // de seguridad no podia explicar por que se denego.
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'authorization.denied',
+        logType: 'security',
+        actorPseudonym: expect.any(String),
+        requiredPermission: 'report:view',
+      }),
+    );
+    expect(loggerWarn).toHaveBeenCalledWith('authorization.denied');
+    // El scope no se pudo resolver, asi que sus ids no se conocen: emitirlos
+    // seria inventarlos.
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.not.objectContaining({ eventProgramId: expect.anything() }),
+    );
+    expect(createRequestLoggerSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ activityId: expect.anything() }),
+    );
+    expect(service.getEffectivePermissions).not.toHaveBeenCalled();
   });
 
   it('requires an authenticated user', async () => {

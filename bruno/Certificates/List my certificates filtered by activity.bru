@@ -1,0 +1,35 @@
+meta {
+  name: List my certificates filtered by activity
+  type: http
+  seq: 4
+  tags: [
+    Certificates
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/certificates?activityId={{certificateActivityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("only the certificates of the requested activity come back", function () {
+    expect(res.getStatus()).to.equal(200);
+    const data = res.getBody().data;
+    expect(data.total).to.be.at.least(1);
+    expect(
+      data.items.every(function (item) {
+        return item.activity.id === bru.getEnvVar("certificateActivityId");
+      })
+    ).to.equal(true);
+  });
+
+  test("the activity filter narrows the unfiltered listing", function () {
+    expect(res.getBody().data.total).to.be.below(bru.getVar("myCertificateCount"));
+  });
+}

@@ -1,0 +1,32 @@
+meta {
+  name: Grant a permission on an archived program returns 409
+  type: http
+  seq: 38
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{archivedProgramId}}/permissions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "permission": "report:export"
+  }
+}
+
+tests {
+  test("An archived event program cannot receive grants", function () {
+    expect(res.getStatus()).to.equal(409);
+    expect(res.getBody().message).to.equal("Archived event programs cannot be modified.");
+  });
+}

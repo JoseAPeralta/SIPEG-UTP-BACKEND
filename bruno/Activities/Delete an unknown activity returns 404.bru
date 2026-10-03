@@ -1,0 +1,25 @@
+meta {
+  name: Delete an unknown activity returns 404
+  type: http
+  seq: 34
+  tags: [
+    Activities
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{unknownActivityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("unknown activities return 404 on delete", function () {
+    expect(res.getStatus()).to.equal(404);
+    expect(res.getBody().message).to.equal("Activity not found.");
+  });
+}

@@ -42,17 +42,23 @@ export const PROGRAM_COLLABORATIONS: readonly ProgramCollaborationCatalogEntry[]
   role({ type: 'unit', unitKey: 'fii' }, 'org-fii', 'ORGANIZER'),
   role({ type: 'unit', unitKey: 'fim' }, 'org-fim', 'ORGANIZER'),
   role({ type: 'unit', unitKey: 'fisc' }, 'org-fisc', 'ORGANIZER'),
-  role({ type: 'unit', unitKey: 'fct' }, 'org-fct', 'ORGANIZER'),
+  role({ type: 'unit', unitKey: 'fcyt' }, 'org-fcyt', 'ORGANIZER'),
   role({ type: 'unit', unitKey: 'sub-acad' }, 'org-sub-acad', 'ORGANIZER'),
   role({ type: 'unit', unitKey: 'sub-admin' }, 'org-sub-admin', 'ORGANIZER'),
   role({ type: 'unit', unitKey: 'sub-vida' }, 'org-sub-vida', 'ORGANIZER'),
   role({ type: 'unit', unitKey: 'sub-ipe' }, 'org-sub-ipe', 'ORGANIZER'),
   role({ type: 'unit', unitKey: 'fisc' }, 'editor', 'EDITOR'),
-  role({ type: 'unit', unitKey: 'fct' }, 'visor', 'VIEWER'),
+  role({ type: 'unit', unitKey: 'fcyt' }, 'visor', 'VIEWER'),
   role({ type: 'additional', programKey: 'semana-ic' }, 'org-fic', 'ORGANIZER'),
   role({ type: 'additional', programKey: 'congreso-cit' }, 'org-fisc', 'ORGANIZER'),
   role({ type: 'additional', programKey: 'foro-ipe' }, 'org-sub-ipe', 'ORGANIZER'),
+  role({ type: 'additional', programKey: 'feria-cientifica' }, 'org-fcyt', 'ORGANIZER'),
+  role({ type: 'additional', programKey: 'encuentro-deportivo' }, 'org-sub-vida', 'ORGANIZER'),
+  role({ type: 'additional', programKey: 'congreso-mecatronica' }, 'org-fim', 'ORGANIZER'),
+  role({ type: 'additional', programKey: 'congreso-cit' }, 'editor-fii', 'EDITOR'),
+  role({ type: 'additional', programKey: 'feria-cientifica' }, 'visor', 'VIEWER'),
   role({ type: 'activity', activityKey: 'fisc-charla-ia' }, 'editor', 'EDITOR'),
+  role({ type: 'activity', activityKey: 'cit-panel-mujeres-stem' }, 'visor', 'VIEWER'),
 ];
 
 export const OVERRIDE_GRANTS: readonly OverrideCatalogEntry[] = [
@@ -71,11 +77,25 @@ export const OVERRIDE_GRANTS: readonly OverrideCatalogEntry[] = [
     validUntilOffsetDays: 60,
   },
   {
-    scope: { type: 'unit', unitKey: 'fct' },
+    scope: { type: 'unit', unitKey: 'fcyt' },
     userKey: 'visor',
     permission: PERMISSIONS.REPORT_EXPORT,
     validFromOffsetDays: -30,
     validUntilOffsetDays: -1,
+  },
+  {
+    scope: { type: 'additional', programKey: 'feria-cientifica' },
+    userKey: 'org-fcyt',
+    permission: PERMISSIONS.REPORT_EXPORT,
+    validFromOffsetDays: 5,
+    validUntilOffsetDays: 10,
+  },
+  {
+    scope: { type: 'additional', programKey: 'congreso-mecatronica' },
+    userKey: 'org-fim',
+    permission: PERMISSIONS.ACTIVITY_CREATE,
+    validFromOffsetDays: null,
+    validUntilOffsetDays: null,
   },
 ];
 

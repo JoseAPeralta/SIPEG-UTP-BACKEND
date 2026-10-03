@@ -1,0 +1,35 @@
+meta {
+  name: Add a collaborator to an activity
+  type: http
+  seq: 31
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities/{{collaboratorsActivityId}}/collaborators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("ADMIN adds an activity-local collaborator", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.userId).to.equal(bru.getVar("collaboratorUserId"));
+    expect(body.data.role).to.equal("VIEWER");
+  });
+}

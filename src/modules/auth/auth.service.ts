@@ -6,15 +6,17 @@ import { SignJWT, importJWK } from 'jose';
 import { env } from '../../config/env.js';
 import { auth } from '../../lib/auth.js';
 import { getPrismaClient } from '../../config/prisma.js';
+import { createRequestLogger } from '../../config/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
+import { writeAuditEvent } from '../audit/audit.service.js';
+import { pseudonymize } from '../../utils/pseudonymize.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { parseTtlToMilliseconds } from '../../utils/ttl.js';
+import { recordAuthAuditEvent, withAuthAuditSubject } from './auth.audit.js';
 import type {
   ChangePasswordBody,
   ForgotPasswordBody,
   LoginBody,
-  LogoutBody,
-  RefreshBody,
   RegisterBody,
   ResetPasswordBody,
   VerifyEmailBody,
@@ -136,6 +138,11 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       isActive: user.isActive,
     });
     const refreshExpiresAt = await fetchSessionExpiry(result.token);
+    createRequestLogger({
+      event: 'auth.login.succeeded',
+      logType: 'security',
+      actorPseudonym: pseudonymize(user.id),
+    }).info('auth.login.succeeded');
     return {
       accessToken,
       accessTokenExpiresAt: new Date(Date.now() + parseTtlToMilliseconds(env.AUTH_TOKEN_TTL)),
@@ -143,6 +150,11 @@ export const loginWithPassword = async (body: LoginBody): Promise<AuthSuccess> =
       refreshTokenExpiresAt: refreshExpiresAt,
     };
   } catch (error) {
+    createRequestLogger({
+      event: 'auth.login.failed',
+      logType: 'security',
+      actorPseudonym: pseudonymize(body.email.trim().toLowerCase()),
+    }).warn('auth.login.failed');
     throwBetterAuthError(error);
     throw new Error('Failed to login.', { cause: error });
   }
@@ -190,6 +202,10 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
     if (!persisted) {
       throw new ApiError(409, 'Email is already registered.');
     }
+    // Tras confirmar la persistencia, no antes: auditar un alta que Better Auth
+    // llego a devolver pero que no esta en la base dejaria un evento sin sujeto
+    // real. El alta no es atomica con este insert (ADR-0008).
+    await recordAuthAuditEvent({ action: 'user.registered', userId: result.user.id });
     return { userId: result.user.id };
   } catch (error) {
     if (error instanceof ApiError) throw error;
@@ -215,12 +231,16 @@ export const registerUser = async (body: RegisterBody): Promise<{ userId: string
   }
 };
 
-export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess> => {
+/**
+ * El token llega desde la cookie `HttpOnly`, no desde el body: asi el cliente no
+ * puede leerlo y las dos pestanas comparten la misma sesion por naturaleza.
+ */
+export const refreshAccessToken = async (refreshToken: string): Promise<AuthSuccess> => {
   try {
     const prisma = getPrismaClient();
     const now = new Date();
     const session = await prisma.session.findFirst({
-      where: { token: body.refreshToken },
+      where: { token: refreshToken },
       select: {
         expiresAt: true,
         userId: true,
@@ -243,7 +263,7 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
       throw new ApiError(401, 'Refresh token has expired.');
     }
     if (!session.user.isActive) {
-      await prisma.session.deleteMany({ where: { token: body.refreshToken } });
+      await prisma.session.deleteMany({ where: { token: refreshToken } });
       throw new ApiError(401, 'Refresh token is invalid.');
     }
     const accessToken = await signAccessJwt({
@@ -256,7 +276,7 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
     });
     const rotatedToken = randomBytes(32).toString('base64url');
     const rotated = await prisma.session.updateMany({
-      where: { token: body.refreshToken, expiresAt: { gt: now } },
+      where: { token: refreshToken, expiresAt: { gt: now } },
       data: { token: rotatedToken },
     });
     if (rotated.count !== 1) {
@@ -275,7 +295,16 @@ export const refreshAccessToken = async (body: RefreshBody): Promise<AuthSuccess
   }
 };
 
-export const changePassword = async (userId: string, body: ChangePasswordBody): Promise<void> => {
+/**
+ * `refreshToken` es la credencial de la sesion actual, leida de la cookie. Se usa
+ * para conservarla mientras se revocan las demas: si se revocara tambien, el
+ * propio cambio de contrasena expulsaria al usuario.
+ */
+export const changePassword = async (
+  userId: string,
+  body: ChangePasswordBody,
+  refreshToken: string,
+): Promise<void> => {
   const prisma = getPrismaClient();
 
   const account = await prisma.account.findFirst({
@@ -288,7 +317,7 @@ export const changePassword = async (userId: string, body: ChangePasswordBody): 
   }
 
   const currentSession = await prisma.session.findFirst({
-    where: { token: body.refreshToken, userId },
+    where: { token: refreshToken, userId },
     select: { id: true },
   });
 
@@ -303,35 +332,81 @@ export const changePassword = async (userId: string, body: ChangePasswordBody): 
       where: { id: account.id },
       data: { password: newHash },
     });
-    await tx.session.deleteMany({
-      where: { userId, token: { not: body.refreshToken } },
+
+    const revoked = await tx.session.deleteMany({
+      where: { userId, token: { not: refreshToken } },
     });
+
+    await writeAuditEvent(tx, {
+      action: 'auth.password_changed',
+      actorType: 'USER',
+      actorId: userId,
+      resourceType: 'user',
+      resourceId: userId,
+      targetUserId: userId,
+    });
+
+    if (revoked.count > 0) {
+      await writeAuditEvent(tx, {
+        action: 'auth.other_sessions_revoked',
+        actorType: 'USER',
+        actorId: userId,
+        resourceType: 'user',
+        resourceId: userId,
+        targetUserId: userId,
+        metadata: { revokedSessionCount: revoked.count },
+      });
+    }
   });
+
+  createRequestLogger({
+    event: 'auth.password.changed',
+    logType: 'security',
+    actorPseudonym: pseudonymize(userId),
+  }).info('auth.password.changed');
 };
 
-export const logoutUser = async (_body: LogoutBody): Promise<void> => {
-  try {
-    const prisma = getPrismaClient();
-    await prisma.session.deleteMany({
-      where: { token: _body.refreshToken },
-    });
-  } catch (error) {
-    throwBetterAuthError(error);
-  }
+export const logoutUser = async (refreshToken: string): Promise<void> => {
+  const prisma = getPrismaClient();
+  await prisma.session.deleteMany({
+    where: { token: refreshToken },
+  });
+  createRequestLogger({ event: 'auth.session.revoked', logType: 'security' }).info(
+    'auth.session.revoked',
+  );
 };
 
 export const verifyEmail = async (body: VerifyEmailBody): Promise<void> => {
+  let userId: string | undefined;
   try {
-    await auth.api.verifyEmail({
-      query: { token: body.token },
-      headers: betterAuthHeaders(),
-      asResponse: false,
-    });
+    const captured = await withAuthAuditSubject(() =>
+      auth.api.verifyEmail({
+        query: { token: body.token },
+        headers: betterAuthHeaders(),
+        asResponse: false,
+      }),
+    );
+    userId = captured.userId;
   } catch (error) {
     if (error instanceof APIError && (error.statusCode ?? 500) < 500) {
+      // Un token de verificacion rechazado es un intento fallido, no un evento
+      // durable: va al canal de seguridad, sin el token y sin el correo.
+      createRequestLogger({
+        event: 'auth.email_verification.failed',
+        logType: 'security',
+      }).warn('auth.email_verification.failed');
       throw new ApiError(400, 'Email verification token is invalid or expired.');
     }
     throwBetterAuthError(error);
+    return;
+  }
+
+  // El hook `afterEmailVerification` solo corre en la transicion real: si el
+  // email ya estaba verificado, Better Auth retorna antes. Auditar despues de
+  // que la llamada resuelva evita registrar un evento por un reintento que no
+  // cambio nada, y evita auditar un token rechazado.
+  if (userId) {
+    await recordAuthAuditEvent({ action: 'auth.email_verified', userId });
   }
 };
 
@@ -351,16 +426,36 @@ export const requestPasswordReset = async (body: ForgotPasswordBody): Promise<vo
 };
 
 export const resetPassword = async (body: ResetPasswordBody): Promise<void> => {
+  let userId: string | undefined;
   try {
-    await auth.api.resetPassword({
-      body: { token: body.token, newPassword: body.newPassword },
-      headers: betterAuthHeaders(),
-      asResponse: false,
-    });
+    const captured = await withAuthAuditSubject(() =>
+      auth.api.resetPassword({
+        body: { token: body.token, newPassword: body.newPassword },
+        headers: betterAuthHeaders(),
+        asResponse: false,
+      }),
+    );
+    userId = captured.userId;
   } catch (error) {
     if (error instanceof APIError && (error.statusCode ?? 500) < 500) {
+      // Un token de reset rechazado es intento de adivinacion: va al canal de
+      // seguridad. Nunca a la bitacora durable, y nunca con el token ni la nueva
+      // contrasena.
+      createRequestLogger({ event: 'auth.password_reset.failed', logType: 'security' }).warn(
+        'auth.password_reset.failed',
+      );
       throw new ApiError(400, 'Password reset token is invalid or expired.');
     }
     throwBetterAuthError(error);
+    return;
+  }
+
+  // A diferencia de `verifyEmail`, aqui el hook `onPasswordReset` corre DESPUES
+  // de cambiar la contrasena pero ANTES de revocar las sesiones. Por eso la
+  // escritura va aca: si el insert de auditoria fallara dentro del hook, la
+  // excepcion cortaria la revocacion y dejaria sesiones vivas con una contrasena
+  // que el titular ya dio por cambiada.
+  if (userId) {
+    await recordAuthAuditEvent({ action: 'auth.password_reset', userId });
   }
 };

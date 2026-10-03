@@ -67,21 +67,26 @@ El ER contiene **18 entidades** y **10 enums**.
 | `proposal_versions`         | Historial inmutable de revisiones de una propuesta                 | Histórico     |
 | `proposal_feedback`         | Feedback textual o visual de un encargado                          | Transaccional |
 | `alerts`                    | Alertas internas dirigidas a usuarios                              | Transaccional |
+| `audit_events`              | Bitácora append-only de acciones sensibles                         | Evidencia     |
 
 ### 2.2 Enums
 
-| Enum                | Valores                                                                                                                                                              | Uso                              |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| `GlobalRole`        | `USER`, `ADMIN`                                                                                                                                                      | Rol global de usuario            |
-| `UnitType`          | `FACULTY`, `SUBDIRECTORATE`                                                                                                                                          | Tipo de unidad organizativa      |
-| `CollaborationRole` | `ORGANIZER`, `EDITOR`, `VIEWER`                                                                                                                                      | Rol en un programa o actividad   |
-| `ProgramStatus`     | `DRAFT`, `ACTIVE`, `COMPLETED`, `CANCELLED`, `ARCHIVED`                                                                                                              | Ciclo de vida de programas       |
-| `ActivityStatus`    | `DRAFT`, `SCHEDULED`, `ONGOING`, `COMPLETED`, `CANCELLED`                                                                                                            | Ciclo de vida de actividades     |
-| `ClassroomType`     | `LABORATORY`, `CLASSROOM`                                                                                                                                            | Tipo de aula                     |
-| `ActivityType`      | `WORKSHOP`, `SEMINAR`, `TALK`, `OTHER`                                                                                                                               | Tipo de actividad y propuesta    |
-| `AttendanceMethod`  | `QR`, `MANUAL`                                                                                                                                                       | Método de registro de asistencia |
-| `ProposalStatus`    | `PENDING`, `APPROVED`, `REJECTED`                                                                                                                                    | Estado vigente de una propuesta  |
-| `AlertType`         | `PROPOSAL_RECEIVED`, `PROPOSAL_UPDATED`, `PROPOSAL_RESPONDED`, `PROGRAM_UPDATED`, `PROGRAM_ARCHIVED`, `ACTIVITY_UPDATED`, `ACTIVITY_CANCELLED`, `CERTIFICATE_ISSUED` | Tipo de alerta                   |
+| Enum                    | Valores                                                                                                                                                              | Uso                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `GlobalRole`            | `USER`, `ADMIN`                                                                                                                                                      | Rol global de usuario             |
+| `UnitType`              | `FACULTY`, `SUBDIRECTORATE`                                                                                                                                          | Tipo de unidad organizativa       |
+| `CollaborationRole`     | `ORGANIZER`, `EDITOR`, `VIEWER`                                                                                                                                      | Rol en un programa o actividad    |
+| `ProgramStatus`         | `DRAFT`, `ACTIVE`, `COMPLETED`, `CANCELLED`, `ARCHIVED`                                                                                                              | Ciclo de vida de programas        |
+| `ActivityStatus`        | `DRAFT`, `SCHEDULED`, `ONGOING`, `COMPLETED`, `CANCELLED`                                                                                                            | Ciclo de vida de actividades      |
+| `ClassroomType`         | `LABORATORY`, `CLASSROOM`                                                                                                                                            | Tipo de aula                      |
+| `ActivityType`          | `WORKSHOP`, `SEMINAR`, `TALK`, `CONFERENCE`, `PANEL`, `COURSE`, `COMPETITION`, `OTHER`                                                                               | Tipo de actividad y propuesta     |
+| `AttendanceMethod`      | `QR`, `MANUAL`                                                                                                                                                       | Método de registro de asistencia  |
+| `ProposalStatus`        | `PENDING`, `APPROVED`, `REJECTED`                                                                                                                                    | Estado vigente de una propuesta   |
+| `AlertType`             | `PROPOSAL_RECEIVED`, `PROPOSAL_UPDATED`, `PROPOSAL_RESPONDED`, `PROGRAM_UPDATED`, `PROGRAM_ARCHIVED`, `ACTIVITY_UPDATED`, `ACTIVITY_CANCELLED`, `CERTIFICATE_ISSUED` | Tipo de alerta                    |
+| `AuditActorType`        | `USER`, `ANONYMOUS`, `SYSTEM`                                                                                                                                        | Naturaleza del actor de un evento |
+| `PermissionGrantSource` | `ROLE_DEFAULT`, `OVERRIDE`                                                                                                                                           | Origen de un permiso otorgado     |
+
+`audit_events.action` no es un enum de base de datos: es un `VARCHAR(80)` cuyo catálogo de 25 valores vive en el código (`AUDIT_ACTIONS`) y se valida al escribir. Esa separación permite agregar una acción sin migración, a cambio de perder la garantía de integridad que da un enum, que es aceptable porque el valor es de escritura única y la bitácora no admite correcciones posteriores.
 
 ### 2.3 Atributos principales
 
@@ -374,6 +379,14 @@ Cada decisión se presenta como decisión, justificación y validación.
 
 **Validación:** el archivado bloquea primero el programa y su unidad propietaria. Solo los programas adicionales comprueban actividades `SCHEDULED`/`ONGOING`; los predeterminados comprueban el estado de la unidad. La creación y transición de actividades debe bloquear la misma fila de programa para cerrar carreras. Al reactivar una unidad se bloquean ambos registros y se restaura el programa a `ACTIVE` antes de confirmar.
 
+### D24. Bitácora de auditoría append-only sin integridad referencial
+
+**Decisión:** `audit_events` es una bitácora de solo inserción, sin ninguna clave foránea, y sus acciones se registran en la misma transacción que la operación que las produce.
+
+**Justificación:** la evidencia de una acción sensible debe sobrevivir a la eliminación de su actor y de su recurso; una `ON DELETE CASCADE` destruiría el registro justamente cuando más importa, y una `RESTRICT` bloquearía el borrado de usuarios. Por eso `actor_id` y `target_user_id` son referencias lógicas sin `FOREIGN KEY`, igual que `resource_type`/`resource_id` y `scope_type`/`scope_id`, que además son polimórficas. Al no haber borrado en cascada posible, `action` puede crecer sin migración.
+
+**Validación:** `audit_events_prevent_mutation` (BEFORE UPDATE OR DELETE) y `audit_events_prevent_truncate` (BEFORE TRUNCATE) rechazan cualquier mutación, de modo que ninguna ruta de aplicación puede reescribir la bitácora. La escritura comparte transacción con la acción auditada, así que un rollback de negocio también retira su evento. La consulta es de solo lectura y está restringida a `ADMIN`. La purga por retención es un procedimiento administrativo privilegiado que necesita deshabilitar ambos triggers en una transacción, y hoy no está definido (ver `logging-y-auditoria.md`, T13.1 y T13.2).
+
 ---
 
 ## 4. Restricciones de integridad
@@ -447,6 +460,28 @@ ALTER TABLE activities ADD CONSTRAINT activities_classroom_no_overlap
     tsrange((date + start_time)::timestamp, (date + end_time)::timestamp, '[)') WITH &&
   ) WHERE (classroom_id IS NOT NULL AND status IN ('SCHEDULED', 'ONGOING'));
 ```
+
+### 4.4 Triggers
+
+Un `CHECK` solo observa la fila que se escribe y no cubre la transición ni la concurrencia. Las reglas que dependen del estado de otra fila, de una transición válida o de la retención de datos se resuelven con triggers en `plpgsql`. El modelo tiene once triggers sobre cuatro tablas:
+
+| Tabla                  | Trigger                                           | Momento                                                                  | Regla                                                                                                        | Función                             |
+| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `activities`           | `activities_prevent_delete`                       | BEFORE DELETE, por fila                                                  | Solo `DRAFT` de programa `ACTIVE`; bloquea el programa con `FOR UPDATE` para cerrar carreras                 | `prevent_activity_delete`           |
+| `activities`           | `activities_validate_program`                     | BEFORE INSERT OR UPDATE OF `event_program_id, date, status`              | La actividad solo existe o se programa en un programa `ACTIVE` (D17)                                         | `validate_activity_program`         |
+| `audit_events`         | `audit_events_prevent_mutation`                   | BEFORE DELETE OR UPDATE, por fila                                        | La bitácora es append-only (D24)                                                                             | `prevent_audit_event_mutation`      |
+| `audit_events`         | `audit_events_prevent_truncate`                   | BEFORE TRUNCATE, por sentencia                                           | Ídem, para la forma de borrado masivo                                                                        | `prevent_audit_event_mutation`      |
+| `event_programs`       | `event_programs_prevent_delete`                   | BEFORE DELETE, por fila                                                  | Ningún programa se borra físicamente, ni vacío (D13)                                                         | `prevent_event_program_delete`      |
+| `event_programs`       | `event_programs_prevent_truncate`                 | BEFORE TRUNCATE, por sentencia                                           | Ídem                                                                                                         | `prevent_event_program_delete`      |
+| `event_programs`       | `event_programs_protect_identity`                 | BEFORE UPDATE, por fila                                                  | `is_default` y la unidad propietaria del predeterminado son inmutables (D21, D23)                            | `protect_event_program_identity`    |
+| `event_programs`       | `event_programs_validate_transition`              | BEFORE INSERT OR UPDATE OF `status, start_date, end_date, created_by_id` | Solo transiciones y metadatos válidos; bloquea la fila para serializar contra un archivado concurrente (D23) | `validate_event_program_transition` |
+| `organizational_units` | `organizational_units_reactivate_default_program` | AFTER UPDATE OF `is_active`, por fila                                    | Reactivar la unidad reactiva su predeterminado en la misma transacción (D21)                                 | `reactivate_default_event_program`  |
+| `proposal_versions`    | `proposal_versions_prevent_mutation`              | BEFORE DELETE OR UPDATE, por fila                                        | El historial de revisiones es inmutable (D4)                                                                 | `prevent_proposal_version_mutation` |
+| `proposal_versions`    | `proposal_versions_prevent_truncate`              | BEFORE TRUNCATE, por sentencia                                           | Ídem                                                                                                         | `prevent_proposal_version_mutation` |
+
+Cada trigger de borrado por fila tiene su gemelo de `TRUNCATE`, porque la aplicación nunca borra en bloque pero un operador con acceso directo sí podría. Cualquier purga por retención, incluida la de los 365 días de auditoría todavía sin definir, debe deshabilitar esos triggers dentro de una transacción y rehabilitarlos al terminar.
+
+Las unidades organizativas se unificaron en una sola tabla después de que `faculties` y `subdirectorates` tuvieran cada una su trigger de reactivación; la migración `20260919093000_unify_organizational_units` los eliminó y creó `organizational_units_reactivate_default_program`, que es el único vigente.
 
 ---
 
@@ -538,7 +573,7 @@ La redundancia controlada más relevante sigue siendo `users.unit_id` junto con 
 2. La precedencia de permisos es aditiva porque no existe una denegación explícita.
 3. Ponente y aula pueden ser nulos en borrador; su obligatoriedad al programar depende del tipo o modalidad de actividad.
 4. La modalidad presencial, virtual o híbrida todavía no está modelada.
-5. No existe una tabla de auditoría administrativa general.
+5. La bitácora `audit_events` cubre las acciones sensibles, pero su consulta está restringida a `ADMIN` y no tiene vista por recurso para collaborators; su retención de 365 días y el procedimiento de purga siguen sin definirse.
 6. La zona horaria institucional quedó resuelta como `America/Panama` (UTC-5, sin DST) en el [ADR-0002](../adr/adr-0002-institutional-timezone-panama.md); la política para actividades que cruzan medianoche sigue pendiente.
 7. `cv_url`, `banner_url` y `pdf_url` representan referencias a almacenamiento externo; el modelo no contiene metadata completa del archivo.
 8. El ER garantiza como máximo un programa predeterminado por unidad; la creación automática, inmutabilidad y reconciliación garantizan el mínimo operativo de uno.
@@ -606,7 +641,10 @@ erDiagram
     activities |o--o{ alerts : "referencia"
     speaker_proposals |o--o{ alerts : "referencia"
     certificates |o--o{ alerts : "referencia"
+    users |o--o{ audit_events : "actor (referencia lógica, sin FK)"
 ```
+
+`audit_events` no aporta ninguna arista de clave foránea: `actor_id`, `target_user_id`, `resource_id` y `scope_id` son referencias lógicas. La arista hacia `users` está dibujada a propósito como relación lógica, y D24 explica por qué la evidencia debe sobrevivir al borrado de su actor.
 
 La FK obligatoria de `event_programs` hacia `organizational_units` garantiza que cada programa tiene exactamente una unidad propietaria. El mínimo de un programa por unidad es una cardinalidad de negocio sostenida por la creación automática y reconciliación, no por una FK aislada.
 
@@ -614,29 +652,29 @@ La FK obligatoria de `event_programs` hacia `organizational_units` garantiza que
 
 ## 10. Trazabilidad requisito a ER
 
-| Requisito                                                    | Soporte en el ER                                         | Estado                                 |
-| ------------------------------------------------------------ | -------------------------------------------------------- | -------------------------------------- |
-| Programa predeterminado por unidad organizativa              | Índice parcial + creación/reconciliación transaccional   | Parcial en BD; cubierto operativamente |
-| Creación automática del predeterminado                       | Transacción unidad + programa                            | Regla de servicio                      |
-| Solo administrador crea programas adicionales                | `created_by_id` + `GlobalRole.ADMIN`                     | Regla de autorización                  |
-| Programa pertenece a una sola unidad                         | `organizational_unit_id NOT NULL` + FK RESTRICT          | Cubierto                               |
-| Programa predeterminado permanente                           | Fechas nulas, estados restringidos y guarda de archivado | BD + regla transaccional               |
-| Reactivación de unidad y programa predeterminado             | Cambio atómico de ambos estados                          | Regla transaccional                    |
-| Programas adicionales con fechas, etiqueta y banner          | CHECK condicional                                        | Cubierto                               |
-| Toda actividad tiene programa                                | `activities.event_program_id NOT NULL`                   | Cubierto                               |
-| Herencia de permisos                                         | `collaborations` + cálculo aditivo                       | Cubierto conceptualmente               |
-| Permisos locales de actividad                                | Scope `activity_id`                                      | Cubierto                               |
-| Archivar, no borrar programas                                | Estado, timestamp y prohibición de `DELETE`              | Regla de servicio/privilegios          |
-| Bloquear archivo de adicional con actividad activa           | Estados y regla transaccional                            | Regla de servicio                      |
-| Actividad con ponente, aula, fecha, hora y equipo            | `activities` + relaciones                                | Parcial: obligatoriedad condicional    |
-| Registro previo y asistencia QR/manual sin duplicados        | `registered_at`, check-in opcional y UQ                  | Cubierto                               |
-| Certificado único por asistencia                             | `certificates.attendance_id UQ`                          | Cubierto                               |
-| Disponibilidad y anti-solape de aulas                        | Disponibilidad + exclusión temporal                      | Parcial: validación entre tablas       |
-| Propuesta con CV, versiones y feedback                       | Propuestas, versiones y feedback                         | Parcial: CV y duración opcionales      |
-| Alertas de propuestas, programas, actividades y certificados | `alerts` + `AlertType`                                   | Cubierto                               |
-| Reportes por unidad, programa y actividad                    | FKs organizativas y datos transaccionales                | Cubierto como fuente de datos          |
-| Auditoría administrativa completa                            | Sin `audit_logs`                                         | Pendiente                              |
-| Cancelación, ausencia y lista de espera                      | Sin estado específico                                    | Pendiente                              |
+| Requisito                                                    | Soporte en el ER                                         | Estado                                                                                                                                                                                |
+| ------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Programa predeterminado por unidad organizativa              | Índice parcial + creación/reconciliación transaccional   | Parcial en BD; cubierto operativamente                                                                                                                                                |
+| Creación automática del predeterminado                       | Transacción unidad + programa                            | Regla de servicio                                                                                                                                                                     |
+| Solo administrador crea programas adicionales                | `created_by_id` + `GlobalRole.ADMIN`                     | Regla de autorización                                                                                                                                                                 |
+| Programa pertenece a una sola unidad                         | `organizational_unit_id NOT NULL` + FK RESTRICT          | Cubierto                                                                                                                                                                              |
+| Programa predeterminado permanente                           | Fechas nulas, estados restringidos y guarda de archivado | BD + regla transaccional                                                                                                                                                              |
+| Reactivación de unidad y programa predeterminado             | Cambio atómico de ambos estados                          | Regla transaccional                                                                                                                                                                   |
+| Programas adicionales con fechas, etiqueta y banner          | CHECK condicional                                        | Cubierto                                                                                                                                                                              |
+| Toda actividad tiene programa                                | `activities.event_program_id NOT NULL`                   | Cubierto                                                                                                                                                                              |
+| Herencia de permisos                                         | `collaborations` + cálculo aditivo                       | Cubierto conceptualmente                                                                                                                                                              |
+| Permisos locales de actividad                                | Scope `activity_id`                                      | Cubierto                                                                                                                                                                              |
+| Archivar, no borrar programas                                | Estado, timestamp y prohibición de `DELETE`              | Regla de servicio/privilegios                                                                                                                                                         |
+| Bloquear archivo de adicional con actividad activa           | Estados y regla transaccional                            | Regla de servicio                                                                                                                                                                     |
+| Actividad con ponente, aula, fecha, hora y equipo            | `activities` + relaciones                                | Parcial: obligatoriedad condicional                                                                                                                                                   |
+| Registro previo y asistencia QR/manual sin duplicados        | `registered_at`, check-in opcional y UQ                  | Cubierto                                                                                                                                                                              |
+| Certificado único por asistencia                             | `certificates.attendance_id UQ`                          | Cubierto                                                                                                                                                                              |
+| Disponibilidad y anti-solape de aulas                        | Disponibilidad + exclusión temporal                      | Parcial: validación entre tablas                                                                                                                                                      |
+| Propuesta con CV, versiones y feedback                       | Propuestas, versiones y feedback                         | Parcial: CV y duración opcionales                                                                                                                                                     |
+| Alertas de propuestas, programas, actividades y certificados | `alerts` + `AlertType`                                   | Cubierto                                                                                                                                                                              |
+| Reportes por unidad, programa y actividad                    | FKs organizativas y datos transaccionales                | Cubierto como fuente de datos                                                                                                                                                         |
+| Auditoría administrativa completa                            | `audit_events` + D24                                     | Parcial: 25 acciones sobre 11 servicios; falta la exportación de reportes y la emisión de certificados, y la retención de 365 días con su procedimiento de purga siguen sin definirse |
+| Cancelación, ausencia y lista de espera                      | Sin estado específico                                    | Pendiente                                                                                                                                                                             |
 
 ---
 

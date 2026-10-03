@@ -37,7 +37,10 @@ export interface ActivityDetail {
   capacity: number | null;
   bannerUrl: string | null;
   status: ActivityStatus;
+  cancelReason: string | null;
   equipment: string[];
+  enrolledCount: number;
+  checkedInCount: number;
   speakers: ActivitySpeakerSummary[];
   classroom: ActivityClassroomSummary | null;
   eventProgram: ActivityProgramSummary;
@@ -60,8 +63,20 @@ export interface ActivityListItem {
   organizationalUnit: ActivityOrganizationalUnit;
 }
 
+export interface EventProgramActivityItem extends ActivityListItem {
+  status: ActivityStatus;
+}
+
 export interface PaginatedActivities {
   items: ActivityListItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedEventProgramActivities {
+  items: EventProgramActivityItem[];
   page: number;
   limit: number;
   total: number;

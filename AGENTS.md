@@ -138,7 +138,7 @@ prisma/
 `-- seed.base.ts     # seed base de produccion
 ```
 
-> Estado actual: modulos `auth`, `authorization`, `users`, `event-programs`, `activities` y `health` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
+> Estado actual: modulos `auth`, `authorization`, `users`, `event-programs`, `activities`, `certificates` y `health` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
 
 Rules:
 
@@ -265,10 +265,12 @@ For errors:
   - `AUTH_EMAIL_VERIFICATION_TTL` (default `24h`), `AUTH_PASSWORD_RESET_TTL` (default `1h`)
   - `TRUSTED_ORIGINS` (CSV adicional a `CORS_ORIGIN`)
 - Rate limiting (via express-rate-limit):
-  - Login: 5/min por usuario/IP
-  - Register: 3/min por usuario/IP
-  - Forgot password y reset password: limiters independientes de 3/min por usuario/IP
-  - Verify email: 5/min por usuario/IP
+  - Login: 5/min por email+IP (bucket combinado) + 30/min por IP como limite complementario
+  - Register: 3/min por email+IP + 30/min por IP
+  - Forgot password: 3/min por email+IP + 10/min por IP; reset password: 3/min por IP (el body no lleva email)
+  - Verify email: 5/min por IP
+  - Change password: 5/min por usuario autenticado (o IP si no hay usuario)
+  - El email de la llave se normaliza (`trim().toLowerCase()`, maximo 254 chars); sin email cae a la llave por IP
   - Better Auth rate limit global: 100/min (configurable)
 - `src/lib/auth.ts` es la unica instancia del proveedor.
 - `src/lib/password.ts` centraliza hashing Argon2id (usado por el proveedor via `password.hash`/`password.verify`).
@@ -292,10 +294,12 @@ For errors:
 - Invariante de subconjunto simetrico: otorgar, revocar y asignar rol exigen que el conjunto actuado este contenido en los permisos efectivos del actor en el mismo scope. `permission:grant` se puede delegar si el actor lo posee.
 - Atenuacion temporal: la ventana otorgada debe quedar dentro del envelope del actor para ese permiso; un envelope acotado prohibe grants sin limite.
 - No ampliacion de scope: un permiso de actividad no permite gestionar el programa padre.
-- Todo grant registra `grantedById` y `grantedAt`. No exponer estos campos internos innecesariamente.
+- Todo grant registra `grantedById` y `grantedAt` como auditoría interna; no se exponen en ninguna respuesta HTTP.
 - El catalogo se puebla con `pnpm prisma:seed:base` en produccion y `pnpm prisma:seed` en desarrollo (ambos idempotentes).
+- `GET /api/v1/users/me/permissions?scope=program|activity&id=` expone los permisos efectivos propios con su envelope temporal y `origin` (`LOCAL`/`INHERITED`/`BOTH`).
+- Los listados de colaboradores exponen permisos efectivos con `origin` (`LOCAL`/`INHERITED`/`BOTH`), envelope fusionado y `effective: true`; los grants vencidos o futuros se omiten y `source` refleja la clase del grant activo (`OVERRIDE` local manda sobre `ROLE_DEFAULT`). Las respuestas de mutacion mantienen el `Collaborator` con grants locales.
 
-- Passwords: 12-128 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
+- Passwords: 12-20 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.
 - **No devolver** password hashes, hashes Argon2, tokens internos, ni `name` (campo interno de Better Auth).
 - **No loguear** tokens, headers `Authorization`, passwords ni env vars con secretos.
 - En startup, `ensureJwks()` se asegura de que la tabla `jwks` tenga al menos una fila para firmar access tokens.
@@ -369,7 +373,7 @@ For errors:
 
 - Use the `multi-stage-dockerfile` skill when adding or changing Dockerfiles.
 - Use multi-stage builds: dependencies, build/test, then minimal runtime.
-- Pin base image versions instead of using floating tags.
+- Pin base image versions instead of using floating tags. In Compose files pin third-party images as `repo:tag@sha256:digest`, never `latest`; the table of images and its single exception (the locally built API image, which requires `IMAGE_TAG`) lives in `docs/adr/adr-0007-structured-logging-and-observability.md`.
 - Use a non-root runtime user.
 - Copy only required runtime artifacts.
 - Add `.dockerignore` when adding Docker support.
@@ -416,7 +420,7 @@ For errors:
 - Keep the default flag and owning organizational unit immutable for default event programs.
 - Allow only site administrators to create additional event programs.
 - Associate each event program with exactly one organizational unit.
-- Default event programs do not require start or end dates; additional programs include name, dates, custom label, and banner.
+- Default event programs do not require start or end dates; additional programs include name and dates, with optional custom label and banner. A DRAFT program is published by setting `status: ACTIVE` through `PATCH /event-programs/:id`.
 - Add collaborators and permissions to event programs.
 - Event-program collaborators and permissions are inherited by their activities by default.
 - Create activities only inside an existing event program.

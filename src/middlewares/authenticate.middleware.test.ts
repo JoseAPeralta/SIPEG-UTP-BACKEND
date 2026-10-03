@@ -11,6 +11,22 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../utils/ApiError.js';
 
+const { loggerWarn, createRequestLoggerSpy } = vi.hoisted(() => {
+  const loggerWarn = vi.fn();
+  const createRequestLoggerSpy = vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: loggerWarn,
+  }));
+  return { loggerWarn, createRequestLoggerSpy };
+});
+
+vi.mock('../config/logger.js', () => ({
+  logger: { error: vi.fn(), info: vi.fn(), warn: loggerWarn },
+  createChildLogger: vi.fn(() => ({ error: vi.fn(), info: vi.fn(), warn: loggerWarn })),
+  createRequestLogger: createRequestLoggerSpy,
+}));
+
 interface PrismaMock {
   user: { findUnique: ReturnType<typeof vi.fn> };
 }
@@ -84,6 +100,7 @@ describe('authenticate middleware', () => {
     await authenticate({ headers: {} } as Request, {} as Response, next);
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(401);
+    expect(loggerWarn).not.toHaveBeenCalled();
   });
 
   it('rejects malformed Authorization headers', async () => {
@@ -97,9 +114,10 @@ describe('authenticate middleware', () => {
     );
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(401);
+    expect(loggerWarn).not.toHaveBeenCalled();
   });
 
-  it('rejects inactive users', async () => {
+  it('rejects inactive users and logs auth.account.disabled with actorPseudonym', async () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockResolvedValue({
       id: 'user-1',
@@ -119,6 +137,41 @@ describe('authenticate middleware', () => {
     );
     const error = next.mock.calls[0]?.[0] as ApiError | undefined;
     expect(error?.statusCode).toBe(403);
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'auth.account.disabled',
+        logType: 'security',
+        actorPseudonym: expect.any(String),
+      }),
+    );
+    expect(loggerWarn).toHaveBeenCalledWith('auth.account.disabled');
+    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('a@b.com');
+  });
+
+  it('logs auth.token.invalid without the token when JWT verification fails', async () => {
+    const prisma = createPrismaMock();
+    vi.doMock('../utils/jwt-verifier.js', () => ({
+      getJwtVerifier: () => ({
+        async verify() {
+          throw new Error('jwt expired');
+        },
+        async refresh() {},
+      }),
+    }));
+    const { authenticate } = await loadAuthMiddleware(prisma);
+    const next = vi.fn();
+    await authenticate(
+      { headers: { authorization: 'Bearer expired-token-value' } } as Request,
+      {} as Response,
+      next,
+    );
+    const error = next.mock.calls[0]?.[0] as ApiError | undefined;
+    expect(error?.statusCode).toBe(401);
+    expect(createRequestLoggerSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'auth.token.invalid', logType: 'security' }),
+    );
+    expect(loggerWarn).toHaveBeenCalledWith('auth.token.invalid');
+    expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain('expired-token-value');
   });
 
   it('attaches the authenticated user on success', async () => {

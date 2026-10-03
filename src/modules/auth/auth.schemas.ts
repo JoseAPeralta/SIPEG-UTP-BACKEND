@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/password.js';
+
 const trimmedString = z.string().trim();
+
+const passwordField = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH, 'Password must be at least 12 characters.')
+  .max(PASSWORD_MAX_LENGTH, 'Password must not exceed 20 characters.');
 
 export const loginSchema = z.object({
   body: z.object({
@@ -10,19 +17,23 @@ export const loginSchema = z.object({
 });
 
 export const registerSchema = z.object({
-  body: z.object({
-    email: z.string().email('Invalid email format.'),
-    password: z.string().min(12, 'Password must be at least 12 characters.').max(128),
-    firstName: trimmedString.min(2).max(100),
-    lastName: trimmedString.min(2).max(100),
-    identificationNumber: trimmedString.min(5).max(30),
-    unitId: z.string().min(1).optional(),
-    careerId: z.string().min(1).optional(),
-  }),
+  body: z
+    .object({
+      email: z.string().email('Invalid email format.'),
+      password: passwordField,
+      firstName: trimmedString.min(2).max(100),
+      lastName: trimmedString.min(2).max(100),
+      identificationNumber: trimmedString.min(5).max(30),
+      unitId: z.string().min(1).optional(),
+      careerId: z.string().min(1).optional(),
+    })
+    .strict(),
 });
 
 export const refreshSchema = z.object({
-  body: z.object({ refreshToken: z.string().min(1, 'Refresh token is required.') }),
+  // Sin cuerpo: el refresh token viaja en la cookie HttpOnly. Se acepta un body
+  // vacio o con claves desconocidas porque el cliente no necesita enviar nada.
+  body: z.object({}).loose().optional().default({}),
 });
 
 export const verifyEmailSchema = z.object({
@@ -36,19 +47,22 @@ export const forgotPasswordSchema = z.object({
 export const resetPasswordSchema = z.object({
   body: z.object({
     token: z.string().min(1, 'Reset token is required.'),
-    newPassword: z.string().min(12).max(128),
+    newPassword: passwordField,
   }),
 });
 
 export const logoutSchema = z.object({
-  body: z.object({ refreshToken: z.string().min(1, 'Refresh token is required.') }),
+  // Sin cuerpo: el token viene de la cookie HttpOnly.
+  body: z.object({}).loose().optional().default({}),
 });
 
 export const changePasswordSchema = z.object({
+  // `refreshToken` ya no viaja en el body: la sesion actual se identifica con la
+  // cookie HttpOnly, que el servidor lee. Enviarla aqui la expondría a JavaScript
+  // sin ganar nada.
   body: z.object({
     currentPassword: z.string().min(1, 'Current password is required.'),
-    newPassword: z.string().min(12, 'Password must be at least 12 characters.').max(128),
-    refreshToken: z.string().min(1, 'Refresh token is required.'),
+    newPassword: passwordField,
   }),
 });
 
@@ -58,17 +72,20 @@ export const authTokensSchema = z
     accessTokenExpiresAt: z.iso
       .datetime()
       .meta({ description: 'ISO 8601 expiration timestamp of the access token.' }),
-    refreshToken: z.string().meta({
-      description: 'Opaque refresh token backed by a server-side session.',
+    refreshTokenExpiresAt: z.iso.datetime().meta({
+      description:
+        'ISO 8601 expiration timestamp of the refresh token. The token itself is delivered in an HttpOnly cookie, never in this body.',
     }),
-    refreshTokenExpiresAt: z.iso
-      .datetime()
-      .meta({ description: 'ISO 8601 expiration timestamp of the refresh token.' }),
     tokenType: z.literal('Bearer'),
   })
+  // Estricto a proposito: el refresh token viaja en la cookie HttpOnly y no debe
+  // poder reaparecer en el body. El contrato documentado sale con
+  // `additionalProperties: false`.
+  .strict()
   .meta({
     id: 'AuthTokens',
-    description: 'Access and refresh token pair returned by the login and refresh flows.',
+    description:
+      'Access token issued by the login and refresh flows. The refresh token travels in an HttpOnly cookie and is never exposed to JavaScript.',
   });
 
 export const registerResultSchema = z

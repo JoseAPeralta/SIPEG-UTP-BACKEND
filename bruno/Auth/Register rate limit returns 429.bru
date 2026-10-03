@@ -1,7 +1,7 @@
 meta {
   name: Register rate limit returns 429
   type: http
-  seq: 22
+  seq: 12
   tags: [
     Auth
   ]
@@ -15,11 +15,11 @@ post {
 
 body:json {
   {
-    "email": "rl.{{$timestamp}}.{{$randomInt}}@utp.ac.pa",
+    "email": "rate-limit.register@utp.ac.pa",
     "password": "PruebaSipeg2026*",
     "firstName": "Prueba",
     "lastName": "RateLimit",
-    "identificationNumber": "rl-{{$timestamp}}-{{$randomInt}}",
+    "identificationNumber": "rl-register-identification",
     "unitId": "seed_unit_fic",
     "careerId": "seed_career_fic-civ"
   }
@@ -28,7 +28,7 @@ body:json {
 tests {
   const attempts = Number(bru.getVar("registerAttempts") ?? 0) + 1;
   bru.setVar("registerAttempts", attempts);
-
+  
   test("fourth register attempt within a minute returns 429", function () {
     if (attempts >= 4) {
       expect(res.getStatus()).to.equal(429);
@@ -39,5 +39,5 @@ tests {
 }
 
 docs {
-  Send this request four times within one minute from a clean window to observe the 429. Other register requests in the folder also count toward the limit of 3 per minute per IP.
+  Send this request four times within one minute from a clean window to observe the 429. The limiter keys by email+IP (3/min), so keep the fixed email; other requests with the same email from the same IP also count toward that bucket. The companion per-IP limit is 30/min.
 }

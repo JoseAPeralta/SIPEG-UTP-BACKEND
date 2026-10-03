@@ -1,0 +1,25 @@
+meta {
+  name: List program activities with an invalid status returns 400
+  type: http
+  seq: 21
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{defaultProgramId}}/activities?status=PENDING
+  body: none
+  auth: none
+}
+
+params:query {
+  status: PENDING
+}
+
+tests {
+  test("unknown status is a validation error", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

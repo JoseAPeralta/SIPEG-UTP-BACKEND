@@ -1,0 +1,25 @@
+meta {
+  name: Delete the activity collaborator after revocation
+  type: http
+  seq: 60
+  tags: [
+    Collaborators
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{collaboratorsActivityId}}/collaborators/{{collaboratorUserId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("ADMIN cleans up the activity collaborator with 204", function () {
+    expect(res.getStatus()).to.equal(204);
+    expect(res.getBody()).to.be.empty;
+  });
+}

@@ -1,0 +1,52 @@
+meta {
+  name: Grant a permission
+  type: http
+  seq: 34
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+script:pre-request {
+  const from = new Date();
+  const until = new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
+  bru.setVar("grantFrom", from.toISOString());
+  bru.setVar("grantUntil", until.toISOString());
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "permission": "report:export",
+    "validFrom": "{{grantFrom}}",
+    "validUntil": "{{grantUntil}}"
+  }
+}
+
+tests {
+  test("ADMIN grants a bounded OVERRIDE permission", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Permission granted successfully.");
+    expect(body.data.userId).to.equal(bru.getVar("collaboratorUserId"));
+    const granted = body.data.permissions.find((entry) => entry.name === "report:export");
+    expect(granted).to.be.an("object");
+    expect(granted.source).to.equal("OVERRIDE");
+    expect(granted.validFrom).to.equal(bru.getVar("grantFrom"));
+    expect(granted.validUntil).to.equal(bru.getVar("grantUntil"));
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("grantedById");
+    expect(serialized).to.not.include("grantedAt");
+  });
+}

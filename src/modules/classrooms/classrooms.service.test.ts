@@ -19,28 +19,50 @@ interface PrismaMock {
     delete: ReturnType<typeof vi.fn>;
   };
   activity: { findMany: ReturnType<typeof vi.fn> };
+  auditEvent: { create: ReturnType<typeof vi.fn> };
+  $transaction: ReturnType<typeof vi.fn>;
 }
 
-const createPrismaMock = (): PrismaMock => ({
-  classroom: {
-    findUnique: vi.fn(),
-    findMany: vi.fn(),
-    count: vi.fn(),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
-  classroomAmenity: {
-    findFirst: vi.fn(),
-    create: vi.fn(),
-    delete: vi.fn(),
-  },
-  classroomAvailability: {
-    findFirst: vi.fn(),
-    create: vi.fn(),
-    delete: vi.fn(),
-  },
-  activity: { findMany: vi.fn() },
-});
+const createPrismaMock = (): PrismaMock => {
+  const prisma: PrismaMock = {
+    classroom: {
+      findUnique: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+    },
+    classroomAmenity: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
+    classroomAvailability: {
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      delete: vi.fn(),
+    },
+    activity: { findMany: vi.fn() },
+    auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
+    $transaction: vi.fn(),
+  };
+
+  prisma.$transaction.mockImplementation(
+    async (callback: (client: PrismaMock) => Promise<unknown>) => callback(prisma),
+  );
+
+  return prisma;
+};
+
+const currentRecord = {
+  id: 'classroom-001',
+  name: 'Aula 101',
+  type: 'CLASSROOM',
+  capacity: 40,
+  building: 'Edificio 1',
+  floor: 1,
+  isActive: true,
+};
 
 const loadService = async (prisma: PrismaMock) => {
   vi.resetModules();
@@ -242,7 +264,7 @@ describe('updateClassroom', () => {
     const prisma = createPrismaMock();
     const service = await loadService(prisma);
 
-    prisma.classroom.findUnique.mockResolvedValue({ id: 'classroom-001' });
+    prisma.classroom.findUnique.mockResolvedValue(currentRecord);
     prisma.classroom.update.mockResolvedValue(detailRecord);
 
     await service.updateClassroom('classroom-001', { capacity: 45, floor: null });
@@ -259,7 +281,7 @@ describe('updateClassroom', () => {
     const prisma = createPrismaMock();
     const service = await loadService(prisma);
 
-    prisma.classroom.findUnique.mockResolvedValue({ id: 'classroom-001' });
+    prisma.classroom.findUnique.mockResolvedValue(currentRecord);
     prisma.activity.findMany.mockResolvedValue([{ id: 'activity-001' }]);
 
     await expect(
@@ -269,13 +291,14 @@ describe('updateClassroom', () => {
       message: 'Cannot deactivate a classroom with scheduled or ongoing activities.',
     });
     expect(prisma.classroom.update).not.toHaveBeenCalled();
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
   });
 
   it('deactivates when no activity reserves the classroom', async () => {
     const prisma = createPrismaMock();
     const service = await loadService(prisma);
 
-    prisma.classroom.findUnique.mockResolvedValue({ id: 'classroom-001' });
+    prisma.classroom.findUnique.mockResolvedValue(currentRecord);
     prisma.activity.findMany.mockResolvedValue([]);
     prisma.classroom.update.mockResolvedValue({ ...detailRecord, isActive: false });
 
@@ -363,6 +386,282 @@ describe('removeClassroomAmenity', () => {
 
     expect(prisma.classroomAmenity.delete).toHaveBeenCalledWith({
       where: { classroomId_amenity: { classroomId: 'classroom-001', amenity: 'Proyector' } },
+    });
+  });
+});
+
+describe('classroom audit trail', () => {
+  const auditContext = { actorId: 'user-001', actorType: 'USER' as const, requestId: 'req-001' };
+
+  it('writes one creation event inside the transaction', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.create.mockResolvedValue(detailRecord);
+
+    await service.createClassroom(
+      { name: 'Aula 101', type: 'CLASSROOM', capacity: 40 },
+      auditContext,
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'classroom.created',
+        actorType: 'USER',
+        actorId: 'user-001',
+        resourceType: 'classroom',
+        resourceId: 'classroom-001',
+        requestId: 'req-001',
+        changes: {
+          after: { type: 'CLASSROOM', capacity: 40, floor: null, isActive: true },
+        },
+      }),
+    });
+  });
+
+  it('writes the creation event after the classroom row', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.create.mockResolvedValue(detailRecord);
+
+    await service.createClassroom({ name: 'Aula 101', type: 'CLASSROOM', capacity: 40 });
+
+    expect(prisma.classroom.create.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.auditEvent.create.mock.invocationCallOrder[0] as number,
+    );
+  });
+
+  it('records a deactivation lifecycle event', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique.mockResolvedValue(currentRecord);
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.classroom.update.mockResolvedValue({ ...detailRecord, isActive: false });
+
+    await service.updateClassroom('classroom-001', { isActive: false }, auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'classroom.deactivated',
+        resourceType: 'classroom',
+        resourceId: 'classroom-001',
+        changes: { before: { isActive: true }, after: { isActive: false } },
+      }),
+    });
+  });
+
+  it('records an activation lifecycle event', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique.mockResolvedValue({ ...currentRecord, isActive: false });
+    prisma.classroom.update.mockResolvedValue(detailRecord);
+
+    await service.updateClassroom('classroom-001', { isActive: true }, auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'classroom.activated',
+        changes: { before: { isActive: false }, after: { isActive: true } },
+      }),
+    });
+  });
+
+  it('reports only the attributes that actually changed and names free text', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique.mockResolvedValue(currentRecord);
+    prisma.classroom.update.mockResolvedValue({ ...detailRecord, name: 'Aula 102', capacity: 45 });
+
+    await service.updateClassroom(
+      'classroom-001',
+      { name: 'Aula 102', capacity: 45 },
+      auditContext,
+    );
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'classroom.updated',
+        changes: { before: { capacity: 40 }, after: { capacity: 45 } },
+        metadata: { changedFields: ['name'] },
+      }),
+    });
+  });
+
+  it('records the lifecycle event and the attribute event in the same transaction', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique.mockResolvedValue(currentRecord);
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.classroom.update.mockResolvedValue({ ...detailRecord, floor: 2, isActive: false });
+
+    await service.updateClassroom('classroom-001', { isActive: false, floor: 2 }, auditContext);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(2);
+    expect(prisma.auditEvent.create.mock.calls.map(([call]) => call.data.action)).toEqual([
+      'classroom.deactivated',
+      'classroom.updated',
+    ]);
+  });
+
+  it('does not audit an update that repeats the current state', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique.mockResolvedValue(currentRecord);
+    prisma.classroom.update.mockResolvedValue(detailRecord);
+
+    await service.updateClassroom(
+      'classroom-001',
+      { isActive: true, capacity: 40, type: 'CLASSROOM' },
+      auditContext,
+    );
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit an update rejected by validation', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.updateClassroom('classroom-unknown', { capacity: 45 }, auditContext),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the classroom when the audit insert fails', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique.mockResolvedValue(currentRecord);
+    prisma.classroom.update.mockResolvedValue(detailRecord);
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+
+    await expect(
+      service.updateClassroom('classroom-001', { capacity: 45 }, auditContext),
+    ).rejects.toThrow('audit insert failed');
+    expect(prisma.classroom.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('records an added amenity', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique
+      .mockResolvedValueOnce(currentRecord)
+      .mockResolvedValueOnce(detailRecord);
+    prisma.classroomAmenity.findFirst.mockResolvedValue(null);
+    prisma.classroomAmenity.create.mockResolvedValue({ classroomId: 'classroom-001' });
+
+    await service.addClassroomAmenity('classroom-001', 'Smart Board', auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'classroom.amenity_added',
+        resourceId: 'classroom-001',
+        changes: { after: { amenity: 'Smart Board' } },
+      }),
+    });
+  });
+
+  it('records a removed amenity and does not audit a missing one', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique
+      .mockResolvedValueOnce(currentRecord)
+      .mockResolvedValueOnce(detailRecord);
+    prisma.classroomAmenity.findFirst.mockResolvedValue({ amenity: 'Proyector' });
+    prisma.classroomAmenity.delete.mockResolvedValue({ classroomId: 'classroom-001' });
+
+    await service.removeClassroomAmenity('classroom-001', 'proyector', auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'classroom.amenity_removed',
+        changes: { before: { amenity: 'Proyector' } },
+      }),
+    });
+
+    const missing = createPrismaMock();
+    const missingService = await loadService(missing);
+
+    missing.classroom.findUnique.mockResolvedValue(currentRecord);
+    missing.classroomAmenity.findFirst.mockResolvedValue(null);
+
+    await expect(
+      missingService.removeClassroomAmenity('classroom-001', 'Proyector', auditContext),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(missing.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('records an added availability window without persisting the free text period', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique
+      .mockResolvedValueOnce(currentRecord)
+      .mockResolvedValueOnce(detailRecord);
+    prisma.classroomAvailability.findFirst.mockResolvedValue(null);
+    prisma.classroomAvailability.create.mockResolvedValue({ id: 'slot-new' });
+
+    await service.addClassroomAvailability(
+      'classroom-001',
+      { dayOfWeek: 1, startTime: '08:00', endTime: '10:00', period: 'Matutino' },
+      auditContext,
+    );
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'classroom.availability_added',
+        changes: {
+          after: { dayOfWeek: 1, startTime: '08:00', endTime: '10:00' },
+        },
+        metadata: { hasPeriod: true },
+      }),
+    });
+  });
+
+  it('records a removed availability window', async () => {
+    const prisma = createPrismaMock();
+    const service = await loadService(prisma);
+
+    prisma.classroom.findUnique
+      .mockResolvedValueOnce(currentRecord)
+      .mockResolvedValueOnce(detailRecord);
+    prisma.classroomAvailability.findFirst.mockResolvedValue({
+      id: 'slot-1',
+      dayOfWeek: 1,
+      startTime: new Date('1970-01-01T07:00:00.000Z'),
+      endTime: new Date('1970-01-01T12:00:00.000Z'),
+      period: 'Matutino',
+    });
+    prisma.classroomAvailability.delete.mockResolvedValue({ id: 'slot-1' });
+
+    await service.removeClassroomAvailability('classroom-001', 'slot-1', auditContext);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'classroom.availability_removed',
+        changes: {
+          before: { dayOfWeek: 1, startTime: '07:00', endTime: '12:00' },
+        },
+        metadata: { hasPeriod: true },
+      }),
     });
   });
 });
@@ -460,9 +759,15 @@ describe('removeClassroomAvailability', () => {
     const service = await loadService(prisma);
 
     prisma.classroom.findUnique
-      .mockResolvedValueOnce({ id: 'classroom-001' })
+      .mockResolvedValueOnce(currentRecord)
       .mockResolvedValueOnce(detailRecord);
-    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-1' });
+    prisma.classroomAvailability.findFirst.mockResolvedValue({
+      id: 'slot-1',
+      dayOfWeek: 1,
+      startTime: new Date('1970-01-01T07:00:00.000Z'),
+      endTime: new Date('1970-01-01T12:00:00.000Z'),
+      period: 'Matutino',
+    });
     prisma.classroomAvailability.delete.mockResolvedValue({ id: 'slot-1' });
 
     await service.removeClassroomAvailability('classroom-001', 'slot-1');

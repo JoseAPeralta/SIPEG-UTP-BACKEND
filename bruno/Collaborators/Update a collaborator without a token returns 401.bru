@@ -1,0 +1,27 @@
+meta {
+  name: Update a collaborator without a token returns 401
+  type: http
+  seq: 20
+  tags: [
+    Collaborators
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators/{{collaboratorUserId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("anonymous requests cannot change collaborator roles", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

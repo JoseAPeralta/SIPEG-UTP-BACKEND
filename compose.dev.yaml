@@ -1,5 +1,28 @@
 name: sipeg-utp-dev
 
+# Politica de imagenes (ADR-0007, seccion "Imagenes Fijadas"): toda imagen de
+# terceros va con tag Y digest, `repo:tag@sha256:...`, nunca `latest`. El tag se
+# lee, el digest fija. Actualizar una imagen exige editar las dos partes a la vez.
+# La tabla completa esta en docs/adr/adr-0007-structured-logging-and-observability.md.
+
+# Spool local de logs (ADR-0007, seccion "Spool Local"). Sin esto el driver por
+# defecto es `json-file` SIN opciones, que no rota nunca: si Loki o Alloy caen,
+# Alloy reintenta para siempre (`max_backoff_retries = 0`) y el disco se llena.
+#
+# El driver `local` rota sin bloquear el contenedor, cosa que `json-file` no
+# hace: la rotacion de `json-file` ocurre en el camino de escritura y frena al
+# proceso mientras comprime. `max-size` y `max-file` son ademas los defaults de
+# `local`; se declaran aqui como politica explicita, no como ajuste.
+#
+# Compatible con el resto del stack: `docker compose logs` sigue funcionando y la
+# API de Docker que lee Alloy (`GET /containers/{id}/logs`, servida por
+# `docker-socket-proxy`) tambien.
+x-logging: &logging
+  driver: local
+  options:
+    max-size: '20m'
+    max-file: '5'
+
 services:
   migrate:
     build:
@@ -12,6 +35,7 @@ services:
       db:
         condition: service_healthy
     restart: 'no'
+    logging: *logging
     security_opt:
       - no-new-privileges:true
     networks:
@@ -27,6 +51,10 @@ services:
       NODE_ENV: development
       PORT: 3000
       DATABASE_URL: postgresql://${POSTGRES_USER:-sipeg}:${POSTGRES_PASSWORD:-sipeg_password}@db:5432/${POSTGRES_DB:-sipeg_utp}?schema=public
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-9}
+      DATABASE_POOL_CONNECTION_TIMEOUT_MS: ${DATABASE_POOL_CONNECTION_TIMEOUT_MS:-5000}
+      DATABASE_POOL_IDLE_TIMEOUT_MS: ${DATABASE_POOL_IDLE_TIMEOUT_MS:-30000}
+      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-4}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_URL: ${AUTH_URL:-http://localhost:3000}
@@ -39,8 +67,21 @@ services:
       MAIL_PORT: 1025
       MAIL_SECURE: 'false'
       MAIL_FROM: ${MAIL_FROM:-SIPEG UTP <no-reply@sipeg.local>}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: ${LOG_PRETTY:-true}
+      LOG_SERVICE_NAME: ${LOG_SERVICE_NAME:-sipeg-utp-backend}
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+      # Sin default: sin ella `pseudonymize()` usa '' como clave HMAC, que es
+      # publica y reproducible para todos los `actorPseudonym`. Se exige tambien
+      # en desarrollo para que el camino de codigo ejercitado sea el de produccion.
+      LOG_PSEUDONYMIZATION_KEY: ${LOG_PSEUDONYMIZATION_KEY:?LOG_PSEUDONYMIZATION_KEY is required}
     ports:
-      - '${PORT:-3000}:3000'
+      # Solo loopback: el frontend de desarrollo lo alcanza como
+      # `http://localhost:3000` desde el navegador, y en produccion el unico
+      # acceso previsto es el proxy TLS del host. Publicar en 0.0.0.0 dejaria la
+      # API en HTTP plano alcanzable desde toda la red. Ver ADR-0007,
+      # seccion "Puertos Publicados".
+      - '127.0.0.1:${PORT:-3000}:3000'
     volumes:
       - ./src:/app/src
       - ./prisma:/app/prisma
@@ -50,13 +91,14 @@ services:
       mailpit:
         condition: service_healthy
     restart: unless-stopped
+    logging: *logging
     security_opt:
       - no-new-privileges:true
     networks:
       - sipeg-utp-dev
 
   mailpit:
-    image: axllent/mailpit:v1.27.8
+    image: axllent/mailpit:v1.27.8@sha256:6abc8e633df15eaf785cfcf38bae48e66f64beecdc03121e249d0f9ec15f0707
     ports:
       - '127.0.0.1:${MAILPIT_PORT:-8025}:8025'
     healthcheck:
@@ -66,13 +108,14 @@ services:
       retries: 5
       start_period: 3s
     restart: unless-stopped
+    logging: *logging
     security_opt:
       - no-new-privileges:true
     networks:
       - sipeg-utp-dev
 
   db:
-    image: postgres:18.6-alpine
+    image: postgres:18.6-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-sipeg_utp}
       POSTGRES_USER: ${POSTGRES_USER:-sipeg}
@@ -88,6 +131,7 @@ services:
       retries: 5
       start_period: 5s
     restart: unless-stopped
+    logging: *logging
     security_opt:
       - no-new-privileges:true
     networks:

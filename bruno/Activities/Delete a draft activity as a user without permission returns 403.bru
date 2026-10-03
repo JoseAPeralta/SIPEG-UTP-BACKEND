@@ -1,0 +1,25 @@
+meta {
+  name: Delete a draft activity as a user without permission returns 403
+  type: http
+  seq: 32
+  tags: [
+    Activities
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{deletableActivityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+tests {
+  test("a user without activity:delete is rejected", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

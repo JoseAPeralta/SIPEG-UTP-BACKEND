@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '../../lib/password.js';
 import type { AdminUserResponse, PaginatedUsers, UserProfileResponse } from './users.types.js';
 
 const trimmedString = z.string().trim();
@@ -94,14 +95,13 @@ export const createUserSchema = z.object({
       email: z.string().trim().email('Invalid email format.').max(254),
       password: z
         .string()
-        .min(12, 'Password must be at least 12 characters.')
-        .max(128, 'Password must not exceed 128 characters.'),
+        .min(PASSWORD_MIN_LENGTH, 'Password must be at least 12 characters.')
+        .max(PASSWORD_MAX_LENGTH, 'Password must not exceed 20 characters.'),
       firstName: trimmedString.min(2, 'First name must be at least 2 characters.').max(100),
       lastName: trimmedString.min(2, 'Last name must be at least 2 characters.').max(100),
       identificationNumber: trimmedString
         .min(5, 'Identification number must be at least 5 characters.')
         .max(30, 'Identification number must not exceed 30 characters.'),
-      globalRole: z.enum(['USER', 'ADMIN'], 'Global role is invalid.').default('USER'),
       isActive: z.boolean().default(true),
       unitId: trimmedString
         .min(1, 'Unit ID is required.')
@@ -116,7 +116,8 @@ export const createUserSchema = z.object({
     .strict()
     .meta({
       id: 'AdminUserCreate',
-      description: 'Administrative payload used to create a user account.',
+      description:
+        'Administrative payload used to create a USER account. Role promotion is a separate operation.',
     }),
 });
 

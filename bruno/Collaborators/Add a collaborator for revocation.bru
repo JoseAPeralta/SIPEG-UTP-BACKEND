@@ -1,0 +1,34 @@
+meta {
+  name: Add a collaborator for revocation
+  type: http
+  seq: 46
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/collaborators
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("ADMIN prepares a collaborator for the revoke flow", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.userId).to.equal(bru.getVar("collaboratorUserId"));
+  });
+}

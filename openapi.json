@@ -33,6 +33,10 @@
       "description": "Event program management."
     },
     {
+      "name": "Collaborators",
+      "description": "Collaborator delegation for event programs and activities."
+    },
+    {
       "name": "Organizational Units",
       "description": "Organizational unit catalog and lifecycle."
     },
@@ -41,8 +45,16 @@
       "description": "Career catalog management."
     },
     {
+      "name": "Certificates",
+      "description": "Certificates issued to the authenticated user."
+    },
+    {
       "name": "Classrooms",
       "description": "Classroom catalog, amenities and availability."
+    },
+    {
+      "name": "Audit",
+      "description": "Read-only access to the durable audit log."
     },
     {
       "name": "Health",
@@ -83,7 +95,30 @@
         },
         "responses": {
           "200": {
-            "description": "Authenticated. Returns an access/refresh token pair.",
+            "description": "Authenticated. Returns an access token in JSON and a refresh token in an HttpOnly cookie.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "def": {
+                    "type": "literal",
+                    "values": [
+                      "no-store"
+                    ]
+                  },
+                  "type": "literal",
+                  "values": {}
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or expires the sipeg-refresh cookie with Path=/api/v1/auth. The refresh token is never returned in JSON.",
+                "schema": {
+                  "def": {
+                    "type": "string"
+                  },
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -151,6 +186,16 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -161,6 +206,7 @@
           "Auth"
         ],
         "summary": "Register a new user",
+        "description": "Public registration always creates an active USER account. Role, status and permission fields are rejected.",
         "requestBody": {
           "required": true,
           "content": {
@@ -176,7 +222,7 @@
                   "password": {
                     "type": "string",
                     "minLength": 12,
-                    "maxLength": 128
+                    "maxLength": 20
                   },
                   "firstName": {
                     "type": "string",
@@ -208,7 +254,8 @@
                   "firstName",
                   "lastName",
                   "identificationNumber"
-                ]
+                ],
+                "additionalProperties": false
               }
             }
           }
@@ -283,28 +330,51 @@
           "Auth"
         ],
         "summary": "Refresh the access token",
+        "description": "Reads and rotates the HttpOnly refresh cookie. No body is needed; a missing, expired or revoked cookie returns 401. Responses use Cache-Control: no-store.",
+        "security": [
+          {
+            "refreshCookie": []
+          }
+        ],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
+                "default": {},
                 "type": "object",
-                "properties": {
-                  "refreshToken": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "refreshToken"
-                ]
+                "properties": {},
+                "additionalProperties": {}
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "New access/refresh token pair.",
+            "description": "New access token in JSON and rotated refresh token in the HttpOnly cookie.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "def": {
+                    "type": "literal",
+                    "values": [
+                      "no-store"
+                    ]
+                  },
+                  "type": "literal",
+                  "values": {}
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or expires the sipeg-refresh cookie with Path=/api/v1/auth. The refresh token is never returned in JSON.",
+                "schema": {
+                  "def": {
+                    "type": "string"
+                  },
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -353,7 +423,27 @@
               }
             }
           },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
             "description": "Error response.",
             "content": {
               "application/json": {
@@ -372,28 +462,52 @@
           "Auth"
         ],
         "summary": "Log out and revoke the refresh token",
+        "description": "Idempotent, including without a cookie or body. Revokes the supplied session and clears its cookie. A server revocation failure returns 500 and preserves the cookie for retry. Previously issued access JWTs remain valid until expiry. Responses use Cache-Control: no-store.",
+        "security": [
+          {
+            "refreshCookie": []
+          },
+          {}
+        ],
         "requestBody": {
-          "required": true,
+          "required": false,
           "content": {
             "application/json": {
               "schema": {
+                "default": {},
                 "type": "object",
-                "properties": {
-                  "refreshToken": {
-                    "type": "string",
-                    "minLength": 1
-                  }
-                },
-                "required": [
-                  "refreshToken"
-                ]
+                "properties": {},
+                "additionalProperties": {}
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Session revoked.",
+            "description": "Session revoked or already absent. Refresh cookie cleared.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "def": {
+                    "type": "literal",
+                    "values": [
+                      "no-store"
+                    ]
+                  },
+                  "type": "literal",
+                  "values": {}
+                }
+              },
+              "Set-Cookie": {
+                "description": "Sets or expires the sipeg-refresh cookie with Path=/api/v1/auth. The refresh token is never returned in JSON.",
+                "schema": {
+                  "def": {
+                    "type": "string"
+                  },
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -423,6 +537,26 @@
             }
           },
           "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
             "description": "Error response.",
             "content": {
               "application/json": {
@@ -581,6 +715,16 @@
               }
             }
           },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Error response.",
             "content": {
@@ -614,7 +758,7 @@
                   "newPassword": {
                     "type": "string",
                     "minLength": 12,
-                    "maxLength": 128
+                    "maxLength": 20
                   }
                 },
                 "required": [
@@ -704,17 +848,12 @@
                   "newPassword": {
                     "type": "string",
                     "minLength": 12,
-                    "maxLength": 128
-                  },
-                  "refreshToken": {
-                    "type": "string",
-                    "minLength": 1
+                    "maxLength": 20
                   }
                 },
                 "required": [
                   "currentPassword",
-                  "newPassword",
-                  "refreshToken"
+                  "newPassword"
                 ]
               }
             }
@@ -1131,7 +1270,7 @@
           "Admin"
         ],
         "summary": "Create a user",
-        "description": "Administrative user creation. Requires the ADMIN role. Creates the credential account with Argon2id and sends a verification email; the account cannot sign in until the email is verified.",
+        "description": "Administrative user creation. Requires the ADMIN role and always creates the account with the USER role. Creates the credential account with Argon2id and sends a verification email; the account cannot sign in until the email is verified.",
         "security": [
           {
             "bearerAuth": []
@@ -1323,7 +1462,7 @@
           "Admin"
         ],
         "summary": "Update a user",
-        "description": "Administrative user update. Requires the ADMIN role. Allows changing the global role, active status, organizational unit and career. Deactivating a user revokes all of their sessions; administrators cannot deactivate or demote themselves and the last active administrator cannot be demoted or deactivated.",
+        "description": "Administrative user update. Requires the ADMIN role. Allows changing the global role, active status, organizational unit and career. Only an already-active user can be promoted to ADMIN, and promotion cannot be combined with deactivation. Deactivating a user revokes all of their sessions; administrators cannot deactivate or demote themselves and the last active administrator cannot be demoted or deactivated.",
         "security": [
           {
             "bearerAuth": []
@@ -1465,6 +1604,1640 @@
         }
       }
     },
+    "/api/v1/event-programs/{id}/collaborators": {
+      "get": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "List event program collaborators",
+        "description": "Lists the collaborators that live directly on the scope with their effective permissions. Requires `permission:grant` in the scope or the ADMIN role. Each permission carries `origin` (`LOCAL` when it comes from the scope, `INHERITED` from the parent event program, `BOTH` when both add it), the effective window merged from every active grant and `effective: true`; expired or future grants are omitted even though they stay stored. `source` describes the local grant kind (ROLE_DEFAULT or OVERRIDE) and falls back to ROLE_DEFAULT for permissions that only come from inheritance. Inherited program collaborations are not expanded as collaborators, only their permissions are resolved for the local ones. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Local collaborators of the scope with effective permissions and provenance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CollaboratorList"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Add an event program collaborator",
+        "description": "Adds a collaborator to the scope and materializes the ROLE_DEFAULT grants of the assigned role. Requires `permission:grant` in the scope or the ADMIN role; the actor cannot assign a role whose defaults exceed its own permissions. Archived event programs cannot be modified. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "VIEWER",
+                      "EDITOR",
+                      "ORGANIZER"
+                    ]
+                  }
+                },
+                "required": [
+                  "userId",
+                  "role"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Collaborator added to the scope with its role defaults materialized.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Collaborator"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/event-programs/{id}/collaborators/{userId}": {
+      "patch": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Change an event program collaborator role",
+        "description": "Changes the role of a local collaborator. Replaces its ROLE_DEFAULT grants with the defaults of the new role and preserves OVERRIDE grants. Requires `permission:grant` in the scope or the ADMIN role; the actor cannot assign a role whose defaults exceed its own permissions nor strip ROLE_DEFAULT grants it does not hold. Archived event programs cannot be modified. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "VIEWER",
+                      "EDITOR",
+                      "ORGANIZER"
+                    ]
+                  }
+                },
+                "required": [
+                  "role"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Collaborator role replaced with its ROLE_DEFAULT grants regenerated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Collaborator"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Remove an event program collaborator",
+        "description": "Removes a local collaborator from the scope. Requires `permission:grant` in the scope or the ADMIN role; the actor cannot remove a collaborator holding permissions it does not hold. The scope must keep at least one active collaborator able to delegate (an active `permission:grant` or the ADMIN global role); removing the last one responds 409. Archived event programs cannot be modified.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Collaborator removed from the scope."
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/activities/{id}/collaborators": {
+      "get": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "List activity collaborators",
+        "description": "Lists the collaborators that live directly on the scope with their effective permissions. Requires `permission:grant` in the scope or the ADMIN role. Each permission carries `origin` (`LOCAL` when it comes from the scope, `INHERITED` from the parent event program, `BOTH` when both add it), the effective window merged from every active grant and `effective: true`; expired or future grants are omitted even though they stay stored. `source` describes the local grant kind (ROLE_DEFAULT or OVERRIDE) and falls back to ROLE_DEFAULT for permissions that only come from inheritance. Inherited program collaborations are not expanded as collaborators, only their permissions are resolved for the local ones. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Local collaborators of the scope with effective permissions and provenance.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/CollaboratorList"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Add an activity collaborator",
+        "description": "Adds a collaborator to the scope and materializes the ROLE_DEFAULT grants of the assigned role. Requires `permission:grant` in the scope or the ADMIN role; the actor cannot assign a role whose defaults exceed its own permissions. Archived event programs cannot be modified. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "VIEWER",
+                      "EDITOR",
+                      "ORGANIZER"
+                    ]
+                  }
+                },
+                "required": [
+                  "userId",
+                  "role"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Collaborator added to the scope with its role defaults materialized.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Collaborator"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/activities/{id}/collaborators/{userId}": {
+      "patch": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Change an activity collaborator role",
+        "description": "Changes the role of a local collaborator. Replaces its ROLE_DEFAULT grants with the defaults of the new role and preserves OVERRIDE grants. Requires `permission:grant` in the scope or the ADMIN role; the actor cannot assign a role whose defaults exceed its own permissions nor strip ROLE_DEFAULT grants it does not hold. Archived event programs cannot be modified. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "VIEWER",
+                      "EDITOR",
+                      "ORGANIZER"
+                    ]
+                  }
+                },
+                "required": [
+                  "role"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Collaborator role replaced with its ROLE_DEFAULT grants regenerated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Collaborator"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Remove an activity collaborator",
+        "description": "Removes a local collaborator from the scope. Requires `permission:grant` in the scope or the ADMIN role; the actor cannot remove a collaborator holding permissions it does not hold. The scope must keep at least one active collaborator able to delegate (an active `permission:grant` or the ADMIN global role); removing the last one responds 409. Archived event programs cannot be modified.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "userId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Collaborator removed from the scope."
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/event-programs/{id}/permissions": {
+      "post": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Grant a permission in an event program",
+        "description": "Creates or replaces a local OVERRIDE grant for an existing collaborator of the scope. Requires `permission:grant` in the scope or the ADMIN role. The actor can only grant permissions it holds and the requested window must stay inside its own envelope for that permission, so a time-bounded delegator cannot create unbounded grants. Re-granting the same permission replaces the window of the existing row. Archived event programs cannot be modified. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "permission": {
+                    "type": "string",
+                    "enum": [
+                      "program:read",
+                      "program:create",
+                      "program:update",
+                      "program:archive",
+                      "program:reactivate",
+                      "activity:read",
+                      "activity:create",
+                      "activity:update",
+                      "activity:cancel",
+                      "activity:delete",
+                      "attendance:register",
+                      "attendance:checkin",
+                      "attendance:manage",
+                      "certificate:read",
+                      "certificate:generate",
+                      "proposal:read",
+                      "proposal:review",
+                      "proposal:feedback",
+                      "report:view",
+                      "report:export",
+                      "permission:grant"
+                    ]
+                  },
+                  "validFrom": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "validUntil": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "userId",
+                  "permission"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Permission grant created or replaced; the collaborator is returned with its local grants.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Collaborator"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/activities/{id}/permissions": {
+      "post": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Grant a permission in an activity",
+        "description": "Creates or replaces a local OVERRIDE grant for an existing collaborator of the scope. Requires `permission:grant` in the scope or the ADMIN role. The actor can only grant permissions it holds and the requested window must stay inside its own envelope for that permission, so a time-bounded delegator cannot create unbounded grants. Re-granting the same permission replaces the window of the existing row. Archived event programs cannot be modified. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "permission": {
+                    "type": "string",
+                    "enum": [
+                      "program:read",
+                      "program:create",
+                      "program:update",
+                      "program:archive",
+                      "program:reactivate",
+                      "activity:read",
+                      "activity:create",
+                      "activity:update",
+                      "activity:cancel",
+                      "activity:delete",
+                      "attendance:register",
+                      "attendance:checkin",
+                      "attendance:manage",
+                      "certificate:read",
+                      "certificate:generate",
+                      "proposal:read",
+                      "proposal:review",
+                      "proposal:feedback",
+                      "report:view",
+                      "report:export",
+                      "permission:grant"
+                    ]
+                  },
+                  "validFrom": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "validUntil": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "userId",
+                  "permission"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Permission grant created or replaced; the collaborator is returned with its local grants.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Collaborator"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/event-programs/{id}/permissions/{permission}": {
+      "delete": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Revoke a permission in an event program",
+        "description": "Removes a local permission grant (ROLE_DEFAULT or OVERRIDE) from an existing collaborator of the scope. Requires `permission:grant` in the scope or the ADMIN role; the actor can only revoke permissions it holds. In an activity scope the endpoint never touches the program grants: when the permission has no local grant but is actively inherited from the event program it responds 409 `Cannot revoke a permission inherited from the event program.` (revoke it at the program scope instead); when a local grant exists it is removed even if the permission stays effective through inheritance. Revoking `permission:grant` from the last active collaborator able to delegate in the scope responds 409. Archived event programs cannot be modified.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "permission",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "program:read",
+                "program:create",
+                "program:update",
+                "program:archive",
+                "program:reactivate",
+                "activity:read",
+                "activity:create",
+                "activity:update",
+                "activity:cancel",
+                "activity:delete",
+                "attendance:register",
+                "attendance:checkin",
+                "attendance:manage",
+                "certificate:read",
+                "certificate:generate",
+                "proposal:read",
+                "proposal:review",
+                "proposal:feedback",
+                "report:view",
+                "report:export",
+                "permission:grant"
+              ]
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "userId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Local permission grant removed from the scope."
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/activities/{id}/permissions/{permission}": {
+      "delete": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Revoke a permission in an activity",
+        "description": "Removes a local permission grant (ROLE_DEFAULT or OVERRIDE) from an existing collaborator of the scope. Requires `permission:grant` in the scope or the ADMIN role; the actor can only revoke permissions it holds. In an activity scope the endpoint never touches the program grants: when the permission has no local grant but is actively inherited from the event program it responds 409 `Cannot revoke a permission inherited from the event program.` (revoke it at the program scope instead); when a local grant exists it is removed even if the permission stays effective through inheritance. Revoking `permission:grant` from the last active collaborator able to delegate in the scope responds 409. Archived event programs cannot be modified.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          },
+          {
+            "in": "path",
+            "name": "permission",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "program:read",
+                "program:create",
+                "program:update",
+                "program:archive",
+                "program:reactivate",
+                "activity:read",
+                "activity:create",
+                "activity:update",
+                "activity:cancel",
+                "activity:delete",
+                "attendance:register",
+                "attendance:checkin",
+                "attendance:manage",
+                "certificate:read",
+                "certificate:generate",
+                "proposal:read",
+                "proposal:review",
+                "proposal:feedback",
+                "report:view",
+                "report:export",
+                "permission:grant"
+              ]
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "userId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Local permission grant removed from the scope."
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/users/me/permissions": {
+      "get": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "Get the authenticated user permissions in a scope",
+        "description": "Returns the effective permissions of the authenticated user in the requested program or activity scope with their temporal envelopes and origin. Activity scopes union the activity-local grants (`origin: LOCAL`) with the ones inherited from the parent program (`origin: INHERITED`); `BOTH` is possible when the same permission is active through both sources. Expired or future grants are ignored and never returned. ADMIN receives the whole catalog as `LOCAL` with unbounded envelopes. A null window means unbounded. Missing scopes respond 404. Audit fields (`grantedById`, `grantedAt`) are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "scope",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "program",
+                "activity"
+              ]
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Effective permissions of the authenticated user in the requested scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OwnPermissions"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/activities": {
       "get": {
         "tags": [
@@ -1577,6 +3350,10 @@
                       "WORKSHOP",
                       "SEMINAR",
                       "TALK",
+                      "CONFERENCE",
+                      "PANEL",
+                      "COURSE",
+                      "COMPETITION",
                       "OTHER"
                     ]
                   },
@@ -1738,13 +3515,680 @@
         }
       }
     },
+    "/api/v1/activities/{id}": {
+      "get": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Get an activity",
+        "description": "Public. Returns the activity detail with speakers, classroom, equipment, program, enrolled and check-in counts. Anonymous callers only see non-DRAFT activities of ACTIVE programs; a valid Bearer token of an ADMIN or of a collaborator with the activity:read permission on the scope can also read DRAFT activities and activities of non ACTIVE programs.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Activity detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ActivityDetail"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Update an activity",
+        "description": "Partially updates an activity. Requires the activity:update permission on the activity scope (or the ADMIN role). COMPLETED and CANCELLED activities respond 409. The status field accepts DRAFT or SCHEDULED to unpublish or publish; ONGOING, COMPLETED and CANCELLED are rejected. When the resulting activity reserves a classroom (SCHEDULED/ONGOING), the availability window, overlaps and classroom capacity are validated. The event program is immutable.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 2000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "WORKSHOP",
+                      "SEMINAR",
+                      "TALK",
+                      "CONFERENCE",
+                      "PANEL",
+                      "COURSE",
+                      "COMPETITION",
+                      "OTHER"
+                    ]
+                  },
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "startTime": {
+                    "type": "string",
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                  },
+                  "endTime": {
+                    "type": "string",
+                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                  },
+                  "maxCapacity": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 100000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "bannerUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500,
+                        "format": "uri"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "classroomId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "DRAFT",
+                      "SCHEDULED"
+                    ]
+                  },
+                  "speakers": {
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ActivitySpeakerInput"
+                    }
+                  },
+                  "equipment": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 255
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Activity updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ActivityDetail"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Delete a draft activity",
+        "description": "Physically deletes an activity and responds 204 without a body. Requires the activity:delete permission on the activity scope (or the ADMIN role); activity:delete is a default of ORGANIZER only. Retention rule: only DRAFT activities of ACTIVE event programs can be deleted, and the activity must have no attendance records and no alert records, otherwise the endpoint responds 409. Attendance and alerts are retained data protected by ON DELETE RESTRICT, so an activity with history is cancelled instead of deleted. Equipment, speaker links and local collaborations are removed by cascade while the speakers catalog entry is kept. Archived event programs are frozen and their activities respond 409.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Activity deleted successfully."
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/activities/{id}/cancel": {
+      "post": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "Cancel an activity",
+        "description": "Cancels an activity and optionally records a reason. Requires the activity:cancel permission on the activity scope (or the ADMIN role). DRAFT, SCHEDULED and ONGOING activities can be cancelled; COMPLETED activities respond 409 and activities of non ACTIVE event programs also respond 409. Cancelling an already cancelled activity is idempotent: it responds 200 without overwriting the recorded reason. The optional body accepts a trimmed reason of up to 500 characters.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cancelled activity.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ActivityDetail"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/event-programs/{id}/activities": {
+      "get": {
+        "tags": [
+          "Activities"
+        ],
+        "summary": "List activities of an event program",
+        "description": "Public. Returns the activities of an event program with offset pagination. Anonymous callers only see SCHEDULED, ONGOING and COMPLETED activities of ACTIVE programs; the status filter is honored only for an ADMIN or a collaborator with the activity:read permission on the program scope, while other callers silently receive the public statuses. Non ACTIVE programs respond 404 unless the caller is authorized. Supports optional type, case-insensitive name/description search and inclusive institutional date range filters.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "SCHEDULED",
+                "ONGOING",
+                "COMPLETED",
+                "CANCELLED",
+                "ALL"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "WORKSHOP",
+                "SEMINAR",
+                "TALK",
+                "CONFERENCE",
+                "PANEL",
+                "COURSE",
+                "COMPETITION",
+                "OTHER"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateFrom",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateTo",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of event program activities.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaginatedEventProgramActivities"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/event-programs": {
       "get": {
         "tags": [
           "Event Programs"
         ],
-        "summary": "List active event programs",
-        "description": "Public. Returns ACTIVE event programs ordered by name. Supports filters by organizational unit, unit type and a name/label search term.",
+        "summary": "List event programs",
+        "description": "Public. Returns ACTIVE event programs ordered by name. The status filter (DRAFT, ACTIVE, COMPLETED, CANCELLED, ARCHIVED or ALL) is honored only for ADMIN users; anonymous callers and non-admin users always receive ACTIVE programs even when they send another status. Supports filters by organizational unit, unit type and a name/label search term. An invalid status responds 400; a present but invalid bearer token responds 401 and an inactive account responds 403.",
         "parameters": [
           {
             "in": "query",
@@ -1787,6 +4231,21 @@
           },
           {
             "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "ACTIVE",
+                "COMPLETED",
+                "CANCELLED",
+                "ARCHIVED",
+                "ALL"
+              ]
+            }
+          },
+          {
+            "in": "query",
             "name": "q",
             "schema": {
               "type": "string",
@@ -1797,7 +4256,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Paginated list of active event programs.",
+            "description": "Paginated list of event programs.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1827,6 +4286,26 @@
             }
           },
           "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
             "description": "Error response.",
             "content": {
               "application/json": {
@@ -2001,15 +4480,125 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Event Programs"
+        ],
+        "summary": "Deleting event programs is not allowed",
+        "description": "Event programs are archived, never physically deleted. This operation always responds 405 with an Allow header listing GET and POST; use POST /api/v1/event-programs/{id}/archive to archive a program.",
+        "responses": {
+          "405": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/event-programs/{id}": {
+      "get": {
+        "tags": [
+          "Event Programs"
+        ],
+        "summary": "Get an event program",
+        "description": "Public. Returns an ACTIVE event program with its activity count. Anonymous callers receive the public visible count (SCHEDULED, ONGOING and COMPLETED activities); ADMIN users and collaborators with program:read on the program also receive the total and the per-status breakdown. Non-active or missing programs respond 404. A present but invalid bearer token responds 401.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event program detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/EventProgramPublicDetail"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "tags": [
           "Event Programs"
         ],
         "summary": "Update an event program",
-        "description": "Partially updates name, description, label, bannerUrl, startDate and endDate of a specific event program. Requires the program:update permission on the program scope, or the ADMIN role. Archived programs cannot be modified.",
+        "description": "Partially updates name, description, label, bannerUrl, startDate, endDate and status of a specific event program. The only accepted status transition is DRAFT to ACTIVE; any other value or transition responds 400/409. Requires the program:update permission on the program scope, or the ADMIN role. Archived programs cannot be modified (409), default programs cannot receive start or end dates (400), and dates that would leave existing activities outside the range are rejected (409).",
         "security": [
           {
             "bearerAuth": []
@@ -2021,7 +4610,8 @@
             "name": "id",
             "schema": {
               "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "maxLength": 100
             },
             "required": true
           }
@@ -2079,6 +4669,10 @@
                   "endDate": {
                     "type": "string",
                     "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "status": {
+                    "type": "string",
+                    "const": "ACTIVE"
                   }
                 },
                 "additionalProperties": false
@@ -2168,6 +4762,253 @@
             }
           },
           "500": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Event Programs"
+        ],
+        "summary": "Deleting an event program is not allowed",
+        "description": "Event programs are archived, never physically deleted. This operation always responds 405 with an Allow header listing GET and PATCH; use POST /api/v1/event-programs/{id}/archive to archive the program.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "405": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/event-programs/{id}/archive": {
+      "post": {
+        "tags": [
+          "Event Programs"
+        ],
+        "summary": "Archive an event program",
+        "description": "Archives an event program and stamps archivedAt. Requires the program:archive permission on the program scope, or the ADMIN role. Default programs cannot be archived while their organizational unit is active (409) and additional programs with SCHEDULED or ONGOING activities are rejected (409); DRAFT, COMPLETED and CANCELLED activities do not block. Archiving an already archived program is idempotent: it responds 200 without modifying archivedAt.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Archived event program.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/EventProgramDetail"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/event-programs/{id}/reactivate": {
+      "post": {
+        "tags": [
+          "Event Programs"
+        ],
+        "summary": "Reactivate an event program",
+        "description": "Reactivates an ARCHIVED additional event program to ACTIVE and clears archivedAt. Requires the program:reactivate permission on the program scope, or the ADMIN role; no collaboration role grants this permission by default. Default event programs follow their organizational unit lifecycle and respond 409 (use POST /organizational-units/{id}/reactivate instead), and programs that are not ARCHIVED also respond 409. An ARCHIVED program without a coherent start and end date responds 400. Reactivating a program whose organizational unit is inactive is allowed.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reactivated event program.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/EventProgramDetail"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "Error response.",
             "content": {
               "application/json": {
@@ -3323,6 +6164,130 @@
         }
       }
     },
+    "/api/v1/users/me/certificates": {
+      "get": {
+        "tags": [
+          "Certificates"
+        ],
+        "summary": "List my certificates",
+        "description": "Paginated list of the certificates issued to the authenticated user, most recently issued first. Each item carries the certificate code, its issuance instant and the activity and event program it attests. Storage paths and attendance internals are not exposed, because certificate download does not exist yet. Supports filters by event program, activity and an issuance date range interpreted in the institutional calendar (America/Panama).",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "eventProgramId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "activityId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "issuedFrom",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "issuedTo",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of own certificates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaginatedMyCertificates"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/classrooms": {
       "get": {
         "tags": [
@@ -4267,6 +7232,231 @@
         }
       }
     },
+    "/api/v1/audit-events": {
+      "get": {
+        "tags": [
+          "Audit"
+        ],
+        "summary": "List audit events",
+        "description": "Read-only listing of the durable audit log. Requires the ADMIN role. The log is append-only, so no create, update or delete operation exists for it. Events are ordered by occurredAt and id, both descending, and the response is paginated with an opaque cursor: pass the nextCursor of a page as the cursor of the following request. Filters can be combined freely; limit defaults to 20 and cannot exceed 100. The response carries identifiers only, never the personal data of the actors.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "action",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "authorization.collaborator_added",
+                "authorization.collaborator_role_changed",
+                "authorization.collaborator_removed",
+                "authorization.permission_granted",
+                "authorization.permission_replaced",
+                "authorization.permission_revoked",
+                "user.admin_created",
+                "user.role_changed",
+                "user.activated",
+                "user.deactivated",
+                "auth.password_changed",
+                "auth.other_sessions_revoked",
+                "organizational_unit.deactivated",
+                "organizational_unit.reactivated",
+                "event_program.published",
+                "event_program.archived",
+                "event_program.reactivated",
+                "activity.scheduled",
+                "activity.unpublished",
+                "activity.schedule_changed",
+                "activity.cancelled",
+                "activity.deleted",
+                "classroom.activated",
+                "classroom.deactivated",
+                "career.deleted",
+                "organizational_unit.created",
+                "organizational_unit.updated",
+                "career.created",
+                "career.updated",
+                "classroom.created",
+                "classroom.updated",
+                "event_program.created",
+                "event_program.updated",
+                "activity.created",
+                "activity.updated",
+                "user.profile_updated",
+                "user.organization_assignment_changed",
+                "classroom.amenity_added",
+                "classroom.amenity_removed",
+                "classroom.availability_added",
+                "classroom.availability_removed",
+                "user.registered",
+                "auth.email_verified",
+                "auth.password_reset",
+                "audit.purged"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "resourceType",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "collaboration",
+                "collaboration_permission",
+                "user",
+                "organizational_unit",
+                "event_program",
+                "activity",
+                "classroom",
+                "career",
+                "audit_log"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "scopeType",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "event_program",
+                "activity"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "actorId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "resourceId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "scopeId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of audit events, most recent first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuditEventPage"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "tags": [
@@ -4322,7 +7512,7 @@
           "password": {
             "type": "string",
             "minLength": 12,
-            "maxLength": 128
+            "maxLength": 20
           },
           "firstName": {
             "type": "string",
@@ -4338,14 +7528,6 @@
             "type": "string",
             "minLength": 5,
             "maxLength": 30
-          },
-          "globalRole": {
-            "default": "USER",
-            "type": "string",
-            "enum": [
-              "USER",
-              "ADMIN"
-            ]
           },
           "isActive": {
             "default": true,
@@ -4377,7 +7559,7 @@
           "identificationNumber"
         ],
         "additionalProperties": false,
-        "description": "Administrative payload used to create a user account."
+        "description": "Administrative payload used to create a USER account. Role promotion is a separate operation."
       },
       "ActivitySpeakerInput": {
         "type": "object",
@@ -4591,15 +7773,11 @@
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
             "description": "ISO 8601 expiration timestamp of the access token."
           },
-          "refreshToken": {
-            "type": "string",
-            "description": "Opaque refresh token backed by a server-side session."
-          },
           "refreshTokenExpiresAt": {
             "type": "string",
             "format": "date-time",
             "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$",
-            "description": "ISO 8601 expiration timestamp of the refresh token."
+            "description": "ISO 8601 expiration timestamp of the refresh token. The token itself is delivered in an HttpOnly cookie, never in this body."
           },
           "tokenType": {
             "type": "string",
@@ -4609,12 +7787,11 @@
         "required": [
           "accessToken",
           "accessTokenExpiresAt",
-          "refreshToken",
           "refreshTokenExpiresAt",
           "tokenType"
         ],
         "additionalProperties": false,
-        "description": "Access and refresh token pair returned by the login and refresh flows."
+        "description": "Access token issued by the login and refresh flows. The refresh token travels in an HttpOnly cookie and is never exposed to JavaScript."
       },
       "ApiErrorResponse": {
         "type": "object",
@@ -4874,6 +8051,280 @@
         "additionalProperties": false,
         "description": "Administrative view of a user account."
       },
+      "CollaboratorList": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollaboratorListDetail"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "description": "Local collaborators of an event program or activity scope."
+      },
+      "CollaboratorListDetail": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "VIEWER",
+              "EDITOR",
+              "ORGANIZER"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO 8601 instant when the collaboration started."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollaboratorListPermission"
+            }
+          }
+        },
+        "required": [
+          "userId",
+          "firstName",
+          "lastName",
+          "email",
+          "role",
+          "createdAt",
+          "permissions"
+        ],
+        "additionalProperties": false,
+        "description": "Local collaborator of an event program or activity with its effective permission grants and provenance."
+      },
+      "CollaboratorListPermission": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ROLE_DEFAULT",
+              "OVERRIDE"
+            ],
+            "description": "Local grant kind that carries the permission in this scope."
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "LOCAL",
+              "INHERITED",
+              "BOTH"
+            ],
+            "description": "Where the effective permission comes from: the scope itself (LOCAL), the parent event program (INHERITED) or both (BOTH)."
+          },
+          "validFrom": {
+            "description": "ISO 8601 instant when the effective grant starts, or null.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validUntil": {
+            "description": "ISO 8601 instant when the effective grant ends, or null.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "effective": {
+            "type": "boolean",
+            "description": "True when the permission is active at response time."
+          }
+        },
+        "required": [
+          "name",
+          "source",
+          "origin",
+          "validFrom",
+          "validUntil",
+          "effective"
+        ],
+        "additionalProperties": false,
+        "description": "Local permission grant of a collaborator enriched with its effective provenance and window."
+      },
+      "Collaborator": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "VIEWER",
+              "EDITOR",
+              "ORGANIZER"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "description": "ISO 8601 instant when the collaboration started."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollaboratorPermission"
+            }
+          }
+        },
+        "required": [
+          "userId",
+          "firstName",
+          "lastName",
+          "email",
+          "role",
+          "createdAt",
+          "permissions"
+        ],
+        "additionalProperties": false,
+        "description": "Local collaborator of an event program or activity with its permission grants."
+      },
+      "CollaboratorPermission": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "ROLE_DEFAULT",
+              "OVERRIDE"
+            ]
+          },
+          "validFrom": {
+            "description": "ISO 8601 instant when the grant starts, or null when unbounded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validUntil": {
+            "description": "ISO 8601 instant when the grant ends, or null when unbounded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "source",
+          "validFrom",
+          "validUntil"
+        ],
+        "additionalProperties": false,
+        "description": "Local permission grant materialized on a collaborator."
+      },
+      "OwnPermissions": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "program",
+                  "activity"
+                ]
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "id"
+            ],
+            "additionalProperties": false
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnPermission"
+            }
+          }
+        },
+        "required": [
+          "scope",
+          "permissions"
+        ],
+        "additionalProperties": false,
+        "description": "Effective permissions of the authenticated user in an event program or activity scope."
+      },
+      "OwnPermission": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "LOCAL",
+              "INHERITED",
+              "BOTH"
+            ],
+            "description": "Where the effective permission comes from: the requested scope (LOCAL), the parent event program (INHERITED) or both (BOTH)."
+          },
+          "validFrom": {
+            "description": "ISO 8601 instant when the permission starts, or null when unbounded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "validUntil": {
+            "description": "ISO 8601 instant when the permission ends, or null when unbounded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "origin",
+          "validFrom",
+          "validUntil"
+        ],
+        "additionalProperties": false,
+        "description": "Effective permission of the authenticated user with its temporal envelope."
+      },
       "PaginatedActivities": {
         "type": "object",
         "properties": {
@@ -4935,6 +8386,10 @@
               "WORKSHOP",
               "SEMINAR",
               "TALK",
+              "CONFERENCE",
+              "PANEL",
+              "COURSE",
+              "COMPETITION",
               "OTHER"
             ]
           },
@@ -5124,6 +8579,10 @@
               "WORKSHOP",
               "SEMINAR",
               "TALK",
+              "CONFERENCE",
+              "PANEL",
+              "COURSE",
+              "COMPETITION",
               "OTHER"
             ]
           },
@@ -5168,12 +8627,31 @@
             ],
             "description": "Activity lifecycle status."
           },
+          "cancelReason": {
+            "description": "Reason recorded when the activity was cancelled; null otherwise.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "equipment": {
             "type": "array",
             "items": {
               "type": "string"
             },
             "description": "Required equipment names."
+          },
+          "enrolledCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Registered attendees of the activity."
+          },
+          "checkedInCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Registered attendees who completed check-in."
           },
           "speakers": {
             "type": "array",
@@ -5209,14 +8687,168 @@
           "capacity",
           "bannerUrl",
           "status",
+          "cancelReason",
           "equipment",
+          "enrolledCount",
+          "checkedInCount",
           "speakers",
           "classroom",
           "eventProgram",
           "organizationalUnit"
         ],
         "additionalProperties": false,
-        "description": "Activity detail returned after creation. Never exposes check-in codes."
+        "description": "Activity detail with speakers, classroom, equipment, program and attendance counts. Never exposes check-in codes."
+      },
+      "PaginatedEventProgramActivities": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventProgramActivityItem"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total",
+          "totalPages"
+        ],
+        "additionalProperties": false,
+        "description": "Paginated list of event program activities."
+      },
+      "EventProgramActivityItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "WORKSHOP",
+              "SEMINAR",
+              "TALK",
+              "CONFERENCE",
+              "PANEL",
+              "COURSE",
+              "COMPETITION",
+              "OTHER"
+            ]
+          },
+          "date": {
+            "type": "string",
+            "description": "Institutional date in YYYY-MM-DD format."
+          },
+          "startTime": {
+            "type": "string",
+            "description": "Institutional start time in HH:mm format."
+          },
+          "endTime": {
+            "type": "string",
+            "description": "Institutional end time in HH:mm format."
+          },
+          "capacity": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "bannerUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speakers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivitySpeakerSummary"
+            }
+          },
+          "classroom": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActivityClassroomSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eventProgram": {
+            "$ref": "#/components/schemas/ActivityProgramSummary"
+          },
+          "organizationalUnit": {
+            "$ref": "#/components/schemas/ActivityOrganizationalUnit"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "SCHEDULED",
+              "ONGOING",
+              "COMPLETED",
+              "CANCELLED"
+            ],
+            "description": "Activity lifecycle status."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "type",
+          "date",
+          "startTime",
+          "endTime",
+          "capacity",
+          "bannerUrl",
+          "speakers",
+          "classroom",
+          "eventProgram",
+          "organizationalUnit",
+          "status"
+        ],
+        "additionalProperties": false,
+        "description": "Activity of an event program including its lifecycle status."
       },
       "PaginatedEventPrograms": {
         "type": "object",
@@ -5355,6 +8987,141 @@
         ],
         "additionalProperties": false,
         "description": "Organizational unit that owns the event program."
+      },
+      "EventProgramPublicDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bannerUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "COMPLETED",
+              "CANCELLED",
+              "ARCHIVED"
+            ]
+          },
+          "startDate": {
+            "description": "Start date in YYYY-MM-DD format.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endDate": {
+            "description": "End date in YYYY-MM-DD format.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "organizationalUnit": {
+            "$ref": "#/components/schemas/EventProgramOrganizationalUnit"
+          },
+          "activityCount": {
+            "$ref": "#/components/schemas/EventProgramActivityCount"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "label",
+          "bannerUrl",
+          "isDefault",
+          "status",
+          "startDate",
+          "endDate",
+          "organizationalUnit",
+          "activityCount"
+        ],
+        "additionalProperties": false,
+        "description": "Public event program detail including activity counts."
+      },
+      "EventProgramActivityCount": {
+        "type": "object",
+        "properties": {
+          "visible": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "byStatus": {
+            "type": "object",
+            "properties": {
+              "DRAFT": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "SCHEDULED": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "ONGOING": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "COMPLETED": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "CANCELLED": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "DRAFT",
+              "SCHEDULED",
+              "ONGOING",
+              "COMPLETED",
+              "CANCELLED"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "visible"
+        ],
+        "additionalProperties": false,
+        "description": "Activity count for an event program. Anonymous callers only receive the public visible count; authorized callers also receive the total and the per-status breakdown."
       },
       "PaginatedOrganizationalUnits": {
         "type": "object",
@@ -5686,6 +9453,134 @@
         "additionalProperties": false,
         "description": "Minimal reference to the organizational unit that owns a career."
       },
+      "PaginatedMyCertificates": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CertificateSummary"
+            },
+            "description": "Certificates, most recently issued first."
+          },
+          "page": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total",
+          "totalPages"
+        ],
+        "additionalProperties": false,
+        "description": "Paginated list of the authenticated user certificates, ordered by issuedAt descending."
+      },
+      "CertificateSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Certificate identifier."
+          },
+          "code": {
+            "type": "string",
+            "description": "Unique certificate code shown on the document."
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "description": "Instant of issuance, in UTC."
+          },
+          "activity": {
+            "$ref": "#/components/schemas/CertificateActivity"
+          },
+          "eventProgram": {
+            "$ref": "#/components/schemas/CertificateEventProgram"
+          }
+        },
+        "required": [
+          "id",
+          "code",
+          "issuedAt",
+          "activity",
+          "eventProgram"
+        ],
+        "additionalProperties": false,
+        "description": "Certificate owned by the authenticated user. Storage paths and attendance internals are not exposed."
+      },
+      "CertificateActivity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "description": "Institutional date in YYYY-MM-DD format."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "WORKSHOP",
+              "SEMINAR",
+              "TALK",
+              "CONFERENCE",
+              "PANEL",
+              "COURSE",
+              "COMPETITION",
+              "OTHER"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "date",
+          "type"
+        ],
+        "additionalProperties": false,
+        "description": "Activity the certificate attests."
+      },
+      "CertificateEventProgram": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false,
+        "description": "Event program that owns the activity the certificate attests."
+      },
       "PaginatedClassrooms": {
         "type": "object",
         "properties": {
@@ -5895,6 +9790,249 @@
         "additionalProperties": false,
         "description": "Weekly availability window of a classroom."
       },
+      "AuditEventPage": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEvent"
+            },
+            "description": "Audit events, most recent first."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991,
+            "description": "Maximum number of events per page."
+          },
+          "hasMore": {
+            "type": "boolean",
+            "description": "True when more events are available after this page."
+          },
+          "nextCursor": {
+            "description": "Opaque cursor for the next page, or null on the last page.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "limit",
+          "hasMore",
+          "nextCursor"
+        ],
+        "additionalProperties": false,
+        "description": "Cursor paginated page of audit events, ordered by occurredAt and id descending."
+      },
+      "AuditEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Audit event identifier."
+          },
+          "action": {
+            "type": "string",
+            "description": "Audited action, from the audit catalog."
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$",
+            "description": "Instant of the audited change, in UTC."
+          },
+          "actorType": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "ANONYMOUS",
+              "SYSTEM"
+            ],
+            "description": "Nature of the actor behind the change."
+          },
+          "actorId": {
+            "description": "User that performed the change.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resourceType": {
+            "type": "string",
+            "description": "Type of the affected resource."
+          },
+          "resourceId": {
+            "description": "Identifier of the affected resource.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scopeType": {
+            "description": "Collaboration scope type, when present.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scopeId": {
+            "description": "Collaboration scope identifier.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "targetUserId": {
+            "description": "User the change is about, when different from the actor.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "description": "Request identifier that correlates the event with the logs.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "changes": {
+            "$ref": "#/components/schemas/AuditChanges"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/AuditMetadata"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "occurredAt",
+          "actorType",
+          "actorId",
+          "resourceType",
+          "resourceId",
+          "scopeType",
+          "scopeId",
+          "targetUserId",
+          "requestId",
+          "changes",
+          "metadata"
+        ],
+        "additionalProperties": false,
+        "description": "Single append-only audit record."
+      },
+      "AuditChanges": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "before": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              },
+              "after": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": [
+                        "string",
+                        "number",
+                        "boolean",
+                        "null"
+                      ]
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": [
+                          "string",
+                          "number",
+                          "boolean",
+                          "null"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Typed before/after snapshot of the audited change. Only allowlisted keys without secrets or personal data are persisted."
+      },
+      "AuditMetadata": {
+        "anyOf": [
+          {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean",
+                    "null"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Allowlisted metadata that qualifies the audited action."
+      },
       "HealthStatus": {
         "type": "object",
         "properties": {
@@ -5932,6 +10070,12 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "Access token JWT (EdDSA). Send it as `Authorization: Bearer <token>`."
+      },
+      "refreshCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sipeg-refresh",
+        "description": "HttpOnly refresh cookie set by login and refresh. Browser requests require credentials: include."
       }
     }
   }

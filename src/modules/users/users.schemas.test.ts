@@ -243,18 +243,17 @@ describe('createUserSchema', () => {
     identificationNumber: '8-888-1234',
   };
 
-  it('applies USER and active defaults', () => {
+  it('applies the active default without exposing a role input', () => {
     const parsed = createUserSchema.parse({ body: baseCreate });
 
-    expect(parsed.body.globalRole).toBe('USER');
+    expect(parsed.body).not.toHaveProperty('globalRole');
     expect(parsed.body.isActive).toBe(true);
   });
 
-  it('accepts role, status, unit and career overrides', () => {
+  it('accepts status, unit and career overrides', () => {
     const parsed = createUserSchema.parse({
       body: {
         ...baseCreate,
-        globalRole: 'ADMIN',
         isActive: false,
         unitId: 'unit-001',
         careerId: 'car-001',
@@ -262,7 +261,6 @@ describe('createUserSchema', () => {
     });
 
     expect(parsed.body).toMatchObject({
-      globalRole: 'ADMIN',
       isActive: false,
       unitId: 'unit-001',
       careerId: 'car-001',
@@ -280,13 +278,30 @@ describe('createUserSchema', () => {
     expect(() => createUserSchema.parse({ body: { ...baseCreate, password: 'short' } })).toThrow();
   });
 
+  it('rejects a password longer than 20 characters', () => {
+    expect(() =>
+      createUserSchema.parse({ body: { ...baseCreate, password: 'a'.repeat(21) } }),
+    ).toThrow('Password must not exceed 20 characters.');
+  });
+
+  it('accepts a password of exactly 20 characters', () => {
+    const password = 'a'.repeat(20);
+
+    expect(createUserSchema.parse({ body: { ...baseCreate, password } }).body.password).toBe(
+      password,
+    );
+  });
+
   it('rejects an invalid email', () => {
     expect(() =>
       createUserSchema.parse({ body: { ...baseCreate, email: 'not-an-email' } }),
     ).toThrow();
   });
 
-  it('rejects an unknown role or a non-boolean status', () => {
+  it('rejects every role input and a non-boolean status', () => {
+    expect(() =>
+      createUserSchema.parse({ body: { ...baseCreate, globalRole: 'ADMIN' } }),
+    ).toThrow();
     expect(() =>
       createUserSchema.parse({ body: { ...baseCreate, globalRole: 'SUPERADMIN' } }),
     ).toThrow();

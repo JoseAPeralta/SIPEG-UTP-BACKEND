@@ -1,0 +1,53 @@
+meta {
+  name: Log in as FISC head
+  type: http
+  seq: 8
+  tags: [
+    Audit
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  X-Forwarded-For: 203.0.113.232
+}
+
+body:json {
+  {
+    "email": "{{headEmail}}",
+    "password": "{{headPassword}}"
+  }
+}
+
+script:post-response {
+  // El refresh token viaja en Set-Cookie y no en el body: la API no lo expone.
+  const responseHeaders = res.getHeaders();
+  const rawCookie = responseHeaders["set-cookie"] ?? responseHeaders["Set-Cookie"];
+  const firstCookie = Array.isArray(rawCookie) ? rawCookie[0] : rawCookie;
+  const cookieValue = /sipeg-refresh=([^;]+)/.exec(firstCookie ?? "")?.[1];
+
+  if (cookieValue) {
+    bru.setVar("refreshCookie", cookieValue);
+  }
+  const body = res.getBody();
+
+  if (body?.success && body.data?.accessToken) {
+    bru.setVar("token", body.data.accessToken);
+  }
+}
+
+tests {
+  test("the FISC head logs in with a plain USER role", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().data.accessToken).to.be.a("string");
+  });
+}
+
+docs {
+  La bitacora es de solo lectura para ADMIN: un colaborador con permisos de programa no alcanza, porque el endpoint exige el rol global.
+}

@@ -1,7 +1,7 @@
 meta {
   name: Register duplicate identification returns 409
   type: http
-  seq: 21
+  seq: 11
   tags: [
     Auth
   ]
@@ -29,7 +29,7 @@ tests {
   test("duplicate identification returns 409", function () {
     expect(res.getStatus()).to.equal(409);
   });
-
+  
   test("duplicate identification message is explicit", function () {
     expect(res.getBody().message).to.contain("Identification number");
   });

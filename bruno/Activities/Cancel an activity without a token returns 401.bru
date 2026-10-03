@@ -1,0 +1,27 @@
+meta {
+  name: Cancel an activity without a token returns 401
+  type: http
+  seq: 26
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}/cancel
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "reason": "Sin token"
+  }
+}
+
+tests {
+  test("cancelling without a token is rejected", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

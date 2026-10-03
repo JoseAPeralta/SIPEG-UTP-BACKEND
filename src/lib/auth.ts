@@ -3,20 +3,47 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { jwt } from 'better-auth/plugins';
 
 import { getPrismaClient } from '../config/prisma.js';
+import { logger } from '../config/logger.js';
 import { env } from '../config/env.js';
 import { parseTtlToSeconds } from '../utils/ttl.js';
 import { sendPasswordResetEmail, sendVerificationEmail } from '../modules/auth/auth.email.js';
-import { hashPassword, verifyPassword } from './password.js';
+import { captureAuthAuditSubject } from '../modules/auth/auth.audit.js';
+import {
+  hashPassword,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  verifyPassword,
+} from './password.js';
+
+const splitOrigins = (value: string): string[] =>
+  value
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 
 const trustedOrigins = [
-  env.CORS_ORIGIN,
-  ...(env.TRUSTED_ORIGINS?.split(',')
-    .map((o) => o.trim())
-    .filter(Boolean) ?? []),
-];
+  ...splitOrigins(env.CORS_ORIGIN),
+  ...(env.TRUSTED_ORIGINS ? splitOrigins(env.TRUSTED_ORIGINS) : []),
+  new URL(env.AUTH_PASSWORD_RESET_URL).origin,
+].filter((origin, index, origins) => origins.indexOf(origin) === index);
 
 const reportEmailDeliveryFailure = (): void => {
-  console.error('Failed to deliver authentication email.');
+  logger.error({ event: 'mail.delivery.failed', logType: 'application' }, 'mail.delivery.failed');
+};
+
+/**
+ * Los hooks de Better Auth solo identifican al sujeto; no escriben auditoria.
+ *
+ * Anotan el `userId` en el marcador de la llamada en curso y el servicio lo
+ * consume despues, cuando la llamada del proveedor ya termino bien. La razon es
+ * que `onPasswordReset` corre DESPUES de cambiar la contrasena pero ANTES de
+ * revocar las sesiones: auditar ahi convertiria un fallo de la bitacora en
+ * sesiones sin revocar. El hook no escribe en base de datos y no captura errores,
+ * asi que nunca puede romper la autenticacion; si corre fuera de una llamada que
+ * capture, no hace nada.
+ */
+const captureAuditSubject = (user: { id: string }): void => {
+  captureAuthAuditSubject(user.id);
 };
 
 export const auth = betterAuth({
@@ -24,6 +51,14 @@ export const auth = betterAuth({
   secret: env.AUTH_SECRET,
   baseURL: env.AUTH_URL,
   trustedOrigins,
+  // El logger propio de Better Auth escribe texto plano por stdout, fuera de pino:
+  // esas lineas no son JSON, asi que Alloy no les pone `service` ni `logType` y
+  // caen en un stream aparte que no se puede filtrar en Grafana. Ademas su
+  // "User not found" en un login fallido duplica un evento que la aplicacion ya
+  // emite con mas contexto y con el sujeto pseudonimo (`auth.login.failed`,
+  // logType `security`). El error real de autenticacion sigue registrandolo
+  // `errorHandler` como `http.error.unexpected`.
+  logger: { disabled: true },
   database: prismaAdapter(getPrismaClient(), { provider: 'postgresql' }),
   advanced: {
     database: { joins: true },
@@ -44,11 +79,14 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
-    minPasswordLength: 12,
-    maxPasswordLength: 128,
+    minPasswordLength: PASSWORD_MIN_LENGTH,
+    maxPasswordLength: PASSWORD_MAX_LENGTH,
     autoSignIn: false,
     resetPasswordTokenExpiresIn: parseTtlToSeconds(env.AUTH_PASSWORD_RESET_TTL),
     revokeSessionsOnPasswordReset: true,
+    onPasswordReset: async ({ user }) => {
+      captureAuditSubject(user);
+    },
     sendResetPassword: async ({ user, token }) => {
       void sendPasswordResetEmail(user.email, token).catch(reportEmailDeliveryFailure);
     },
@@ -61,6 +99,9 @@ export const auth = betterAuth({
     sendOnSignUp: true,
     autoSignInAfterVerification: false,
     expiresIn: parseTtlToSeconds(env.AUTH_EMAIL_VERIFICATION_TTL),
+    afterEmailVerification: async (user) => {
+      captureAuditSubject(user);
+    },
     sendVerificationEmail: async ({ user, token }) => {
       void sendVerificationEmail(user.email, token).catch(reportEmailDeliveryFailure);
     },
@@ -74,7 +115,7 @@ export const auth = betterAuth({
         required: true,
         input: true,
       },
-      globalRole: { type: 'string', required: false, input: false },
+      globalRole: { type: 'string', required: false, input: false, defaultValue: 'USER' },
       isActive: { type: 'boolean', required: false, input: false },
       unitId: { type: 'string', required: false, input: true },
       careerId: { type: 'string', required: false, input: true },

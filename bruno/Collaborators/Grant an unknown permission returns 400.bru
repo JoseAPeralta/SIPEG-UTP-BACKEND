@@ -1,0 +1,32 @@
+meta {
+  name: Grant an unknown permission returns 400
+  type: http
+  seq: 36
+  tags: [
+    Collaborators
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{collaboratorsProgramId}}/permissions
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "userId": "{{collaboratorUserId}}",
+    "permission": "nope:nope"
+  }
+}
+
+tests {
+  test("An unknown permission is rejected before the service", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

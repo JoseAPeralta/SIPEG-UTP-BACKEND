@@ -1,0 +1,40 @@
+meta {
+  name: List program activities as admin
+  type: http
+  seq: 18
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/event-programs/{{eventProgramId}}/activities?page=1&limit=50&status=SCHEDULED
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  page: 1
+  limit: 50
+  status: SCHEDULED
+}
+
+docs {
+  The status filter is honored only for ADMIN or a collaborator with activity:read on the program scope.
+}
+
+tests {
+  test("admin status filter returns only SCHEDULED activities", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.total).to.be.above(0);
+    body.data.items.forEach(function (activity) {
+      expect(activity.status).to.equal("SCHEDULED");
+    });
+  });
+}

@@ -10,6 +10,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+ENV UV_THREADPOOL_SIZE=4
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 FROM base AS deps

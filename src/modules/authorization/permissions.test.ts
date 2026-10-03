@@ -28,6 +28,22 @@ describe('permission catalog', () => {
     }
   });
 
+  it('keeps program:reactivate out of every role default', () => {
+    expect(PERMISSIONS.PROGRAM_REACTIVATE).toBe('program:reactivate');
+
+    for (const defaults of Object.values(ROLE_DEFAULTS)) {
+      expect(defaults).not.toContain(PERMISSIONS.PROGRAM_REACTIVATE);
+    }
+  });
+
+  it('grants activity:delete only to organizers', () => {
+    expect(PERMISSIONS.ACTIVITY_DELETE).toBe('activity:delete');
+    expect(PERMISSION_DESCRIPTIONS[PERMISSIONS.ACTIVITY_DELETE]).toBeTruthy();
+    expect(ROLE_DEFAULTS.ORGANIZER).toContain(PERMISSIONS.ACTIVITY_DELETE);
+    expect(ROLE_DEFAULTS.EDITOR).not.toContain(PERMISSIONS.ACTIVITY_DELETE);
+    expect(ROLE_DEFAULTS.VIEWER).not.toContain(PERMISSIONS.ACTIVITY_DELETE);
+  });
+
   it('escalates role defaults monotonically', () => {
     const viewer = new Set(ROLE_DEFAULTS.VIEWER);
     const editor = new Set(ROLE_DEFAULTS.EDITOR);

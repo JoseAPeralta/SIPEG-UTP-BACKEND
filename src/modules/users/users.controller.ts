@@ -1,5 +1,6 @@
 import { requireAuthenticatedUser } from '../../middlewares/authenticate.middleware.js';
 import { asyncHandler } from '../../utils/asyncHandler.js';
+import { toAuditContext } from '../../utils/audit-context.js';
 import { successResponse } from '../../utils/response.js';
 import type {
   CreateUserSchemaBody,
@@ -18,7 +19,7 @@ import {
 
 export const createUser = asyncHandler(async (req, res) => {
   const body = req.body as CreateUserSchemaBody;
-  const user = await createUserService(body);
+  const user = await createUserService(body, toAuditContext(req));
 
   res.status(201).json(successResponse('User created successfully.', user));
 });
@@ -32,7 +33,11 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
 
 export const updateCurrentUser = asyncHandler(async (req, res) => {
   const user = requireAuthenticatedUser(req);
-  const profile = await updateProfile(user.id, req.body as UpdateProfileSchemaBody);
+  const profile = await updateProfile(
+    user.id,
+    req.body as UpdateProfileSchemaBody,
+    toAuditContext(req),
+  );
 
   res.status(200).json(successResponse('Profile updated successfully.', profile));
 });
@@ -54,7 +59,12 @@ export const getUser = asyncHandler(async (req, res) => {
 export const updateUser = asyncHandler(async (req, res) => {
   const actor = requireAuthenticatedUser(req);
   const { id } = req.params as { id: string };
-  const user = await updateAdminUserService(actor.id, id, req.body as UpdateAdminUserBody);
+  const user = await updateAdminUserService(
+    actor.id,
+    id,
+    req.body as UpdateAdminUserBody,
+    toAuditContext(req),
+  );
 
   res.status(200).json(successResponse('User updated successfully.', user));
 });

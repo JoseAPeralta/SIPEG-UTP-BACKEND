@@ -1,0 +1,39 @@
+meta {
+  name: List audit events filtered by action
+  type: http
+  seq: 3
+  tags: [
+    Audit
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/audit-events?action=user.role_changed&limit=5
+  body: none
+  auth: bearer
+}
+
+params:query {
+  action: user.role_changed
+  limit: 5
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the action filter narrows the log to that action", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.be.an("array");
+    for (const item of body.data.items) {
+      expect(item.action).to.equal("user.role_changed");
+    }
+  });
+}
+
+docs {
+  Los filtros se combinan libremente. El action se valida contra el catalogo de audit.types.ts, por lo que una accion desconocida responde 400 y no una lista vacia.
+}

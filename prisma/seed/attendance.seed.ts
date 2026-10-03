@@ -71,6 +71,52 @@ export const ATTENDANCE_GROUPS: readonly AttendanceGroupCatalogEntry[] = [
     checkedInCount: 3,
     method: 'QR',
   },
+  {
+    activityKey: 'fic-competicion-puentes',
+    attendeeKeys: [
+      'student-13',
+      'student-14',
+      'student-15',
+      'student-16',
+      'student-17',
+      'student-18',
+      'student-01',
+      'student-06',
+    ],
+    checkedInCount: 6,
+    method: 'QR',
+  },
+  {
+    activityKey: 'fcyt-conferencia-biotecnologia',
+    attendeeKeys: ['student-14', 'student-15', 'student-02', 'student-10'],
+    checkedInCount: 0,
+    method: 'MANUAL',
+  },
+  {
+    activityKey: 'cit-panel-blockchain',
+    attendeeKeys: ['student-01', 'student-03', 'student-13', 'student-18'],
+    checkedInCount: 0,
+    method: 'QR',
+  },
+  {
+    activityKey: 'congreso-cit-curso-machine-learning',
+    attendeeKeys: [
+      'student-02',
+      'student-04',
+      'student-11',
+      'student-13',
+      'student-16',
+      'student-18',
+    ],
+    checkedInCount: 0,
+    method: 'MANUAL',
+  },
+  {
+    activityKey: 'feria-cientifica-curso-metodologia',
+    attendeeKeys: ['student-14', 'student-15', 'student-17', 'student-05', 'student-09'],
+    checkedInCount: 0,
+    method: 'MANUAL',
+  },
 ];
 
 export interface AttendanceSummary {

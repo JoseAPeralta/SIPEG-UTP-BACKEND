@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { sendPasswordResetEmail, sendVerificationEmail } = vi.hoisted(() => ({
+const { sendPasswordResetEmail, sendVerificationEmail, loggerError } = vi.hoisted(() => ({
   sendPasswordResetEmail: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   sendVerificationEmail: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+  loggerError: vi.fn(),
 }));
 
 vi.mock('../modules/auth/auth.email.js', () => ({
   sendPasswordResetEmail,
   sendVerificationEmail,
+}));
+
+vi.mock('../config/logger.js', () => ({
+  logger: { error: loggerError },
 }));
 
 describe('auth instance', () => {
@@ -19,6 +24,7 @@ describe('auth instance', () => {
     delete process.env['AUTH_PASSWORD_RESET_URL'];
     sendPasswordResetEmail.mockReset().mockResolvedValue(undefined);
     sendVerificationEmail.mockReset().mockResolvedValue(undefined);
+    loggerError.mockReset();
     vi.doUnmock('../config/prisma.js');
   });
 
@@ -58,6 +64,28 @@ describe('auth instance', () => {
       expiresIn: 86_400,
       sendVerificationEmail: expect.any(Function),
     });
+    expect(auth.options.user?.additionalFields?.['globalRole']).toMatchObject({
+      input: false,
+      defaultValue: 'USER',
+    });
+  });
+
+  it('silences the internal logger of the provider', async () => {
+    process.env['NODE_ENV'] = 'test';
+    process.env['AUTH_SECRET'] = 'a'.repeat(32);
+    process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
+    process.env['AUTH_URL'] = 'http://localhost:3000';
+    process.env['AUTH_EMAIL_VERIFICATION_URL'] = 'http://localhost:5173/verify-email';
+    process.env['AUTH_PASSWORD_RESET_URL'] = 'http://localhost:5173/reset-password';
+    vi.resetModules();
+
+    vi.doMock('../config/prisma.js', () => ({
+      getPrismaClient: () => ({}),
+    }));
+
+    const { auth } = await import('./auth.js');
+
+    expect(auth.options.logger).toMatchObject({ disabled: true });
   });
 
   it('dispatches auth emails without awaiting delivery and logs no sensitive details', async () => {
@@ -69,7 +97,6 @@ describe('auth instance', () => {
     vi.doMock('../config/prisma.js', () => ({
       getPrismaClient: () => ({}),
     }));
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     let rejectDelivery: ((reason: Error) => void) | undefined;
     const rejectedDelivery = new Promise<void>((_resolve, reject) => {
       rejectDelivery = reject;
@@ -99,9 +126,11 @@ describe('auth instance', () => {
     expect(sendPasswordResetEmail).toHaveBeenCalledWith('user@utp.ac.pa', 'reset-secret');
     rejectDelivery?.(new Error('SMTP secret detail'));
     await vi.waitFor(() => {
-      expect(consoleError).toHaveBeenCalledWith('Failed to deliver authentication email.');
+      expect(loggerError).toHaveBeenCalledWith(
+        { event: 'mail.delivery.failed', logType: 'application' },
+        'mail.delivery.failed',
+      );
     });
-    expect(JSON.stringify(consoleError.mock.calls)).not.toContain('secret');
-    consoleError.mockRestore();
+    expect(JSON.stringify(loggerError.mock.calls)).not.toContain('secret');
   });
 });

@@ -1,0 +1,62 @@
+meta {
+  name: List activity collaborators
+  type: http
+  seq: 4
+  tags: [
+    Collaborators
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities/{{collaboratorsActivityId}}/collaborators
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("ADMIN lists only the activity-local collaborators", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.be.an("array");
+    const editor = body.data.items.find(function (item) {
+      return item.userId === "seed_user_editor";
+    });
+
+    expect(editor).to.not.equal(undefined);
+    expect(editor.role).to.equal("EDITOR");
+  });
+
+  test("the editor shows local and inherited provenance", function () {
+    const body = res.getBody();
+    const editor = body.data.items.find(function (item) {
+      return item.userId === "seed_user_editor";
+    });
+    const generate = editor.permissions.find(function (permission) {
+      return permission.name === "certificate:generate";
+    });
+    const checkin = editor.permissions.find(function (permission) {
+      return permission.name === "attendance:checkin";
+    });
+
+    expect(generate).to.not.equal(undefined);
+    expect(generate.origin).to.equal("INHERITED");
+    expect(generate.source).to.equal("OVERRIDE");
+    expect(generate.effective).to.equal(true);
+    expect(checkin).to.not.equal(undefined);
+    expect(checkin.origin).to.equal("BOTH");
+    expect(checkin.effective).to.equal(true);
+    expect(
+      editor.permissions.every(function (permission) {
+        return permission.effective === true;
+      })
+    ).to.equal(true);
+    const serialized = JSON.stringify(body);
+    expect(serialized).to.not.include("grantedById");
+    expect(serialized).to.not.include("grantedAt");
+  });
+}

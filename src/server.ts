@@ -1,48 +1,94 @@
-import { createServer } from 'node:http';
+import { createServer, type Server } from 'node:http';
+import { pathToFileURL } from 'node:url';
 
 import { app } from './app.js';
 import { ensureJwks } from './lib/auth.js';
 import { env } from './config/env.js';
 import { disconnectPrisma } from './config/prisma.js';
+import { logger } from './config/logger.js';
 
-const server = createServer(app);
+const exitWithFlush = (code: number): void => {
+  logger.flush(() => process.exit(code));
+};
 
-server.on('error', (error) => {
-  console.error('HTTP server error:', error);
-  process.exit(1);
-});
+export const createApiServer = (): Server => createServer(app);
 
-server.listen(env.PORT, async () => {
-  console.log(`SIPEG UTP API listening on port ${env.PORT}`);
-  try {
-    await ensureJwks();
-    console.log('JWKS ready.');
-  } catch (error) {
-    console.error('Failed to initialize JWKS:', error);
-  }
-});
+export const startServer = async (server: Server, port: number = env.PORT): Promise<void> => {
+  logger.info({ event: 'app.starting', logType: 'infrastructure' }, 'app.starting');
 
-const shutdown = (signal: NodeJS.Signals): void => {
-  console.log(`${signal} received. Shutting down gracefully.`);
+  server.on('error', (error) => {
+    logger.error({ event: 'app.fatal', logType: 'infrastructure', err: error }, 'app.fatal');
+    exitWithFlush(1);
+  });
+
+  server.listen(port, async () => {
+    logger.info({ event: 'app.listening', logType: 'infrastructure', port }, 'app.listening');
+    try {
+      await ensureJwks();
+      logger.info({ event: 'app.jwks.ready', logType: 'infrastructure' }, 'app.jwks.ready');
+    } catch (error) {
+      logger.error(
+        { event: 'app.jwks.failed', logType: 'infrastructure', err: error },
+        'app.jwks.failed',
+      );
+    }
+  });
+};
+
+export const shutdown = (server: Server, signal: NodeJS.Signals): void => {
+  logger.info(
+    { event: 'app.shutdown.signal', logType: 'infrastructure', signal },
+    'app.shutdown.signal',
+  );
 
   server.closeIdleConnections();
-
   server.close(async (error) => {
     await disconnectPrisma();
-
     if (error) {
-      console.error(error);
-      process.exit(1);
+      logger.error(
+        { event: 'app.shutdown.error', logType: 'infrastructure', err: error },
+        'app.shutdown.error',
+      );
+      exitWithFlush(1);
     }
-
-    process.exit(0);
+    logger.info(
+      { event: 'app.shutdown.completed', logType: 'infrastructure' },
+      'app.shutdown.completed',
+    );
+    exitWithFlush(0);
   });
 
   setTimeout(() => {
-    console.error('Forced shutdown after timeout.');
-    process.exit(1);
+    logger.error(
+      { event: 'app.shutdown.forced', logType: 'infrastructure' },
+      'app.shutdown.forced',
+    );
+    exitWithFlush(1);
   }, 10_000).unref();
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+export const registerShutdownHandlers = (server: Server): void => {
+  process.on('SIGINT', () => shutdown(server, 'SIGINT'));
+  process.on('SIGTERM', () => shutdown(server, 'SIGTERM'));
+};
+
+export const registerFatalHandlers = (): void => {
+  process.on('uncaughtException', (error) => {
+    logger.error({ event: 'app.fatal', logType: 'infrastructure', err: error }, 'app.fatal');
+    exitWithFlush(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    logger.error({ event: 'app.fatal', logType: 'infrastructure', err: reason }, 'app.fatal');
+    exitWithFlush(1);
+  });
+};
+
+const isMain =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isMain) {
+  registerFatalHandlers();
+  const server = createApiServer();
+  registerShutdownHandlers(server);
+  void startServer(server);
+}

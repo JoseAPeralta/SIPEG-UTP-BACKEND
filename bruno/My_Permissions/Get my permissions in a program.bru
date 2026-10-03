@@ -1,0 +1,48 @@
+meta {
+  name: Get my permissions in a program
+  type: http
+  seq: 2
+  tags: [
+    My_Permissions
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/permissions?scope=program&id={{collaboratorsProgramId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the head reads its bounded permission:grant envelope", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.scope).to.eql({ type: "program", id: "seed_program_congreso-cit" });
+    const grant = body.data.permissions.find((entry) => entry.name === "permission:grant");
+    expect(grant).to.be.an("object");
+    expect(grant.origin).to.equal("LOCAL");
+    expect(grant.validFrom).to.be.a("string");
+    expect(grant.validUntil).to.be.a("string");
+  });
+
+  test("every program permission is local", function () {
+    const body = res.getBody();
+    expect(body.data.permissions.length).to.be.at.least(1);
+    expect(
+      body.data.permissions.every(function (entry) {
+        return entry.origin === "LOCAL";
+      })
+    ).to.equal(true);
+  });
+
+  test("the response does not expose delegation audit fields", function () {
+    const serialized = JSON.stringify(res.getBody());
+    expect(serialized).to.not.include("grantedById");
+    expect(serialized).to.not.include("grantedAt");
+  });
+}

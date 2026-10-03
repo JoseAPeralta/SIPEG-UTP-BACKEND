@@ -30,7 +30,6 @@ export interface CreateUserInput {
   firstName: string;
   lastName: string;
   identificationNumber: string;
-  globalRole: GlobalRole;
   isActive: boolean;
   unitId?: string | null | undefined;
   careerId?: string | undefined;

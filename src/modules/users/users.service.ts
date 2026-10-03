@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
 import { getPrismaClient } from '../../config/prisma.js';
+import { logger } from '../../config/logger.js';
 import { auth } from '../../lib/auth.js';
 import { hashPassword } from '../../lib/password.js';
+import { writeAuditEvent } from '../audit/audit.service.js';
+import type { AuditContext, AuditEventInput, AuditScalar } from '../audit/audit.types.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type { GlobalRole } from '../../generated/prisma/enums.js';
 import type { ListUsersQuery } from './users.schemas.js';
@@ -152,9 +155,62 @@ export const getProfile = async (userId: string): Promise<UserProfileResponse> =
   return user;
 };
 
+const buildProfileAuditEvents = (
+  userId: string,
+  current: { firstName: string; lastName: string; unitId: string | null; careerId: string | null },
+  input: UpdateProfileInput,
+  next: { firstName: string; lastName: string; unitId: string | null; careerId: string | null },
+  auditContext: AuditContext,
+): AuditEventInput[] => {
+  const events: AuditEventInput[] = [];
+  const base = {
+    ...auditContext,
+    resourceType: 'user' as const,
+    resourceId: userId,
+    targetUserId: userId,
+  };
+
+  const changedProfileFields: string[] = [];
+
+  for (const key of ['firstName', 'lastName'] as const) {
+    if (input[key] !== undefined && input[key] !== current[key]) {
+      changedProfileFields.push(key);
+    }
+  }
+
+  if (changedProfileFields.length > 0) {
+    events.push({
+      ...base,
+      action: 'user.profile_updated',
+      metadata: { changedFields: changedProfileFields },
+    });
+  }
+
+  const before: Record<string, AuditScalar> = {};
+  const after: Record<string, AuditScalar> = {};
+
+  for (const key of ['unitId', 'careerId'] as const) {
+    if (next[key] !== undefined && next[key] !== current[key]) {
+      before[key] = current[key];
+      after[key] = next[key];
+    }
+  }
+
+  if (Object.keys(after).length > 0) {
+    events.push({
+      ...base,
+      action: 'user.organization_assignment_changed',
+      changes: { before, after },
+    });
+  }
+
+  return events;
+};
+
 export const updateProfile = async (
   userId: string,
   input: UpdateProfileInput,
+  auditContext: AuditContext = {},
 ): Promise<UserProfileResponse> => {
   const prisma = getPrismaClient();
 
@@ -162,6 +218,8 @@ export const updateProfile = async (
     where: { id: userId },
     select: {
       id: true,
+      firstName: true,
+      lastName: true,
       unitId: true,
       careerId: true,
       career: { select: { unitId: true } },
@@ -185,10 +243,31 @@ export const updateProfile = async (
     data.lastName = input.lastName;
   }
 
-  return prisma.user.update({
-    where: { id: userId },
-    data,
-    select: profileSelect,
+  const auditEvents = buildProfileAuditEvents(
+    userId,
+    currentUser,
+    input,
+    {
+      firstName: input.firstName ?? currentUser.firstName,
+      lastName: input.lastName ?? currentUser.lastName,
+      unitId: organization.unitId !== undefined ? organization.unitId : currentUser.unitId,
+      careerId: organization.careerId !== undefined ? organization.careerId : currentUser.careerId,
+    },
+    auditContext,
+  );
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id: userId },
+      data,
+      select: profileSelect,
+    });
+
+    for (const event of auditEvents) {
+      await writeAuditEvent(tx, event);
+    }
+
+    return updated;
   });
 };
 
@@ -196,11 +275,14 @@ const sendAccountVerificationEmail = async (email: string): Promise<void> => {
   try {
     await auth.api.sendVerificationEmail({ body: { email } });
   } catch {
-    console.error('Failed to send account verification email.');
+    logger.error({ event: 'mail.delivery.failed', logType: 'application' }, 'mail.delivery.failed');
   }
 };
 
-export const createUser = async (input: CreateUserInput): Promise<AdminUserResponse> => {
+export const createUser = async (
+  input: CreateUserInput,
+  auditContext: AuditContext,
+): Promise<AdminUserResponse> => {
   const prisma = getPrismaClient();
   const email = input.email.trim().toLowerCase();
 
@@ -236,7 +318,7 @@ export const createUser = async (input: CreateUserInput): Promise<AdminUserRespo
           identificationNumber: input.identificationNumber,
           email,
           emailVerified: false,
-          globalRole: input.globalRole,
+          globalRole: 'USER',
           isActive: input.isActive,
           unitId: organization.unitId ?? null,
           careerId: organization.careerId ?? null,
@@ -251,6 +333,22 @@ export const createUser = async (input: CreateUserInput): Promise<AdminUserRespo
           providerId: 'credential',
           userId: user.id,
           password: passwordHash,
+        },
+      });
+
+      await writeAuditEvent(tx, {
+        ...auditContext,
+        action: 'user.admin_created',
+        resourceType: 'user',
+        resourceId: user.id,
+        targetUserId: user.id,
+        changes: {
+          after: {
+            globalRole: user.globalRole,
+            isActive: user.isActive,
+            unitId: user.unit?.id ?? null,
+            careerId: user.career?.id ?? null,
+          },
         },
       });
 
@@ -335,10 +433,92 @@ export const getUserById = async (userId: string): Promise<AdminUserResponse> =>
   return user;
 };
 
+interface AdminUserCurrentState {
+  globalRole: GlobalRole;
+  isActive: boolean;
+  unitId: string | null;
+  careerId: string | null;
+}
+
+const buildOrganizationAssignmentAuditEvent = (
+  current: AdminUserCurrentState,
+  input: UpdateAdminUserInput,
+  base: Pick<AuditEventInput, 'actorId' | 'resourceType' | 'resourceId' | 'targetUserId'>,
+): AuditEventInput | null => {
+  const before: Record<string, AuditScalar> = {};
+  const after: Record<string, AuditScalar> = {};
+
+  for (const key of ['unitId', 'careerId'] as const) {
+    if (input[key] !== undefined && input[key] !== current[key]) {
+      before[key] = current[key];
+      after[key] = input[key] ?? null;
+    }
+  }
+
+  if (Object.keys(after).length === 0) {
+    return null;
+  }
+
+  return {
+    ...base,
+    action: 'user.organization_assignment_changed',
+    changes: { before, after },
+  };
+};
+
+const buildAdminUserAuditEvents = (
+  actorUserId: string,
+  targetUserId: string,
+  current: AdminUserCurrentState,
+  input: UpdateAdminUserInput,
+  auditContext: AuditContext,
+): AuditEventInput[] => {
+  const events: AuditEventInput[] = [];
+
+  const base = {
+    actorId: actorUserId,
+    resourceType: 'user' as const,
+    resourceId: targetUserId,
+    targetUserId,
+    requestId: auditContext.requestId,
+  };
+
+  if (input.globalRole !== undefined && input.globalRole !== current.globalRole) {
+    events.push({
+      ...base,
+      action: 'user.role_changed',
+      changes: {
+        before: { globalRole: current.globalRole },
+        after: { globalRole: input.globalRole },
+      },
+    });
+  }
+
+  if (input.isActive !== undefined && input.isActive !== current.isActive) {
+    events.push({
+      ...base,
+      action: input.isActive ? 'user.activated' : 'user.deactivated',
+      changes: {
+        before: { isActive: current.isActive },
+        after: { isActive: input.isActive },
+      },
+    });
+  }
+
+  const organization = buildOrganizationAssignmentAuditEvent(current, input, base);
+
+  if (organization) {
+    events.push(organization);
+  }
+
+  return events;
+};
+
 export const updateAdminUser = async (
   actorUserId: string,
   targetUserId: string,
   input: UpdateAdminUserInput,
+  auditContext: AuditContext = {},
 ): Promise<AdminUserResponse> => {
   const prisma = getPrismaClient();
 
@@ -348,6 +528,7 @@ export const updateAdminUser = async (
       globalRole: true,
       isActive: true,
       unitId: true,
+      careerId: true,
       career: { select: { unitId: true } },
     },
   });
@@ -364,6 +545,11 @@ export const updateAdminUser = async (
     if (input.globalRole !== undefined && input.globalRole !== currentUser.globalRole) {
       throw new ApiError(409, 'You cannot change your own role.');
     }
+  }
+
+  const promotesToAdmin = currentUser.globalRole === 'USER' && input.globalRole === 'ADMIN';
+  if (promotesToAdmin && (!currentUser.isActive || input.isActive === false)) {
+    throw new ApiError(409, 'Only active users can be promoted to administrator.');
   }
 
   const data: AdminUserUpdateData = {};
@@ -402,6 +588,16 @@ export const updateAdminUser = async (
 
     if (data.isActive === false) {
       await tx.session.deleteMany({ where: { userId: targetUserId } });
+    }
+
+    for (const event of buildAdminUserAuditEvents(
+      actorUserId,
+      targetUserId,
+      currentUser,
+      input,
+      auditContext,
+    )) {
+      await writeAuditEvent(tx, event);
     }
 
     return updated;

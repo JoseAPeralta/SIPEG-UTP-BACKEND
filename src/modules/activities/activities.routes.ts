@@ -1,15 +1,51 @@
 import { Router } from 'express';
 
 import { authenticate } from '../../middlewares/authenticate.middleware.js';
-import { requirePermission } from '../../middlewares/authorize.middleware.js';
+import { requirePermission, type ScopeResolver } from '../../middlewares/authorize.middleware.js';
+import { optionalAuthenticate } from '../../middlewares/optionalAuthenticate.middleware.js';
 import { validate } from '../../middlewares/validate.middleware.js';
 import { PERMISSIONS } from '../authorization/permissions.js';
-import { createActivity, getActivities } from './activities.controller.js';
-import { createActivitySchema, listActivitiesQuerySchema } from './activities.schemas.js';
+import {
+  cancelActivity,
+  createActivity,
+  deleteActivity,
+  getActivities,
+  getActivity,
+  getEventProgramActivities,
+  updateActivity,
+} from './activities.controller.js';
+import {
+  activityParamsSchema,
+  cancelActivitySchema,
+  createActivitySchema,
+  listActivitiesQuerySchema,
+  listEventProgramActivitiesSchema,
+  updateActivitySchema,
+} from './activities.schemas.js';
 
 export const activitiesRoutes = Router();
 
+const activityScope: ScopeResolver = (req) => {
+  const id = (req.params as { id?: string }).id;
+
+  return typeof id === 'string' && id.length > 0 ? { activityId: id } : undefined;
+};
+
 activitiesRoutes.get('/activities', validate(listActivitiesQuerySchema), getActivities);
+
+activitiesRoutes.get(
+  '/activities/:id',
+  optionalAuthenticate,
+  validate(activityParamsSchema),
+  getActivity,
+);
+
+activitiesRoutes.get(
+  '/event-programs/:id/activities',
+  optionalAuthenticate,
+  validate(listEventProgramActivitiesSchema),
+  getEventProgramActivities,
+);
 activitiesRoutes.post(
   '/activities',
   authenticate,
@@ -22,4 +58,27 @@ activitiesRoutes.post(
   }),
   validate(createActivitySchema),
   createActivity,
+);
+activitiesRoutes.patch(
+  '/activities/:id',
+  authenticate,
+  requirePermission(PERMISSIONS.ACTIVITY_UPDATE, activityScope),
+  validate(updateActivitySchema),
+  updateActivity,
+);
+
+activitiesRoutes.post(
+  '/activities/:id/cancel',
+  authenticate,
+  requirePermission(PERMISSIONS.ACTIVITY_CANCEL, activityScope),
+  validate(cancelActivitySchema),
+  cancelActivity,
+);
+
+activitiesRoutes.delete(
+  '/activities/:id',
+  authenticate,
+  requirePermission(PERMISSIONS.ACTIVITY_DELETE, activityScope),
+  validate(activityParamsSchema),
+  deleteActivity,
 );

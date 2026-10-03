@@ -1,0 +1,32 @@
+meta {
+  name: List audit events with an action outside the catalog returns 400
+  type: http
+  seq: 5
+  tags: [
+    Audit
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/audit-events?action=user.unknown
+  body: none
+  auth: bearer
+}
+
+params:query {
+  action: user.unknown
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("an action outside the audit catalog is rejected", function () {
+    expect(res.getStatus()).to.equal(400);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Validation error.");
+    expect(body.errors[0].field).to.equal("query.action");
+  });
+}

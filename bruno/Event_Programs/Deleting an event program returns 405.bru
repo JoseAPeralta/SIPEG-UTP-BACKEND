@@ -1,0 +1,26 @@
+meta {
+  name: Deleting an event program returns 405
+  type: http
+  seq: 33
+  tags: [
+    Event_Programs
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs/seed_program_foro-ipe
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("physical deletion of an event program is not allowed", function () {
+    expect(res.getStatus()).to.equal(405);
+    expect(res.getBody().success).to.equal(false);
+    expect(res.getBody().message).to.equal("Method not allowed.");
+  });
+}

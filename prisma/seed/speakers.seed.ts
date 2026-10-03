@@ -31,8 +31,10 @@ export const SPEAKERS: readonly SpeakerCatalogEntry[] = [
   { key: 'speaker-diana', userKey: 'speaker-diana' },
   { key: 'speaker-ivan', userKey: 'speaker-ivan' },
   { key: 'org-fic', userKey: 'org-fic' },
+  { key: 'org-fie', userKey: 'org-fie' },
   { key: 'org-fii', userKey: 'org-fii' },
   { key: 'org-fim', userKey: 'org-fim' },
+  { key: 'org-fcyt', userKey: 'org-fcyt' },
   { key: 'org-sub-acad', userKey: 'org-sub-acad' },
   { key: 'org-sub-admin', userKey: 'org-sub-admin' },
   { key: 'org-sub-vida', userKey: 'org-sub-vida' },
@@ -50,6 +52,26 @@ export const SPEAKERS: readonly SpeakerCatalogEntry[] = [
     lastName: 'Santos',
     email: null,
     organization: 'Colegio de Ingenieros de Panama',
+  },
+  { key: 'speaker-lucia', userKey: 'ponente-lucia', organization: 'Universidad de Panama' },
+  {
+    key: 'speaker-roberto',
+    userKey: 'ponente-roberto',
+    organization: 'Autoridad del Canal de Panama',
+  },
+  {
+    key: 'speaker-externo-sofia',
+    firstName: 'Sofia',
+    lastName: 'Chen',
+    email: 'sofia.chen@ponentes.utp.ac.pa',
+    organization: 'Instituto de Investigacion Cientifica',
+  },
+  {
+    key: 'speaker-externo-jorge',
+    firstName: 'Jorge',
+    lastName: 'Navarro',
+    email: null,
+    organization: null,
   },
 ];
 

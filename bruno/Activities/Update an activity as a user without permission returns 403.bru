@@ -1,0 +1,31 @@
+meta {
+  name: Update an activity as a user without permission returns 403
+  type: http
+  seq: 16
+  tags: [
+    Activities
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/activities/{{draftActivityId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{userToken}}
+}
+
+body:json {
+  {
+    "name": "Intento sin permiso"
+  }
+}
+
+tests {
+  test("a user without activity:update is rejected", function () {
+    expect(res.getStatus()).to.equal(403);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

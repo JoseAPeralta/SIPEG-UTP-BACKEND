@@ -1,0 +1,26 @@
+meta {
+  name: Archive a default program with an active unit returns 409
+  type: http
+  seq: 17
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{defaultProgramId}}/archive
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("default programs cannot be archived while their unit is active", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("A default event program cannot be archived while its organizational unit is active.");
+  });
+}

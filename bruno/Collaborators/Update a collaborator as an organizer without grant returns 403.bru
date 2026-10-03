@@ -1,0 +1,33 @@
+meta {
+  name: Update a collaborator as an organizer without grant returns 403
+  type: http
+  seq: 23
+  tags: [
+    Collaborators
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/event-programs/seed_program_fisc_default/collaborators/{{collaboratorUserId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "role": "VIEWER"
+  }
+}
+
+tests {
+  test("ORGANIZER without permission:grant cannot change collaborator roles", function () {
+    expect(res.getStatus()).to.equal(403);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Insufficient privileges for this resource.");
+  });
+}

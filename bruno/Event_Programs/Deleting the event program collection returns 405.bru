@@ -1,0 +1,21 @@
+meta {
+  name: Deleting the event program collection returns 405
+  type: http
+  seq: 34
+  tags: [
+    Event_Programs
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/event-programs
+  body: none
+  auth: none
+}
+
+tests {
+  test("physical deletion of the program collection is not allowed", function () {
+    expect(res.getStatus()).to.equal(405);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

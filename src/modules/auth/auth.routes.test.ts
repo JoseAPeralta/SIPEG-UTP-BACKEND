@@ -140,6 +140,9 @@ const loadApp = async (
       findMany: vi.fn().mockImplementation(() => Promise.resolve(jwksRows)),
       count: vi.fn().mockImplementation(() => Promise.resolve(jwksRows.length)),
     },
+    auditEvent: {
+      create: vi.fn().mockImplementation(() => Promise.resolve({ id: 'audit-001' })),
+    },
     $transaction: vi.fn(),
   };
   prismaMock.$transaction.mockImplementation(
@@ -203,14 +206,22 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: 'a@b.com', password: 'strongpass1234' })
+      .expect('Cache-Control', 'no-store')
       .expect(200);
 
     const accessToken = response.body.data.accessToken as string;
     expect(response.body.success).toBe(true);
-    expect(response.body.data.refreshToken).toBe('refresh-token');
     expect(response.body.data.tokenType).toBe('Bearer');
     expect(decodeProtectedHeader(accessToken).alg).toBe('EdDSA');
     expect(JSON.stringify(response.body)).not.toContain('$argon2');
+
+    // El refresh token viaja en una cookie HttpOnly y NO en el body: asi
+    // JavaScript no puede leer la credencial de larga duracion.
+    expect(response.body.data.refreshToken).toBeUndefined();
+    const setCookie = String(response.headers['set-cookie']);
+    expect(setCookie).toContain('sipeg-refresh=refresh-token');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('Path=/api/v1/auth');
   });
 
   it('POST /login returns 400 on invalid body', async () => {
@@ -218,6 +229,7 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: 'not-an-email' })
+      .expect('Cache-Control', 'no-store')
       .expect(400);
     expect(response.body.success).toBe(false);
   });
@@ -302,11 +314,50 @@ describe('auth routes', () => {
     expect(response.body.message).toBe('Too many login attempts. Try again in one minute.');
   });
 
+  it('POST /login does not block distinct emails behind the same NAT ip', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.signInEmail.mockRejectedValue(
+      new APIError(401, { message: 'Invalid email or password' }),
+    );
+    const app = await loadApp(authMock);
+
+    for (let index = 1; index <= 6; index += 1) {
+      await request(app)
+        .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', '198.51.100.10')
+        .send({ email: `student-${index}@b.com`, password: 'strongpass1234' })
+        .expect(401);
+    }
+  });
+
+  it('POST /login keeps the email+IP bucket independent per origin', async () => {
+    const { APIError } = await import('better-auth/api');
+    authMock.api.signInEmail.mockRejectedValue(
+      new APIError(401, { message: 'Invalid email or password' }),
+    );
+    const app = await loadApp(authMock);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app)
+        .post('/api/v1/auth/login')
+        .set('X-Forwarded-For', '198.51.100.20')
+        .send({ email: 'shared@b.com', password: 'strongpass1234' })
+        .expect(401);
+    }
+
+    await request(app)
+      .post('/api/v1/auth/login')
+      .set('X-Forwarded-For', '198.51.100.21')
+      .send({ email: 'shared@b.com', password: 'strongpass1234' })
+      .expect(401);
+  });
+
   it('POST /refresh returns 401 when session not found', async () => {
     const app = await loadApp(authMock);
     const response = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: 'invalid' })
+      .set('Cookie', 'sipeg-refresh=invalid')
+      .expect('Cache-Control', 'no-store')
       .expect(401);
     expect(response.body.success).toBe(false);
   });
@@ -315,7 +366,8 @@ describe('auth routes', () => {
     const app = await loadApp(authMock);
     const response = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: 'valid-token' })
+      .set('Cookie', 'sipeg-refresh=valid-token')
+      .expect('Cache-Control', 'no-store')
       .expect(200);
 
     const accessToken = response.body.data.accessToken as string;
@@ -345,7 +397,7 @@ describe('auth routes', () => {
 
     const response = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: 'expired-token' })
+      .set('Cookie', 'sipeg-refresh=expired-token')
       .expect(401);
     expect(response.body.message).toBe('Refresh token has expired.');
   });
@@ -375,18 +427,70 @@ describe('auth routes', () => {
 
     const first = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: 'old-token' })
+      .set('Cookie', 'sipeg-refresh=old-token')
       .expect(200);
-    const rotated = first.body.data.refreshToken as string;
+    // El token rotado llega en la Set-Cookie, no en el body: es lo que hara el
+    // navegador, y lo que le permite a la otra pestana reutilizar la sesion.
+    const rotated = /sipeg-refresh=([^;]+)/.exec(String(first.headers['set-cookie']))?.[1];
+    expect(rotated).toBeDefined();
     expect(rotated).not.toBe('old-token');
+    expect(first.body.data.refreshToken).toBeUndefined();
 
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: 'old-token' }).expect(401);
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: rotated }).expect(200);
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', 'sipeg-refresh=old-token')
+      .expect(401);
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', `sipeg-refresh=${rotated as string}`)
+      .expect(200);
   });
 
   it('POST /logout returns 200 even when session missing', async () => {
+    const app = await loadApp(authMock, defaultFindUnique, {
+      deleteMany: () => Promise.resolve({ count: 0 }),
+    });
+    const response = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', 'sipeg-refresh=r')
+      .expect('Cache-Control', 'no-store')
+      .expect(200);
+    expect(String(response.headers['set-cookie'])).toContain('sipeg-refresh=;');
+  });
+
+  it('POST /logout is idempotent without a cookie or body and clears the cookie', async () => {
+    const deleteMany = vi.fn().mockResolvedValue({ count: 0 });
+    const app = await loadApp(authMock, defaultFindUnique, { deleteMany });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await request(app)
+        .post('/api/v1/auth/logout')
+        .expect(200)
+        .expect('Cache-Control', 'no-store');
+      expect(response.body).toEqual({ success: true, message: 'Logout successful.', data: {} });
+      expect(String(response.headers['set-cookie'])).toContain('sipeg-refresh=;');
+      expect(String(response.headers['set-cookie'])).toContain('Path=/api/v1/auth');
+      expect(String(response.headers['set-cookie'])).toContain('Expires=Thu, 01 Jan 1970');
+    }
+    expect(deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('POST /logout reports revocation failures and preserves the cookie for retry', async () => {
+    const app = await loadApp(authMock, defaultFindUnique, {
+      deleteMany: () => Promise.reject(new Error('Database unavailable: private detail')),
+    });
+    const response = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', 'sipeg-refresh=session-a')
+      .expect(500);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.body.success).toBe(false);
+    expect(JSON.stringify(response.body)).not.toContain('private detail');
+    expect(response.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('POST /refresh still requires a cookie when the body is omitted', async () => {
     const app = await loadApp(authMock);
-    await request(app).post('/api/v1/auth/logout').send({ refreshToken: 'r' }).expect(200);
+    await request(app).post('/api/v1/auth/refresh').expect(401);
   });
 
   it('POST /logout revokes only the supplied refresh token', async () => {
@@ -405,19 +509,28 @@ describe('auth routes', () => {
       },
     });
 
-    await request(app).post('/api/v1/auth/logout').send({ refreshToken: 'session-a' }).expect(200);
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: 'session-a' }).expect(401);
-    await request(app).post('/api/v1/auth/refresh').send({ refreshToken: 'session-b' }).expect(200);
+    await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', 'sipeg-refresh=session-a')
+      .expect(200);
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', 'sipeg-refresh=session-a')
+      .expect(401);
+    await request(app)
+      .post('/api/v1/auth/refresh')
+      .set('Cookie', 'sipeg-refresh=session-b')
+      .expect(200);
   });
 
   it('POST /change-password returns 401 without a bearer token', async () => {
     const app = await loadApp(authMock);
     const response = await request(app)
       .post('/api/v1/auth/change-password')
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'currentpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(401);
     expect(response.body.success).toBe(false);
@@ -432,10 +545,10 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'wrongpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(400);
 
@@ -455,10 +568,10 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'currentpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(200);
 
@@ -491,10 +604,10 @@ describe('auth routes', () => {
     await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'currentpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(200);
 
@@ -511,10 +624,10 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'currentpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'foreign-session',
       })
       .expect(400);
 
@@ -530,10 +643,10 @@ describe('auth routes', () => {
       await request(app)
         .post('/api/v1/auth/change-password')
         .set('Authorization', `Bearer ${accessToken}`)
+        .set('Cookie', 'sipeg-refresh=session-current')
         .send({
           currentPassword: 'wrongpass123',
           newPassword: 'newstrongpass12',
-          refreshToken: 'session-current',
         })
         .expect(400);
     }
@@ -541,10 +654,10 @@ describe('auth routes', () => {
     const response = await request(app)
       .post('/api/v1/auth/change-password')
       .set('Authorization', `Bearer ${accessToken}`)
+      .set('Cookie', 'sipeg-refresh=session-current')
       .send({
         currentPassword: 'wrongpass123',
         newPassword: 'newstrongpass12',
-        refreshToken: 'session-current',
       })
       .expect(429);
 
@@ -568,6 +681,26 @@ describe('auth routes', () => {
       .expect(201);
     expect(response.body.data).toEqual({ userId: 'u-new' });
     expect(JSON.stringify(response.body)).not.toContain('$argon2');
+  });
+
+  it('POST /register rejects privilege fields before calling Better Auth', async () => {
+    authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
+    const app = await loadApp(authMock);
+
+    const response = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'new@b.com',
+        password: 'strongpass1234',
+        firstName: 'Nuevo',
+        lastName: 'Usuario',
+        identificationNumber: '8-999-9999',
+        globalRole: 'ADMIN',
+      })
+      .expect(400);
+
+    expect(response.body.message).toBe('Validation error.');
+    expect(authMock.api.signUpEmail).not.toHaveBeenCalled();
   });
 
   it('POST /register returns 409 on duplicate email', async () => {
@@ -612,7 +745,7 @@ describe('auth routes', () => {
     authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
     const app = await loadApp(authMock);
     const payload = (index: number) => ({
-      email: `rate-limit-${index}@b.com`,
+      email: 'rate-limit@b.com',
       password: 'strongpass1234',
       firstName: 'Nuevo',
       lastName: 'Usuario',
@@ -624,6 +757,36 @@ describe('auth routes', () => {
     }
 
     const response = await request(app).post('/api/v1/auth/register').send(payload(4)).expect(429);
+    expect(response.body.success).toBe(false);
+  });
+
+  it('POST /register allows distinct emails from the same IP until the 30/min IP limit', async () => {
+    authMock.api.signUpEmail.mockResolvedValue({ user: { id: 'u-new' } });
+    const app = await loadApp(authMock);
+
+    for (let index = 1; index <= 30; index += 1) {
+      await request(app)
+        .post('/api/v1/auth/register')
+        .send({
+          email: `bulk-${index}@b.com`,
+          password: 'strongpass1234',
+          firstName: 'Nuevo',
+          lastName: 'Usuario',
+          identificationNumber: `8-777-${String(index).padStart(4, '0')}`,
+        })
+        .expect(201);
+    }
+
+    const response = await request(app)
+      .post('/api/v1/auth/register')
+      .send({
+        email: 'bulk-31@b.com',
+        password: 'strongpass1234',
+        firstName: 'Nuevo',
+        lastName: 'Usuario',
+        identificationNumber: '8-777-0031',
+      })
+      .expect(429);
     expect(response.body.success).toBe(false);
   });
 
@@ -654,13 +817,13 @@ describe('auth routes', () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await request(app)
         .post('/api/v1/auth/forgot-password')
-        .send({ email: `user-${attempt}@example.com` })
+        .send({ email: 'user@example.com' })
         .expect(200);
     }
 
     const response = await request(app)
       .post('/api/v1/auth/forgot-password')
-      .send({ email: 'user-4@example.com' })
+      .send({ email: 'user@example.com' })
       .expect(429);
     expect(response.body.message).toBe(
       'Too many password reset attempts. Try again in one minute.',
@@ -675,7 +838,7 @@ describe('auth routes', () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       await request(app)
         .post('/api/v1/auth/forgot-password')
-        .send({ email: `user-${attempt}@example.com` })
+        .send({ email: 'user@example.com' })
         .expect(200);
     }
 

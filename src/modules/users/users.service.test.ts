@@ -26,16 +26,22 @@ interface SessionModelMock {
   deleteMany: ReturnType<typeof vi.fn>;
 }
 
+interface AuditEventModelMock {
+  create: ReturnType<typeof vi.fn>;
+}
+
 interface PrismaMock {
   user: UserModelMock;
   organizationalUnit: OrganizationalUnitModelMock;
   career: CareerModelMock;
   account: AccountModelMock;
   session: SessionModelMock;
+  auditEvent: AuditEventModelMock;
   $transaction: ReturnType<typeof vi.fn>;
 }
 
 const sendVerificationEmailMock = vi.fn();
+const loggerErrorMock = vi.fn();
 
 const createPrismaMock = (): PrismaMock => {
   const prisma: PrismaMock = {
@@ -54,6 +60,7 @@ const createPrismaMock = (): PrismaMock => {
     },
     account: { create: vi.fn() },
     session: { deleteMany: vi.fn() },
+    auditEvent: { create: vi.fn() },
     $transaction: vi.fn(),
   };
   prisma.$transaction.mockImplementation(
@@ -69,6 +76,9 @@ const loadService = async (prisma: PrismaMock) => {
   }));
   vi.doMock('../../lib/auth.js', () => ({
     auth: { api: { sendVerificationEmail: sendVerificationEmailMock } },
+  }));
+  vi.doMock('../../config/logger.js', () => ({
+    logger: { error: loggerErrorMock },
   }));
 
   return import('./users.service.js');
@@ -87,6 +97,8 @@ const profileRecord = {
 
 const currentUserRecord = {
   id: 'user-001',
+  firstName: 'Ana',
+  lastName: 'Gomez',
   unitId: 'unit-001',
   careerId: 'car-001',
   career: { unitId: 'unit-001' },
@@ -109,6 +121,7 @@ const updateTargetRecord = {
   globalRole: 'USER',
   isActive: true,
   unitId: 'unit-001',
+  careerId: 'car-001',
   career: { unitId: 'unit-001' },
 };
 
@@ -124,7 +137,9 @@ describe('users service', () => {
   afterEach(() => {
     vi.doUnmock('../../config/prisma.js');
     vi.doUnmock('../../lib/auth.js');
+    vi.doUnmock('../../config/logger.js');
     sendVerificationEmailMock.mockReset();
+    loggerErrorMock.mockReset();
   });
 
   it('returns the profile of an existing user', async () => {
@@ -521,7 +536,6 @@ describe('users service', () => {
     firstName: 'Ana',
     lastName: 'Gomez',
     identificationNumber: '8-888-1234',
-    globalRole: 'USER' as const,
     isActive: true,
   };
 
@@ -531,7 +545,11 @@ describe('users service', () => {
     prisma.user.create.mockResolvedValue(adminUserRecord);
     const { createUser } = await loadService(prisma);
 
-    const created = await createUser(createInput);
+    const created = await createUser(createInput, {
+      actorId: 'user-admin',
+      actorType: 'USER' as const,
+      requestId: 'request-001',
+    });
 
     expect(created).toEqual(adminUserRecord);
     expect(prisma.user.create).toHaveBeenCalledWith({
@@ -561,13 +579,35 @@ describe('users service', () => {
     expect(await verifyPassword(accountArgs.data.password, createInput.password)).toBe(true);
   });
 
+  it('forces USER when an untrusted caller supplies ADMIN', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue(adminUserRecord);
+    const { createUser } = await loadService(prisma);
+
+    await createUser(
+      {
+        ...createInput,
+        globalRole: 'ADMIN',
+      } as Parameters<typeof createUser>[0],
+      { actorId: 'user-admin', actorType: 'USER' as const, requestId: 'request-001' },
+    );
+
+    expect(prisma.user.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ globalRole: 'USER' }) }),
+    );
+  });
+
   it('normalizes the email and sends the verification email', async () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.user.create.mockResolvedValue(adminUserRecord);
     const { createUser } = await loadService(prisma);
 
-    await createUser({ ...createInput, email: '  Ana.Gomez@UTP.AC.PA  ' });
+    await createUser(
+      { ...createInput, email: '  Ana.Gomez@UTP.AC.PA  ' },
+      { actorId: 'user-admin', actorType: 'USER' as const, requestId: 'request-001' },
+    );
 
     expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ email: 'ana.gomez@utp.ac.pa' }) }),
@@ -584,7 +624,13 @@ describe('users service', () => {
     );
     const { createUser } = await loadService(prisma);
 
-    await expect(createUser(createInput)).rejects.toMatchObject({
+    await expect(
+      createUser(createInput, {
+        actorId: 'user-admin',
+        actorType: 'USER' as const,
+        requestId: 'request-001',
+      }),
+    ).rejects.toMatchObject({
       statusCode: 409,
       message: 'Email is already registered.',
     });
@@ -600,7 +646,13 @@ describe('users service', () => {
     );
     const { createUser } = await loadService(prisma);
 
-    await expect(createUser(createInput)).rejects.toMatchObject({
+    await expect(
+      createUser(createInput, {
+        actorId: 'user-admin',
+        actorType: 'USER' as const,
+        requestId: 'request-001',
+      }),
+    ).rejects.toMatchObject({
       statusCode: 409,
       message: 'Identification number is already registered.',
     });
@@ -613,7 +665,12 @@ describe('users service', () => {
     prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-002', isActive: false });
     const { createUser } = await loadService(prisma);
 
-    await expect(createUser({ ...createInput, unitId: 'unit-002' })).rejects.toMatchObject({
+    await expect(
+      createUser(
+        { ...createInput, unitId: 'unit-002' },
+        { actorId: 'user-admin', actorType: 'USER' as const, requestId: 'request-001' },
+      ),
+    ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Organizational unit is not available.',
     });
@@ -626,7 +683,12 @@ describe('users service', () => {
     prisma.career.findUnique.mockResolvedValue(null);
     const { createUser } = await loadService(prisma);
 
-    await expect(createUser({ ...createInput, careerId: 'car-404' })).rejects.toMatchObject({
+    await expect(
+      createUser(
+        { ...createInput, careerId: 'car-404' },
+        { actorId: 'user-admin', actorType: 'USER' as const, requestId: 'request-001' },
+      ),
+    ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Career not found.',
     });
@@ -641,7 +703,10 @@ describe('users service', () => {
     const { createUser } = await loadService(prisma);
 
     await expect(
-      createUser({ ...createInput, unitId: 'unit-001', careerId: 'car-002' }),
+      createUser(
+        { ...createInput, unitId: 'unit-001', careerId: 'car-002' },
+        { actorId: 'user-admin', actorType: 'USER' as const, requestId: 'request-001' },
+      ),
     ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Career does not belong to the selected unit.',
@@ -656,7 +721,10 @@ describe('users service', () => {
     prisma.user.create.mockResolvedValue(adminUserRecord);
     const { createUser } = await loadService(prisma);
 
-    await createUser({ ...createInput, careerId: 'car-002' });
+    await createUser(
+      { ...createInput, careerId: 'car-002' },
+      { actorId: 'user-admin', actorType: 'USER' as const, requestId: 'request-001' },
+    );
 
     expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -672,7 +740,10 @@ describe('users service', () => {
     prisma.user.create.mockResolvedValue(adminUserRecord);
     const { createUser } = await loadService(prisma);
 
-    await createUser({ ...createInput, unitId: null });
+    await createUser(
+      { ...createInput, unitId: null },
+      { actorId: 'user-admin', actorType: 'USER' as const, requestId: 'request-001' },
+    );
 
     expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -687,7 +758,12 @@ describe('users service', () => {
     prisma.career.findUnique.mockResolvedValue(null);
     const { createUser } = await loadService(prisma);
 
-    await expect(createUser({ ...createInput, unitId: null })).rejects.toMatchObject({
+    await expect(
+      createUser(
+        { ...createInput, unitId: null },
+        { actorId: 'user-admin', actorType: 'USER' as const, requestId: 'request-001' },
+      ),
+    ).rejects.toMatchObject({
       statusCode: 409,
       message: 'The global Otros career is not configured.',
     });
@@ -705,7 +781,13 @@ describe('users service', () => {
     prisma.$transaction.mockRejectedValue(new Error('Unique constraint failed'));
     const { createUser } = await loadService(prisma);
 
-    await expect(createUser(createInput)).rejects.toMatchObject({
+    await expect(
+      createUser(createInput, {
+        actorId: 'user-admin',
+        actorType: 'USER' as const,
+        requestId: 'request-001',
+      }),
+    ).rejects.toMatchObject({
       statusCode: 409,
       message: 'Email is already registered.',
     });
@@ -716,12 +798,19 @@ describe('users service', () => {
     prisma.user.findUnique.mockResolvedValue(null);
     prisma.user.create.mockResolvedValue(adminUserRecord);
     sendVerificationEmailMock.mockRejectedValue(new Error('smtp down'));
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const { createUser } = await loadService(prisma);
 
-    await expect(createUser(createInput)).resolves.toEqual(adminUserRecord);
-    expect(errorSpy).toHaveBeenCalledWith('Failed to send account verification email.');
-    errorSpy.mockRestore();
+    await expect(
+      createUser(createInput, {
+        actorId: 'user-admin',
+        actorType: 'USER' as const,
+        requestId: 'request-001',
+      }),
+    ).resolves.toEqual(adminUserRecord);
+    expect(loggerErrorMock).toHaveBeenCalledWith(
+      { event: 'mail.delivery.failed', logType: 'application' },
+      'mail.delivery.failed',
+    );
   });
 
   it('selects only safe fields for the created user', async () => {
@@ -730,7 +819,11 @@ describe('users service', () => {
     prisma.user.create.mockResolvedValue(adminUserRecord);
     const { createUser } = await loadService(prisma);
 
-    await createUser(createInput);
+    await createUser(createInput, {
+      actorId: 'user-admin',
+      actorType: 'USER' as const,
+      requestId: 'request-001',
+    });
 
     const createArgs = prisma.user.create.mock.calls[0]?.[0] as {
       select: Record<string, unknown>;
@@ -743,27 +836,24 @@ describe('users service', () => {
     expect(createArgs.select).not.toHaveProperty('emailVerified');
   });
 
-  it('updates role and status and returns the administrative view', async () => {
+  it('promotes an active user and returns the administrative view', async () => {
     const prisma = createPrismaMock();
     prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
     prisma.user.update.mockResolvedValue({
       ...adminUserRecord,
       globalRole: 'ADMIN',
-      isActive: false,
+      isActive: true,
     });
     const { updateAdminUser } = await loadService(prisma);
 
-    const updated = await updateAdminUser('user-admin', 'user-target', {
-      globalRole: 'ADMIN',
-      isActive: false,
-    });
+    const updated = await updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN' });
 
     expect(updated.globalRole).toBe('ADMIN');
-    expect(updated.isActive).toBe(false);
+    expect(updated.isActive).toBe(true);
     expect(prisma.user.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'user-target' },
-        data: { globalRole: 'ADMIN', isActive: false },
+        data: { globalRole: 'ADMIN' },
       }),
     );
   });
@@ -790,6 +880,34 @@ describe('users service', () => {
     await updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN' });
 
     expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects promoting an inactive user even when the request also reactivates it', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ ...updateTargetRecord, isActive: false });
+    const { updateAdminUser } = await loadService(prisma);
+
+    await expect(
+      updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN', isActive: true }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Only active users can be promoted to administrator.',
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects promoting and deactivating a user in the same request', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
+    const { updateAdminUser } = await loadService(prisma);
+
+    await expect(
+      updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN', isActive: false }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Only active users can be promoted to administrator.',
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
   it('fails when the requested user does not exist', async () => {
@@ -935,5 +1053,373 @@ describe('users service', () => {
     expect(capturedArgs?.select).not.toHaveProperty('password');
     expect(capturedArgs?.select).not.toHaveProperty('passwordHash');
     expect(capturedArgs?.select).not.toHaveProperty('emailVerified');
+  });
+});
+
+describe('users service audit trail', () => {
+  const ADMIN_CONTEXT = {
+    actorId: 'user-admin',
+    actorType: 'USER' as const,
+    requestId: 'request-001',
+  };
+
+  const auditInput = {
+    email: 'ana.gomez@utp.ac.pa',
+    password: 'SipegNueva2026*',
+    firstName: 'Ana',
+    lastName: 'Gomez',
+    identificationNumber: '8-888-1234',
+    isActive: true,
+  };
+
+  const auditPayloads = (prisma: PrismaMock) =>
+    prisma.auditEvent.create.mock.calls.map(
+      (call) => (call[0] as { data: Record<string, unknown> }).data,
+    );
+
+  const readyCreateMock = (prisma: PrismaMock) => {
+    prisma.user.findUnique.mockResolvedValue(null);
+    prisma.user.create.mockResolvedValue(adminUserRecord);
+    return prisma;
+  };
+
+  it('audits the administrative user creation with the initial state', async () => {
+    const prisma = readyCreateMock(createPrismaMock());
+    const { createUser } = await loadService(prisma);
+
+    await createUser(auditInput, ADMIN_CONTEXT);
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
+      action: 'user.admin_created',
+      actorType: 'USER',
+      actorId: 'user-admin',
+      resourceType: 'user',
+      resourceId: 'user-001',
+      targetUserId: 'user-001',
+      requestId: 'request-001',
+    });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      after: { globalRole: 'USER', isActive: true, unitId: 'unit-001', careerId: 'car-001' },
+    });
+  });
+
+  it('never stores the new password or the email in the audit payload', async () => {
+    const prisma = readyCreateMock(createPrismaMock());
+    const { createUser } = await loadService(prisma);
+
+    await createUser(auditInput, ADMIN_CONTEXT);
+
+    const serialized = JSON.stringify(auditPayloads(prisma));
+    expect(serialized).not.to.include('SipegNueva2026');
+    expect(serialized).not.to.include('$argon2id$');
+    expect(serialized).not.to.include('ana.gomez@utp.ac.pa');
+    expect(serialized).not.to.include('8-888-1234');
+  });
+
+  it('does not audit a creation rejected by a duplicate email', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ id: 'user-existing' });
+    const { createUser } = await loadService(prisma);
+
+    await expect(createUser(auditInput, ADMIN_CONTEXT)).rejects.toMatchObject({
+      statusCode: 409,
+    });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit a creation rejected by an unavailable organizational unit', async () => {
+    const prisma = readyCreateMock(createPrismaMock());
+    prisma.organizationalUnit.findUnique.mockResolvedValue(null);
+    const { createUser } = await loadService(prisma);
+
+    await expect(
+      createUser({ ...auditInput, unitId: 'unit-002' }, ADMIN_CONTEXT),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('audits a global role change from the previous role', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
+    prisma.user.update.mockResolvedValue({ ...adminUserRecord, globalRole: 'ADMIN' });
+    const { updateAdminUser } = await loadService(prisma);
+
+    await updateAdminUser('user-admin', 'user-target', { globalRole: 'ADMIN' }, ADMIN_CONTEXT);
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
+      action: 'user.role_changed',
+      actorId: 'user-admin',
+      resourceType: 'user',
+      resourceId: 'user-target',
+      targetUserId: 'user-target',
+      requestId: 'request-001',
+    });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      before: { globalRole: 'USER' },
+      after: { globalRole: 'ADMIN' },
+    });
+  });
+
+  it('audits a deactivation and revokes the sessions in the same transaction', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
+    prisma.user.update.mockResolvedValue({ ...adminUserRecord, isActive: false });
+    prisma.session.deleteMany.mockResolvedValue({ count: 2 });
+    const { updateAdminUser } = await loadService(prisma);
+
+    await updateAdminUser('user-admin', 'user-target', { isActive: false }, ADMIN_CONTEXT);
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({
+      action: 'user.deactivated',
+      actorId: 'user-admin',
+      resourceId: 'user-target',
+    });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      before: { isActive: true },
+      after: { isActive: false },
+    });
+  });
+
+  it('audits a reactivation', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ ...updateTargetRecord, isActive: false });
+    prisma.user.update.mockResolvedValue(adminUserRecord);
+    const { updateAdminUser } = await loadService(prisma);
+
+    await updateAdminUser('user-admin', 'user-target', { isActive: true }, ADMIN_CONTEXT);
+
+    const payloads = auditPayloads(prisma);
+    expect(payloads).toHaveLength(1);
+    expect(payloads[0]).toMatchObject({ action: 'user.activated' });
+    expect(payloads[0]?.['changes']).toMatchObject({
+      before: { isActive: false },
+      after: { isActive: true },
+    });
+  });
+
+  it('audits one event per transition when role and status change together', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ ...updateTargetRecord, globalRole: 'ADMIN' });
+    prisma.user.count.mockResolvedValue(1);
+    prisma.user.update.mockResolvedValue({
+      ...adminUserRecord,
+      globalRole: 'USER',
+      isActive: false,
+    });
+    prisma.session.deleteMany.mockResolvedValue({ count: 1 });
+    const { updateAdminUser } = await loadService(prisma);
+
+    await updateAdminUser(
+      'user-admin',
+      'user-target',
+      { globalRole: 'USER', isActive: false },
+      ADMIN_CONTEXT,
+    );
+
+    const actions = auditPayloads(prisma).map((payload) => payload['action']);
+    expect(actions).toEqual(['user.role_changed', 'user.deactivated']);
+  });
+
+  it('does not audit an update that leaves the role and the status unchanged', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
+    prisma.user.update.mockResolvedValue(adminUserRecord);
+    const { updateAdminUser } = await loadService(prisma);
+
+    await updateAdminUser('user-admin', 'user-target', { globalRole: 'USER' }, ADMIN_CONTEXT);
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit an update rejected by the last active admin guard', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ ...activeAdminRecord, unitId: null, career: null });
+    prisma.user.count.mockResolvedValue(0);
+    const { updateAdminUser } = await loadService(prisma);
+
+    await expect(
+      updateAdminUser('user-admin', 'user-admin', { isActive: false }, ADMIN_CONTEXT),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(prisma.user.update).not.toHaveBeenCalled();
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit a self deactivation rejected by the service', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
+    const { updateAdminUser } = await loadService(prisma);
+
+    await expect(
+      updateAdminUser('user-target', 'user-target', { isActive: false }, ADMIN_CONTEXT),
+    ).rejects.toMatchObject({ statusCode: 409 });
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('profile and organization assignment audit trail', () => {
+  const PROFILE_CONTEXT = {
+    actorId: 'user-001',
+    actorType: 'USER' as const,
+    requestId: 'request-profile',
+  };
+
+  it('records a profile update naming the changed fields without the values', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(currentUserRecord);
+    prisma.user.update.mockResolvedValue({
+      ...profileRecord,
+      firstName: 'Juana',
+      lastName: 'Pereza',
+    });
+    const { updateProfile } = await loadService(prisma);
+
+    await updateProfile('user-001', { firstName: 'Juana', lastName: 'Pereza' }, PROFILE_CONTEXT);
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(1);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'user.profile_updated',
+        actorId: 'user-001',
+        resourceType: 'user',
+        resourceId: 'user-001',
+        targetUserId: 'user-001',
+        requestId: 'request-profile',
+        metadata: { changedFields: ['firstName', 'lastName'] },
+      }),
+    });
+  });
+
+  it('records a self-service organization reassignment', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(currentUserRecord);
+    prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-002', isActive: true });
+    prisma.user.update.mockResolvedValue(profileRecord);
+    const { updateProfile } = await loadService(prisma);
+
+    await updateProfile('user-001', { unitId: 'unit-002' }, PROFILE_CONTEXT);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'user.organization_assignment_changed',
+        changes: {
+          before: { unitId: 'unit-001', careerId: 'car-001' },
+          after: { unitId: 'unit-002', careerId: null },
+        },
+      }),
+    });
+  });
+
+  it('emits both events when a single patch renames and reassigns', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(currentUserRecord);
+    prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-002', isActive: true });
+    prisma.user.update.mockResolvedValue(profileRecord);
+    const { updateProfile } = await loadService(prisma);
+
+    await updateProfile('user-001', { firstName: 'Juana', unitId: 'unit-002' }, PROFILE_CONTEXT);
+
+    expect(prisma.auditEvent.create).toHaveBeenCalledTimes(2);
+    expect(prisma.auditEvent.create.mock.calls.map(([call]) => call.data.action)).toEqual([
+      'user.profile_updated',
+      'user.organization_assignment_changed',
+    ]);
+  });
+
+  it('does not audit a profile patch that repeats the stored values', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(currentUserRecord);
+    prisma.user.update.mockResolvedValue(profileRecord);
+    const { updateProfile } = await loadService(prisma);
+
+    await updateProfile('user-001', { firstName: 'Ana', lastName: 'Gomez' }, PROFILE_CONTEXT);
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('does not audit a profile patch rejected by validation', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(null);
+    const { updateProfile } = await loadService(prisma);
+
+    await expect(
+      updateProfile('missing', { firstName: 'Juana' }, PROFILE_CONTEXT),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('reverts the profile when the audit insert fails', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(currentUserRecord);
+    prisma.user.update.mockResolvedValue(profileRecord);
+    prisma.auditEvent.create.mockRejectedValue(new Error('audit insert failed'));
+    const { updateProfile } = await loadService(prisma);
+
+    await expect(
+      updateProfile('user-001', { firstName: 'Juana' }, PROFILE_CONTEXT),
+    ).rejects.toThrow('audit insert failed');
+    expect(prisma.user.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('records an administrative organization reassignment next to the role change', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
+    prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-002', isActive: true });
+    prisma.user.update.mockResolvedValue(adminUserRecord);
+    const { updateAdminUser } = await loadService(prisma);
+
+    await updateAdminUser(
+      'user-admin',
+      'user-target',
+      { globalRole: 'ADMIN', unitId: 'unit-002' },
+      { actorId: 'user-admin', actorType: 'USER', requestId: 'request-002' },
+    );
+
+    expect(prisma.auditEvent.create.mock.calls.map(([call]) => call.data.action)).toEqual([
+      'user.role_changed',
+      'user.organization_assignment_changed',
+    ]);
+    expect(prisma.auditEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        action: 'user.organization_assignment_changed',
+        resourceId: 'user-target',
+        targetUserId: 'user-target',
+        changes: {
+          before: { unitId: 'unit-001' },
+          after: { unitId: 'unit-002' },
+        },
+      }),
+    });
+  });
+
+  it('does not audit an administrative patch that only repeats the assignment', async () => {
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(updateTargetRecord);
+    prisma.organizationalUnit.findUnique.mockResolvedValue({ id: 'unit-001', isActive: true });
+    prisma.user.update.mockResolvedValue(adminUserRecord);
+    const { updateAdminUser } = await loadService(prisma);
+
+    await updateAdminUser(
+      'user-admin',
+      'user-target',
+      { unitId: 'unit-001' },
+      {
+        actorId: 'user-admin',
+        actorType: 'USER',
+        requestId: 'request-003',
+      },
+    );
+
+    expect(prisma.auditEvent.create).not.toHaveBeenCalled();
   });
 });

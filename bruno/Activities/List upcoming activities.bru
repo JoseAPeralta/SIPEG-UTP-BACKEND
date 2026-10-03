@@ -1,7 +1,7 @@
 meta {
   name: List upcoming activities
   type: http
-  seq: 1
+  seq: 2
   tags: [
     Activities
   ]
@@ -19,7 +19,29 @@ params:query {
 }
 
 docs {
-  Public. Returns SCHEDULED and ONGOING activities of ACTIVE programs with date greater than or equal to today in the institutional time zone America/Panama.
+  Public. Returns SCHEDULED and ONGOING activities of ACTIVE programs with date greater than or equal to today in the institutional time zone America/Panama. DRAFT activities are never exposed, so an unauthenticated caller sees only the public set.
+}
+
+tests {
+  test("returns a paginated public list", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.be.an("array");
+    expect(body.data.page).to.equal(1);
+    expect(body.data.limit).to.equal(20);
+    expect(body.data.total).to.be.at.least(0);
+    expect(body.data.totalPages).to.be.at.least(0);
+  })
+
+  test("never exposes a DRAFT or a check-in code", function () {
+    const body = res.getBody();
+    body.data.items.forEach(function (activity) {
+      expect(activity.status).to.not.equal("DRAFT");
+      expect(activity).to.not.have.property("qrCode");
+      expect(activity).to.not.have.property("manualCode");
+    });
+  })
 }
 
 example {
@@ -50,38 +72,38 @@ example {
       type: json
       content: '''
         {
-          "success": false,
-          "message": "",
+          "success": true,
+          "message": "Operation completed successfully.",
           "data": {
             "items": [
               {
-                "id": "",
-                "name": "",
-                "description": "",
+                "id": "seed_activity_fic-taller-acuatica",
+                "name": "Taller de acuatica",
+                "description": "Sesion practica en el laboratorio.",
                 "type": "WORKSHOP",
-                "date": "",
-                "startTime": "",
-                "endTime": "",
-                "capacity": "",
-                "bannerUrl": "",
+                "date": "2026-10-03",
+                "startTime": "09:00",
+                "endTime": "11:00",
+                "capacity": 24,
+                "bannerUrl": null,
                 "speakers": [],
-                "classroom": "",
+                "classroom": null,
                 "eventProgram": {
-                  "id": "",
-                  "name": "",
-                  "label": ""
+                  "id": "seed_program_fic_default",
+                  "name": "Facultad de Ingenieria en Sistemas",
+                  "label": null
                 },
                 "organizationalUnit": {
                   "type": "FACULTY",
-                  "id": "",
-                  "name": ""
+                  "id": "seed_ou_fic",
+                  "name": "Facultad de Ingenieria en Sistemas"
                 }
               }
             ],
-            "page": 0,
-            "limit": 0,
-            "total": 0,
-            "totalPages": 0
+            "page": 1,
+            "limit": 20,
+            "total": 1,
+            "totalPages": 1
           }
         }
       '''
@@ -98,7 +120,7 @@ example {
     method: GET
     mode: none
     params:query: {
-      page: 1
+      page: 0
       limit: 20
     }
   }
@@ -118,11 +140,11 @@ example {
       content: '''
         {
           "success": false,
-          "message": "",
+          "message": "Validation error.",
           "errors": [
             {
-              "field": "",
-              "message": ""
+              "field": "page",
+              "message": "Page must be at least 1."
             }
           ]
         }

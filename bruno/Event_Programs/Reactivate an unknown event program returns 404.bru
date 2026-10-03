@@ -1,0 +1,23 @@
+meta {
+  name: Reactivate an unknown event program returns 404
+  type: http
+  seq: 26
+  tags: [
+    Event_Programs
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/event-programs/{{unknownProgramId}}/reactivate
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("unknown programs respond 404", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+}
