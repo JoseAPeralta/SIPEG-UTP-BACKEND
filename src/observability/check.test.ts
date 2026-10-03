@@ -155,6 +155,26 @@ const healthyDashboards: DashboardEntry[] = [
   { uid: 'sipeg-security', title: 'Security', folderTitle: 'SIPEG UTP' },
 ];
 
+const healthyApiOverview = {
+  dashboard: {
+    panels: [
+      {
+        title: 'Frecuencia por operacion',
+        targets: [
+          {
+            expr: 'sort_desc(sum by (method, route) (count_over_time({log_type="access"} | requestKind="matched" [$__auto])))',
+          },
+        ],
+      },
+      {
+        title: 'Ultimas solicitudes',
+        type: 'logs',
+        targets: [{ direction: 'backward', expr: '{log_type="access"}' }],
+      },
+    ],
+  },
+};
+
 function buildObservation(overrides: Partial<Observation> = {}): Observation {
   return {
     datasourceHealth: healthyHealth,
@@ -162,6 +182,8 @@ function buildObservation(overrides: Partial<Observation> = {}): Observation {
     promRules: buildPromRules(),
     dashboards: healthyDashboards,
     apiStreams: [jsonStreams],
+    apiUnstructuredLines: [],
+    apiOverview: healthyApiOverview,
     windowMinutes: 15,
     ...overrides,
   };
@@ -350,9 +372,10 @@ describe('verifyObservability', () => {
     expect(findings.filter((item) => item.level === 'fail')).toEqual([]);
   });
 
-  it('falla si hay un stream del contenedor api sin la etiqueta service, que es la firma de LOG_PRETTY', () => {
+  it('falla si hay lineas no estructuradas de la aplicacion, que es la firma de LOG_PRETTY', () => {
     const prettyLogs = buildObservation({
       apiStreams: [jsonStreams, { container: 'api' }],
+      apiUnstructuredLines: ['[12:00:00] INFO GET /api/v1/users 200'],
     });
 
     const failed = checkIds(prettyLogs);
@@ -364,6 +387,19 @@ describe('verifyObservability', () => {
     expect(finding?.hint).toContain('LOG_PRETTY');
     expect(finding?.hint).toContain('--force-recreate api');
     expect(finding?.hint).toContain('--window');
+  });
+
+  it('tolera el banner conocido de tsx watch sin ocultar otros logs no estructurados', () => {
+    const developmentStartup = buildObservation({
+      apiStreams: [jsonStreams, { container: 'api' }],
+      apiUnstructuredLines: ['$ tsx watch src/server.ts'],
+    });
+
+    const finding = verifyObservability(developmentStartup).find(
+      (item) => item.check === 'ingest.json-labels',
+    );
+
+    expect(finding?.level).toBe('pass');
   });
 
   it('informa sin fallar cuando no hubo trafico del contenedor api en la ventana', () => {
@@ -392,6 +428,38 @@ describe('verifyObservability', () => {
     });
 
     expect(checkIds(missingDashboard)).toContain('dashboards.folder');
+  });
+
+  it('falla si API Overview no tiene una cola descendente de access logs', () => {
+    const broken = buildObservation({
+      apiOverview: {
+        dashboard: {
+          panels: healthyApiOverview.dashboard.panels.filter(
+            (panel) => panel.title !== 'Ultimas solicitudes',
+          ),
+        },
+      },
+    });
+
+    expect(checkIds(broken)).toContain('dashboards.api-traffic');
+  });
+
+  it('falla si la frecuencia no distingue method y route', () => {
+    const broken = buildObservation({
+      apiOverview: {
+        dashboard: {
+          panels: [
+            {
+              title: 'Frecuencia por operacion',
+              targets: [{ expr: 'topk(10, sum by (route) (count_over_time({} [1h])))' }],
+            },
+            healthyApiOverview.dashboard.panels[1]!,
+          ],
+        },
+      },
+    });
+
+    expect(checkIds(broken)).toContain('dashboards.api-traffic');
   });
 });
 

@@ -38,6 +38,30 @@
         "sort": 1,
         "hide": 0,
         "skipUrlSync": false
+      },
+      {
+        "name": "method",
+        "label": "Metodo",
+        "type": "custom",
+        "query": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "options": [],
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "route",
+        "label": "Ruta (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": { "selected": true, "text": ".*", "value": ".*" },
+        "options": [{ "selected": true, "text": ".*", "value": ".*" }],
+        "hide": 0,
+        "skipUrlSync": false,
+        "description": "Plantilla de ruta, por ejemplo /api/v1/activities/:id. Se interpreta como expresion regular."
       }
     ]
   },
@@ -129,7 +153,7 @@
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
-          "expr": "((sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"5..\" [$__auto])) / sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} [$__auto]))) * 100) or vector(0)"
+          "expr": "((sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" | statusCode=~\"5..\" [$__auto])) / sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" [$__auto]))) * 100) or vector(0)"
         }
       ]
     },
@@ -172,7 +196,7 @@
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
-          "expr": "quantile_over_time(0.95, {service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | unwrap durationMs | __error__=\"\" [$__auto]) by ()"
+          "expr": "quantile_over_time(0.95, {service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" | unwrap durationMs | __error__=\"\" [$__auto]) by ()"
         }
       ]
     },
@@ -215,7 +239,7 @@
           "instant": true,
           "range": false,
           "legendFormat": "__auto",
-          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | json | aborted=\"true\" | __error__=\"\" [$__auto])) or vector(0)"
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"aborted\" [$__auto])) or vector(0)"
         }
       ]
     },
@@ -362,7 +386,7 @@
           "instant": false,
           "range": true,
           "legendFormat": "2xx",
-          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"2..\" [$__auto]))"
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" | statusCode=~\"2..\" [$__auto]))"
         },
         {
           "refId": "B",
@@ -372,7 +396,7 @@
           "instant": false,
           "range": true,
           "legendFormat": "3xx",
-          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"3..\" [$__auto]))"
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" | statusCode=~\"3..\" [$__auto]))"
         },
         {
           "refId": "C",
@@ -382,7 +406,7 @@
           "instant": false,
           "range": true,
           "legendFormat": "4xx",
-          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"4..\" [$__auto]))"
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" | statusCode=~\"4..\" [$__auto]))"
         },
         {
           "refId": "D",
@@ -392,7 +416,7 @@
           "instant": false,
           "range": true,
           "legendFormat": "5xx",
-          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | statusCode=~\"5..\" [$__auto]))"
+          "expr": "sum(count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" | statusCode=~\"5..\" [$__auto]))"
         }
       ]
     },
@@ -460,7 +484,7 @@
           "instant": false,
           "range": true,
           "legendFormat": "p50",
-          "expr": "quantile_over_time(0.50, {service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | unwrap durationMs | __error__=\"\" [$__auto]) by ()"
+          "expr": "quantile_over_time(0.50, {service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" | unwrap durationMs | __error__=\"\" [$__auto]) by ()"
         },
         {
           "refId": "B",
@@ -470,15 +494,15 @@
           "instant": false,
           "range": true,
           "legendFormat": "p95",
-          "expr": "quantile_over_time(0.95, {service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | unwrap durationMs | __error__=\"\" [$__auto]) by ()"
+          "expr": "quantile_over_time(0.95, {service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"completed\" | unwrap durationMs | __error__=\"\" [$__auto]) by ()"
         }
       ]
     },
     {
       "id": 8,
-      "type": "bargauge",
-      "title": "Rutas mas usadas",
-      "description": "Plantilla de ruta (`/api/v1/careers`, no `/api/v1/careers/42`) con el total del rango. `unmatched` agrupa las peticiones que no acertaron ninguna ruta, tipicamente escaneos o errores de URL.",
+      "type": "table",
+      "title": "Frecuencia por operacion",
+      "description": "Inventario completo por metodo y plantilla de ruta durante el rango. Excluye preflight y solicitudes no enrutadas; usa los filtros Metodo y Ruta para investigar una operacion concreta.",
       "datasource": { "type": "loki", "uid": "loki" },
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 13 },
       "fieldConfig": {
@@ -490,24 +514,7 @@
         },
         "overrides": []
       },
-      "options": {
-        "displayMode": "gradient",
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "maxVizHeight": 300,
-        "minVizHeight": 16,
-        "minVizWidth": 8,
-        "namePlacement": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "showUnfilled": true,
-        "sizing": "auto",
-        "valueMode": "color"
-      },
+      "options": { "showHeader": true, "cellHeight": "sm", "footer": { "show": false } },
       "targets": [
         {
           "refId": "A",
@@ -516,8 +523,8 @@
           "queryType": "instant",
           "instant": true,
           "range": false,
-          "legendFormat": "{{route}}",
-          "expr": "topk(10, sum by (route) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} [$__auto])))"
+          "legendFormat": "{{method}} {{route}}",
+          "expr": "sort_desc(sum by (method, route) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | requestKind=\"matched\" | method=~\"$method\" | route=~\"$route\" [$__auto])))"
         }
       ]
     },
@@ -527,7 +534,7 @@
       "title": "Requests abortados por ruta",
       "description": "Rutas donde el cliente cerro la conexion antes de terminar la respuesta. Un valor alto en una ruta de listado suele indicar un timeout en el cliente o un proxy que corta la transferencia.",
       "datasource": { "type": "loki", "uid": "loki" },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 22 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -564,7 +571,85 @@
           "instant": true,
           "range": false,
           "legendFormat": "{{route}}",
-          "expr": "topk(10, sum by (route) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | json | aborted=\"true\" | __error__=\"\" [$__auto])))"
+          "expr": "topk(10, sum by (route) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | outcome=\"aborted\" [$__auto])))"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "bargauge",
+      "title": "Preflight y solicitudes no enrutadas",
+      "description": "Separa los OPTIONS resueltos por CORS de solicitudes rechazadas antes del router o URLs inexistentes. No participan en Frecuencia por operacion.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "continuous-YlRd" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "instant",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{requestKind}} {{method}}",
+          "expr": "sum by (requestKind, method) (count_over_time({service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | requestKind=~\"preflight|unmatched\" [$__auto]))"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "logs",
+      "title": "Ultimas solicitudes",
+      "description": "Solicitudes mas recientes primero. Usa Metodo y Ruta para filtrar; cada linea conserva status, outcome, duracion y X-Request-ID sin exponer query strings ni cuerpos.",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 30 },
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "loki", "uid": "loki" },
+          "editorMode": "code",
+          "queryType": "range",
+          "instant": false,
+          "range": true,
+          "direction": "backward",
+          "legendFormat": "__auto",
+          "expr": "{service=\"sipeg-utp-backend\", environment=~\"$environment\", log_type=\"access\"} | method=~\"$method\" | route=~\"$route\" | line_format \"{{.method}} {{.route}} status={{.statusCode}} outcome={{.outcome}} duration={{.durationMs}}ms requestId={{.requestId}}\""
         }
       ]
     }
