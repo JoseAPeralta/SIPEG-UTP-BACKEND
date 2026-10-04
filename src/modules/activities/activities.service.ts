@@ -1,11 +1,18 @@
 import { getPrismaClient } from '../../config/prisma.js';
 import type { ActivityStatus, ActivityType } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { getInstitutionalDayOfWeek, startOfInstitutionalDay } from '../../utils/date.js';
+import { startOfInstitutionalDay } from '../../utils/date.js';
 import { writeAuditEvent } from '../audit/audit.service.js';
 import type { AuditContext, AuditEventInput, AuditScalar } from '../audit/audit.types.js';
 import { getEffectivePermissions } from '../authorization/authorization.service.js';
 import { PERMISSIONS } from '../authorization/permissions.js';
+import {
+  assertActivityScheduleIsAvailable,
+  assertActivityTimeRange,
+  assertClassroomIsAssignable,
+  isExclusionViolation,
+  RESERVING_STATUSES,
+} from './activities.schedule.js';
 import type {
   CreateActivityBody,
   ListActivitiesQuery,
@@ -166,26 +173,9 @@ const toProgramActivityItem = (record: ProgramActivityRecord): EventProgramActiv
   status: record.status,
 });
 
-const RESERVING_STATUSES: ActivityStatus[] = ['SCHEDULED', 'ONGOING'];
-
 const parseActivityDate = (value: string): Date => new Date(`${value}T00:00:00.000Z`);
 
 const parseActivityTime = (value: string): Date => new Date(`1970-01-01T${value}:00.000Z`);
-
-const isExclusionViolation = (error: unknown): boolean => {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-
-  const candidate = error as { code?: unknown; message?: unknown; meta?: { code?: unknown } };
-
-  return (
-    candidate.code === '23P01' ||
-    candidate.meta?.code === '23P01' ||
-    (typeof candidate.message === 'string' &&
-      candidate.message.includes('activities_classroom_no_overlap'))
-  );
-};
 
 const ACTIVITY_DELETION_CONFLICT_MESSAGE =
   'The activity changed while it was being deleted. Retry the request.';
@@ -208,64 +198,6 @@ const isDeletionRetentionConflict = (error: unknown): boolean => {
     message.includes('only DRAFT activities can be deleted') ||
     message.includes('activities can only be deleted in an active event program')
   );
-};
-
-const assertActivityScheduleIsAvailable = async (input: {
-  activityId: string;
-  classroomId: string;
-  date: Date;
-  startTime: Date;
-  endTime: Date;
-  maxCapacity: number | null;
-}): Promise<void> => {
-  const prisma = getPrismaClient();
-
-  const classroom = await prisma.classroom.findUnique({
-    where: { id: input.classroomId },
-    select: { id: true, isActive: true, capacity: true },
-  });
-
-  if (!classroom) {
-    throw new ApiError(404, 'Classroom not found.');
-  }
-  if (!classroom.isActive) {
-    throw new ApiError(400, 'Classroom is not active.');
-  }
-  if (input.maxCapacity !== null && classroom.capacity < input.maxCapacity) {
-    throw new ApiError(400, 'Classroom capacity is below the activity capacity.');
-  }
-
-  const dateKey = input.date.toISOString().slice(0, 10);
-
-  const window = await prisma.classroomAvailability.findFirst({
-    where: {
-      classroomId: input.classroomId,
-      dayOfWeek: getInstitutionalDayOfWeek(dateKey),
-      startTime: { lte: input.startTime },
-      endTime: { gte: input.endTime },
-    },
-    select: { id: true },
-  });
-
-  if (!window) {
-    throw new ApiError(409, 'Classroom is not available in the requested time window.');
-  }
-
-  const overlapping = await prisma.activity.findFirst({
-    where: {
-      id: { not: input.activityId },
-      classroomId: input.classroomId,
-      date: input.date,
-      status: { in: [...RESERVING_STATUSES] },
-      startTime: { lt: input.endTime },
-      endTime: { gt: input.startTime },
-    },
-    select: { id: true },
-  });
-
-  if (overlapping) {
-    throw new ApiError(409, 'Classroom is already reserved for an overlapping activity.');
-  }
 };
 
 export const listUpcomingActivities = async (
@@ -787,9 +719,7 @@ export const updateActivity = async (
     input.startTime !== undefined ? parseActivityTime(input.startTime) : current.startTime;
   const endTime = input.endTime !== undefined ? parseActivityTime(input.endTime) : current.endTime;
 
-  if (endTime <= startTime) {
-    throw new ApiError(400, 'End time must be after start time.');
-  }
+  assertActivityTimeRange(startTime, endTime);
 
   if (
     input.date !== undefined &&
@@ -824,17 +754,7 @@ export const updateActivity = async (
       maxCapacity,
     });
   } else if (classroomChanged && classroomId) {
-    const classroom = await prisma.classroom.findUnique({
-      where: { id: classroomId },
-      select: { id: true, isActive: true },
-    });
-
-    if (!classroom) {
-      throw new ApiError(404, 'Classroom not found.');
-    }
-    if (!classroom.isActive) {
-      throw new ApiError(400, 'Classroom is not active.');
-    }
+    await assertClassroomIsAssignable(classroomId);
   }
 
   const data = {
