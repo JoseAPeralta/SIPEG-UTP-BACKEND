@@ -1,4 +1,10 @@
-import type { CollaborationRole, PermissionGrantSource } from '../../generated/prisma/enums.js';
+import type {
+  ActivityStatus,
+  CollaborationRole,
+  PermissionGrantSource,
+  ProgramStatus,
+  UnitType,
+} from '../../generated/prisma/enums.js';
 
 export interface AuthorizationScope {
   eventProgramId?: string;
@@ -77,4 +83,41 @@ export interface OwnPermissionEnvelope {
 export interface OwnPermissions {
   scope: OwnPermissionsScope;
   permissions: OwnPermissionEnvelope[];
+}
+
+export interface ListUserScopesQuery {
+  type?: 'program' | 'activity' | undefined;
+  page: number;
+  limit: number;
+}
+
+export interface UserScopeEventProgram {
+  id: string;
+  name: string;
+  label: string | null;
+  status: ProgramStatus;
+}
+
+export interface UserScopeOrganizationalUnit {
+  id: string;
+  name: string;
+  type: UnitType;
+}
+
+export interface UserScopeItem {
+  type: 'program' | 'activity';
+  id: string;
+  name: string;
+  status: ProgramStatus | ActivityStatus;
+  eventProgram: UserScopeEventProgram | null;
+  organizationalUnit: UserScopeOrganizationalUnit;
+  permissions: OwnPermissionEnvelope[];
+}
+
+export interface PaginatedUserScopes {
+  items: UserScopeItem[];
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
 }

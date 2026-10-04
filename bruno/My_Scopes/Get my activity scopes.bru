@@ -1,0 +1,29 @@
+meta {
+  name: Get my activity scopes
+  type: http
+  seq: 4
+  tags: [
+    My_Scopes
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/scopes?type=activity
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("a program collaborator without direct activity collaborations gets an empty page", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.eql([]);
+    expect(body.data.total).to.equal(0);
+    expect(body.data.totalPages).to.equal(0);
+  });
+}

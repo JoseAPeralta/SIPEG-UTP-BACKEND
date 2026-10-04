@@ -7,10 +7,14 @@ import { successResponse } from '../../utils/response.js';
 import type {
   AddCollaboratorBody,
   GrantPermissionBody,
+  ListUserScopesQueryInput,
   OwnPermissionsQuery,
   UpdateCollaboratorRoleBody,
 } from './authorization.schemas.js';
-import { listOwnPermissions as listOwnPermissionsService } from './authorization.service.js';
+import {
+  listOwnPermissions as listOwnPermissionsService,
+  listUserScopes as listUserScopesService,
+} from './authorization.service.js';
 import {
   addCollaborator as addCollaboratorService,
   grantPermission as grantPermissionService,
@@ -195,4 +199,12 @@ export const getOwnPermissions: RequestHandler = asyncHandler(async (req, res) =
   const result = await listOwnPermissionsService(user, { type: query.scope, id: query.id });
 
   res.status(200).json(successResponse('Permissions retrieved successfully.', result));
+});
+
+export const getUserScopes: RequestHandler = asyncHandler(async (req, res) => {
+  const query = req.query as unknown as ListUserScopesQueryInput;
+  const user = requireAuthenticatedUser(req);
+  const result = await listUserScopesService(user, query);
+
+  res.status(200).json(successResponse('Scopes retrieved successfully.', result));
 });

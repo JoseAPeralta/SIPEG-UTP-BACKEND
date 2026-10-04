@@ -120,6 +120,7 @@ const loadApp = async (
   permissions: string[] = [],
   getEffectivePermissions = vi.fn(),
   listOwnPermissions = vi.fn(),
+  listUserScopes = vi.fn(),
 ) => {
   getEffectivePermissions.mockResolvedValue(new Set(permissions));
   process.env['NODE_ENV'] = 'test';
@@ -149,7 +150,11 @@ const loadApp = async (
       },
     },
   }));
-  vi.doMock('./authorization.service.js', () => ({ getEffectivePermissions, listOwnPermissions }));
+  vi.doMock('./authorization.service.js', () => ({
+    getEffectivePermissions,
+    listOwnPermissions,
+    listUserScopes,
+  }));
 
   const { app } = await import('../../app.js');
   return app;
@@ -1110,6 +1115,106 @@ describe('collaborator routes', () => {
       .get('/api/v1/users/me/permissions?scope=program&id=missing')
       .set('Authorization', 'Bearer user-001')
       .expect(404);
+  });
+
+  const userScopesResult = {
+    items: [
+      {
+        type: 'program',
+        id: 'program-001',
+        name: 'Programa Uno',
+        status: 'ACTIVE',
+        eventProgram: null,
+        organizationalUnit: { id: 'unit-001', name: 'Facultad', type: 'FACULTY' },
+        permissions: [{ name: 'program:read', origin: 'LOCAL', validFrom: null, validUntil: null }],
+      },
+    ],
+    page: 1,
+    limit: 20,
+    total: 1,
+    totalPages: 1,
+  };
+
+  it('rejects reading user scopes without a token', async () => {
+    const service = buildServiceMock();
+    const listUserScopes = vi.fn();
+    const app = await loadApp(service, createPrismaMock(), [], vi.fn(), vi.fn(), listUserScopes);
+
+    await request(app).get('/api/v1/users/me/scopes').expect(401);
+    expect(listUserScopes).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid scope type before the service', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(userRecord);
+    const listUserScopes = vi.fn();
+    const app = await loadApp(service, prisma, [], vi.fn(), vi.fn(), listUserScopes);
+
+    await request(app)
+      .get('/api/v1/users/me/scopes?type=team')
+      .set('Authorization', 'Bearer user-001')
+      .expect(400);
+    expect(listUserScopes).not.toHaveBeenCalled();
+  });
+
+  it('rejects out-of-range pagination before the service', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(userRecord);
+    const listUserScopes = vi.fn();
+    const app = await loadApp(service, prisma, [], vi.fn(), vi.fn(), listUserScopes);
+
+    await request(app)
+      .get('/api/v1/users/me/scopes?page=0')
+      .set('Authorization', 'Bearer user-001')
+      .expect(400);
+    await request(app)
+      .get('/api/v1/users/me/scopes?limit=51')
+      .set('Authorization', 'Bearer user-001')
+      .expect(400);
+    expect(listUserScopes).not.toHaveBeenCalled();
+  });
+
+  it('returns the scopes of the authenticated user', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(userRecord);
+    const listUserScopes = vi.fn().mockResolvedValue(userScopesResult);
+    const app = await loadApp(service, prisma, [], vi.fn(), vi.fn(), listUserScopes);
+
+    const response = await request(app)
+      .get('/api/v1/users/me/scopes?type=program&page=1&limit=20')
+      .set('Authorization', 'Bearer user-001')
+      .expect(200);
+
+    expect(listUserScopes).toHaveBeenCalledWith(expect.objectContaining({ id: 'user-001' }), {
+      type: 'program',
+      page: 1,
+      limit: 20,
+    });
+    expect(response.body).toEqual({
+      success: true,
+      message: 'Scopes retrieved successfully.',
+      data: userScopesResult,
+    });
+    const serialized = JSON.stringify(response.body);
+    expect(serialized).not.to.include('grantedBy');
+    expect(serialized).not.to.include('grantedAt');
+  });
+
+  it('rejects a disabled account', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue({ ...userRecord, isActive: false });
+    const listUserScopes = vi.fn();
+    const app = await loadApp(service, prisma, [], vi.fn(), vi.fn(), listUserScopes);
+
+    await request(app)
+      .get('/api/v1/users/me/scopes')
+      .set('Authorization', 'Bearer user-001')
+      .expect(403);
+    expect(listUserScopes).not.toHaveBeenCalled();
   });
 
   it('does not expose audit fields in the own permissions response', async () => {

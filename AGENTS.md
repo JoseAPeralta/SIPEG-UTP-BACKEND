@@ -297,6 +297,7 @@ For errors:
 - Todo grant registra `grantedById` y `grantedAt` como auditoría interna; no se exponen en ninguna respuesta HTTP.
 - El catalogo se puebla con `pnpm prisma:seed:base` en produccion y `pnpm prisma:seed` en desarrollo (ambos idempotentes).
 - `GET /api/v1/users/me/permissions?scope=program|activity&id=` expone los permisos efectivos propios con su envelope temporal y `origin` (`LOCAL`/`INHERITED`/`BOTH`).
+- `GET /api/v1/users/me/scopes` (privado, paginado, `type?=program|activity`) descubre los scopes con al menos un permiso efectivo vigente, incluidos estados no publicos, en orden determinista `name, id`. Un `USER` recibe solo sus colaboraciones directas (la herencia del programa se refleja en `permissions`, no como item de actividad); `ADMIN` recibe todo el catalogo como `LOCAL` ilimitado. Sin scopes responde pagina vacia. Sin auditoria ni emails. Ver `docs/adr/adr-0011-user-scope-discovery.md`.
 - Los listados de colaboradores exponen permisos efectivos con `origin` (`LOCAL`/`INHERITED`/`BOTH`), envelope fusionado y `effective: true`; los grants vencidos o futuros se omiten y `source` refleja la clase del grant activo (`OVERRIDE` local manda sobre `ROLE_DEFAULT`). Las respuestas de mutacion mantienen el `Collaborator` con grants locales.
 
 - Passwords: 12-20 chars, hasheados con Argon2id. El campo `passwordHash` en User fue eliminado; Better Auth usa `Account.password`.

@@ -8,8 +8,10 @@ import {
   collaboratorSchema,
   collaboratorUserParamsSchema,
   grantPermissionSchema,
+  listUserScopesQuerySchema,
   ownPermissionsQuerySchema,
   ownPermissionsSchema,
+  paginatedUserScopesSchema,
   revokePermissionSchema,
   updateCollaboratorRoleSchema,
 } from './authorization.schemas.js';
@@ -86,6 +88,16 @@ const ownPermissionsResponses = {
   404: errorResponse,
 } as const;
 
+const userScopesResponses = {
+  200: {
+    description: 'Paginated scopes where the authenticated user holds effective permissions.',
+    content: { 'application/json': { schema: apiSuccessResponse(paginatedUserScopesSchema) } },
+  },
+  400: errorResponse,
+  401: errorResponse,
+  403: errorResponse,
+} as const;
+
 const revokeResponses = {
   204: { description: 'Local permission grant removed from the scope.' },
   400: errorResponse,
@@ -115,6 +127,9 @@ const grantDescription =
 
 const ownPermissionsDescription =
   'Returns the effective permissions of the authenticated user in the requested program or activity scope with their temporal envelopes and origin. Activity scopes union the activity-local grants (`origin: LOCAL`) with the ones inherited from the parent program (`origin: INHERITED`); `BOTH` is possible when the same permission is active through both sources. Expired or future grants are ignored and never returned. ADMIN receives the whole catalog as `LOCAL` with unbounded envelopes. A null window means unbounded. Missing scopes respond 404. Audit fields (`grantedById`, `grantedAt`) are never returned.';
+
+const userScopesDescription =
+  'Returns the scopes where the authenticated user holds at least one effective permission, ordered by `name ASC, id ASC` with a deterministic binary comparison. A USER receives its direct collaborations only: a program appears when it has a local collaboration with an active permission, and an activity appears only when the user collaborates directly on it (the parent program grants are still unioned into its `permissions` as `INHERITED`/`BOTH`). Scopes in non-public states (DRAFT, CANCELLED, ARCHIVED) are included; expired or future grants are ignored at request time. A user without scopes receives an empty page, never a 404. ADMIN receives the whole catalog (every program and activity) with the full permission catalog as `LOCAL` and unbounded envelopes, consistent with `GET /users/me/permissions`. Activity `status` is the effective status derived at read time with the institutional date and time; program `status` is the stored one. Audit fields (`grantedById`, `grantedAt`), emails and internal identifiers are never returned.';
 
 export const authorizationPaths: ZodOpenApiPathsObject = {
   '/api/v1/event-programs/{id}/collaborators': {
@@ -267,6 +282,16 @@ export const authorizationPaths: ZodOpenApiPathsObject = {
       security: [{ bearerAuth: [] }],
       requestParams: { query: ownPermissionsQuerySchema.shape.query },
       responses: ownPermissionsResponses,
+    },
+  },
+  '/api/v1/users/me/scopes': {
+    get: {
+      tags: ['Collaborators'],
+      summary: 'List the authenticated user scopes',
+      description: userScopesDescription,
+      security: [{ bearerAuth: [] }],
+      requestParams: { query: listUserScopesQuerySchema.shape.query },
+      responses: userScopesResponses,
     },
   },
 };

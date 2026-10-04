@@ -3238,6 +3238,115 @@
         }
       }
     },
+    "/api/v1/users/me/scopes": {
+      "get": {
+        "tags": [
+          "Collaborators"
+        ],
+        "summary": "List the authenticated user scopes",
+        "description": "Returns the scopes where the authenticated user holds at least one effective permission, ordered by `name ASC, id ASC` with a deterministic binary comparison. A USER receives its direct collaborations only: a program appears when it has a local collaboration with an active permission, and an activity appears only when the user collaborates directly on it (the parent program grants are still unioned into its `permissions` as `INHERITED`/`BOTH`). Scopes in non-public states (DRAFT, CANCELLED, ARCHIVED) are included; expired or future grants are ignored at request time. A user without scopes receives an empty page, never a 404. ADMIN receives the whole catalog (every program and activity) with the full permission catalog as `LOCAL` and unbounded envelopes, consistent with `GET /users/me/permissions`. Activity `status` is the effective status derived at read time with the institutional date and time; program `status` is the stored one. Audit fields (`grantedById`, `grantedAt`), emails and internal identifiers are never returned.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "program",
+                "activity"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated scopes where the authenticated user holds effective permissions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "const": true,
+                      "description": "Always true for successful responses."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Human readable success summary."
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/PaginatedUserScopes"
+                    }
+                  },
+                  "required": [
+                    "success",
+                    "message",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/activities": {
       "get": {
         "tags": [
@@ -8452,6 +8561,166 @@
         ],
         "additionalProperties": false,
         "description": "Effective permission of the authenticated user with its temporal envelope."
+      },
+      "PaginatedUserScopes": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserScope"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "total": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total",
+          "totalPages"
+        ],
+        "additionalProperties": false,
+        "description": "Paginated scopes of the authenticated user."
+      },
+      "UserScope": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "program",
+              "activity"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "COMPLETED",
+              "CANCELLED",
+              "ARCHIVED",
+              "SCHEDULED",
+              "ONGOING"
+            ]
+          },
+          "eventProgram": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserScopeEventProgram"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "organizationalUnit": {
+            "$ref": "#/components/schemas/UserScopeOrganizationalUnit"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnPermission"
+            }
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "name",
+          "status",
+          "eventProgram",
+          "organizationalUnit",
+          "permissions"
+        ],
+        "additionalProperties": false,
+        "description": "Program or activity scope where the authenticated user holds at least one effective permission."
+      },
+      "UserScopeEventProgram": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "ACTIVE",
+              "COMPLETED",
+              "CANCELLED",
+              "ARCHIVED"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "label",
+          "status"
+        ],
+        "additionalProperties": false,
+        "description": "Parent event program of an activity scope."
+      },
+      "UserScopeOrganizationalUnit": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "FACULTY",
+              "SUBDIRECTORATE"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "type"
+        ],
+        "additionalProperties": false,
+        "description": "Owning organizational unit of a program or activity scope."
       },
       "PaginatedActivities": {
         "type": "object",

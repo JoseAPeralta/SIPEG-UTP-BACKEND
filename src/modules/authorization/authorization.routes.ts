@@ -9,6 +9,7 @@ import {
   getActivityCollaborators,
   getEventProgramCollaborators,
   getOwnPermissions,
+  getUserScopes,
   grantActivityPermission,
   grantEventProgramPermission,
   removeActivityCollaborator,
@@ -23,6 +24,7 @@ import {
   collaboratorParamsSchema,
   collaboratorUserParamsSchema,
   grantPermissionSchema,
+  listUserScopesQuerySchema,
   ownPermissionsQuerySchema,
   revokePermissionSchema,
   updateCollaboratorRoleSchema,
@@ -144,4 +146,11 @@ authorizationRoutes.get(
   authenticate,
   validate(ownPermissionsQuerySchema),
   getOwnPermissions,
+);
+
+authorizationRoutes.get(
+  '/users/me/scopes',
+  authenticate,
+  validate(listUserScopesQuerySchema),
+  getUserScopes,
 );

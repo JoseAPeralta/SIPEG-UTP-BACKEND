@@ -16,6 +16,7 @@ const expectedOperations = [
   'GET /api/v1/users/me',
   'PATCH /api/v1/users/me',
   'GET /api/v1/users/me/permissions',
+  'GET /api/v1/users/me/scopes',
   'GET /api/v1/users/me/certificates',
   'GET /api/v1/admin/users',
   'POST /api/v1/admin/users',
@@ -769,6 +770,31 @@ describe('openApiDocument', () => {
     expect(schema?.properties).toHaveProperty('permissions');
     expect(ownPermission?.properties).toHaveProperty('origin');
     expect(openApiDocument.components?.schemas).toHaveProperty('OwnPermission');
+  });
+
+  it('documents user scope discovery with bearer security and paginated items', () => {
+    const operation = openApiDocument.paths?.['/api/v1/users/me/scopes']?.get;
+    const parameters = operation?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+    const scope = openApiDocument.components?.schemas?.['UserScope'] as
+      { properties?: Record<string, unknown> } | undefined;
+    const page = openApiDocument.components?.schemas?.['PaginatedUserScopes'] as
+      { properties?: Record<string, unknown> } | undefined;
+
+    expect(operation?.security).toEqual([{ bearerAuth: [] }]);
+    expect(names).toEqual(expect.arrayContaining(['type', 'page', 'limit']));
+    expect(operation?.responses?.['200']).toBeDefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+    expect(scope?.properties).toHaveProperty('eventProgram');
+    expect(scope?.properties).toHaveProperty('organizationalUnit');
+    expect(scope?.properties).toHaveProperty('permissions');
+    expect(page?.properties).toHaveProperty('items');
+    expect(page?.properties).toHaveProperty('totalPages');
+    expect(openApiDocument.components?.schemas).toHaveProperty('UserScopeEventProgram');
+    expect(openApiDocument.components?.schemas).toHaveProperty('UserScopeOrganizationalUnit');
+    expect(openApiDocument.components?.schemas).toHaveProperty('PaginatedUserScopes');
   });
 
   it('documents collaborator list provenance and effective permissions', () => {
