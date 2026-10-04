@@ -31,7 +31,12 @@ const activityScope: ScopeResolver = (req) => {
   return typeof id === 'string' && id.length > 0 ? { activityId: id } : undefined;
 };
 
-activitiesRoutes.get('/activities', validate(listActivitiesQuerySchema), getActivities);
+activitiesRoutes.get(
+  '/activities',
+  optionalAuthenticate,
+  validate(listActivitiesQuerySchema),
+  getActivities,
+);
 
 activitiesRoutes.get(
   '/activities/:id',

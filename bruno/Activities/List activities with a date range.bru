@@ -1,0 +1,38 @@
+meta {
+  name: List activities with a date range
+  type: http
+  seq: 44
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities?page=1&limit=50&when=all&dateFrom=2026-01-01&dateTo=2026-12-31
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 50
+  when: all
+  dateFrom: 2026-01-01
+  dateTo: 2026-12-31
+}
+
+docs {
+  Public. dateFrom and dateTo are inclusive institutional calendar dates; dateFrom after dateTo responds 400.
+}
+
+tests {
+  test("returns a page inside the requested range", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    body.data.items.forEach(function (activity) {
+      expect(activity.date >= "2026-01-01").to.equal(true);
+      expect(activity.date <= "2026-12-31").to.equal(true);
+    });
+  })
+}

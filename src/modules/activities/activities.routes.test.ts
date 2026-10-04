@@ -10,7 +10,7 @@ import request from 'supertest';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 interface ActivitiesServiceMock {
-  listUpcomingActivities: ReturnType<typeof vi.fn>;
+  listActivities: ReturnType<typeof vi.fn>;
   listEventProgramActivities: ReturnType<typeof vi.fn>;
   createActivity: ReturnType<typeof vi.fn>;
   getActivityById: ReturnType<typeof vi.fn>;
@@ -27,7 +27,7 @@ const auditContext = (actorId: string) =>
   });
 
 const buildServiceMock = (): ActivitiesServiceMock => ({
-  listUpcomingActivities: vi.fn(),
+  listActivities: vi.fn(),
   listEventProgramActivities: vi.fn(),
   createActivity: vi.fn(),
   getActivityById: vi.fn(),
@@ -86,14 +86,19 @@ const loadApp = async (options: {
     getJwtVerifier: () => ({
       verify: async (token: string) => {
         const resolver = createLocalJWKSet(jwks as Parameters<typeof createLocalJWKSet>[0]);
-        const { payload } = await import('jose').then((j) =>
-          j.jwtVerify(token, resolver, {
-            issuer: 'http://localhost:3000',
-            audience: 'http://localhost:3000',
-            algorithms: ['EdDSA'],
-          }),
-        );
-        return payload;
+        try {
+          const { payload } = await import('jose').then((j) =>
+            j.jwtVerify(token, resolver, {
+              issuer: 'http://localhost:3000',
+              audience: 'http://localhost:3000',
+              algorithms: ['EdDSA'],
+            }),
+          );
+          return payload;
+        } catch {
+          const { ApiError } = await import('../../utils/ApiError.js');
+          throw new ApiError(401, 'Invalid or expired token.');
+        }
       },
       refresh: async () => {},
     }),
@@ -131,6 +136,7 @@ const activityItem = {
   endTime: '17:00',
   capacity: 35,
   bannerUrl: null,
+  status: 'SCHEDULED',
   speakers: [{ id: 'speaker-001', firstName: 'Carlos', lastName: 'Rivera' }],
   classroom: { id: 'classroom-001', name: 'Laboratorio 3', building: 'Edificio B' },
   eventProgram: { id: 'program-001', name: 'Programa de Ingenieria', label: null },
@@ -219,9 +225,9 @@ describe('activity routes', () => {
     vi.doUnmock('../authorization/authorization.service.js');
   });
 
-  it('returns paginated upcoming activities', async () => {
+  it('returns paginated public activities', async () => {
     const service = buildServiceMock();
-    service.listUpcomingActivities.mockResolvedValue({
+    service.listActivities.mockResolvedValue({
       items: [activityItem],
       page: 1,
       limit: 20,
@@ -247,7 +253,7 @@ describe('activity routes', () => {
 
   it('applies default pagination when no query is provided', async () => {
     const service = buildServiceMock();
-    service.listUpcomingActivities.mockResolvedValue({
+    service.listActivities.mockResolvedValue({
       items: [],
       page: 1,
       limit: 20,
@@ -258,23 +264,52 @@ describe('activity routes', () => {
 
     await request(app).get('/api/v1/activities').expect(200);
 
-    expect(service.listUpcomingActivities).toHaveBeenCalledWith({ page: 1, limit: 20 });
+    expect(service.listActivities).toHaveBeenCalledWith({ page: 1, limit: 20 }, null);
   });
 
-  it('forwards parsed pagination parameters', async () => {
+  it('forwards the parsed filters and the optional viewer', async () => {
     const service = buildServiceMock();
-    service.listUpcomingActivities.mockResolvedValue({
+    service.listActivities.mockResolvedValue({
       items: [],
       page: 3,
       limit: 50,
       total: 0,
       totalPages: 0,
     });
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp({ service, prisma });
+
+    await request(app)
+      .get(
+        '/api/v1/activities?page=3&limit=50&when=past&type=SEMINAR&unitType=FACULTY&status=DRAFT&classroomId=classroom-001',
+      )
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+
+    expect(service.listActivities).toHaveBeenCalledWith(
+      {
+        page: 3,
+        limit: 50,
+        when: 'past',
+        type: 'SEMINAR',
+        unitType: 'FACULTY',
+        status: 'DRAFT',
+        classroomId: 'classroom-001',
+      },
+      expect.objectContaining({ id: 'admin-001', globalRole: 'ADMIN' }),
+    );
+  });
+
+  it('rejects an invalid token on the public list', async () => {
+    const service = buildServiceMock();
     const app = await loadApp({ service });
 
-    await request(app).get('/api/v1/activities?page=3&limit=50').expect(200);
-
-    expect(service.listUpcomingActivities).toHaveBeenCalledWith({ page: 3, limit: 50 });
+    await request(app)
+      .get('/api/v1/activities')
+      .set('Authorization', 'Bearer broken-token')
+      .expect(401);
+    expect(service.listActivities).not.toHaveBeenCalled();
   });
 
   it('rejects a limit above the maximum', async () => {
@@ -284,7 +319,7 @@ describe('activity routes', () => {
     const response = await request(app).get('/api/v1/activities?limit=100').expect(400);
 
     expect(response.body).toMatchObject({ success: false, message: 'Validation error.' });
-    expect(service.listUpcomingActivities).not.toHaveBeenCalled();
+    expect(service.listActivities).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid page', async () => {
@@ -292,7 +327,15 @@ describe('activity routes', () => {
     const app = await loadApp({ service });
 
     await request(app).get('/api/v1/activities?page=0').expect(400);
-    expect(service.listUpcomingActivities).not.toHaveBeenCalled();
+    expect(service.listActivities).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid status before the service', async () => {
+    const service = buildServiceMock();
+    const app = await loadApp({ service });
+
+    await request(app).get('/api/v1/activities?status=PENDING').expect(400);
+    expect(service.listActivities).not.toHaveBeenCalled();
   });
 
   it('rejects create requests without a token', async () => {

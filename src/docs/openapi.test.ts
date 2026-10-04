@@ -134,11 +134,13 @@ describe('openApiDocument', () => {
     expect(openApiDocument.paths?.['/api/v1/health']?.get?.security).toBeUndefined();
   });
 
-  it('marks the create activity operation with bearer security and a 201 response', () => {
+  it('marks the create activity operation with bearer security, a 201 response and its conflicts', () => {
     const operation = openApiDocument.paths?.['/api/v1/activities']?.post;
 
     expect(operation?.security).toEqual([{ bearerAuth: [] }]);
     expect(operation?.responses?.['201']).toBeDefined();
+    expect(operation?.responses?.['409']).toBeDefined();
+    expect(operation?.description).toContain('availability');
     expect(openApiDocument.components?.schemas).toHaveProperty('ActivityDetail');
   });
 
@@ -408,12 +410,37 @@ describe('openApiDocument', () => {
     expect(openApiDocument.components?.securitySchemes).toHaveProperty('bearerAuth');
   });
 
-  it('documents the activity pagination query parameters', () => {
-    const parameters = openApiDocument.paths?.['/api/v1/activities']?.get?.parameters ?? [];
+  it('documents the activity list query parameters and failures', () => {
+    const operation = openApiDocument.paths?.['/api/v1/activities']?.get;
+    const parameters = operation?.parameters ?? [];
     const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
 
-    expect(names).toContain('page');
-    expect(names).toContain('limit');
+    expect(names).toEqual(
+      expect.arrayContaining([
+        'page',
+        'limit',
+        'when',
+        'eventProgramId',
+        'organizationalUnitId',
+        'unitType',
+        'type',
+        'classroomId',
+        'dateFrom',
+        'dateTo',
+        'status',
+      ]),
+    );
+    expect(operation?.security).toBeUndefined();
+    expect(operation?.responses?.['400']).toBeDefined();
+    expect(operation?.responses?.['401']).toBeDefined();
+    expect(operation?.responses?.['403']).toBeDefined();
+  });
+
+  it('exposes the activity status in the list item schema', () => {
+    const item = openApiDocument.components?.schemas?.['ActivityListItem'] as
+      { properties?: Record<string, unknown> } | undefined;
+
+    expect(item?.properties).toHaveProperty('status');
   });
 
   it('documents the event program list query parameters', () => {

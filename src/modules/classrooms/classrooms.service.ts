@@ -4,6 +4,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { getInstitutionalDayOfWeek } from '../../utils/date.js';
 import { writeAuditEvent } from '../audit/audit.service.js';
 import type { AuditContext, AuditEventInput, AuditScalar } from '../audit/audit.types.js';
+import { buildReservingActivityWhere } from '../activities/activities.status.js';
 import type { AvailableClassroomsQuery, ListClassroomsQuery } from './classrooms.schemas.js';
 import type {
   AddClassroomAvailabilityInput,
@@ -13,8 +14,6 @@ import type {
   PaginatedClassrooms,
   UpdateClassroomInput,
 } from './classrooms.types.js';
-
-const BLOCKING_ACTIVITY_STATUSES = ['SCHEDULED', 'ONGOING'] as const;
 
 const classroomSummarySelect = {
   id: true,
@@ -255,6 +254,7 @@ export const updateClassroom = async (
   id: string,
   input: UpdateClassroomInput,
   auditContext: AuditContext = {},
+  now: Date = new Date(),
 ): Promise<ClassroomDetail> => {
   const prisma = getPrismaClient();
   const current = await prisma.classroom.findUnique({
@@ -285,7 +285,7 @@ export const updateClassroom = async (
 
   if (input.isActive === false && current.isActive) {
     const blocking = await prisma.activity.findMany({
-      where: { classroomId: id, status: { in: [...BLOCKING_ACTIVITY_STATUSES] } },
+      where: { classroomId: id, ...buildReservingActivityWhere(now) },
       select: { id: true },
       take: 1,
     });
@@ -506,6 +506,7 @@ export const removeClassroomAvailability = async (
 
 export const findAvailableClassrooms = async (
   query: AvailableClassroomsQuery,
+  now: Date = new Date(),
 ): Promise<ClassroomSummary[]> => {
   const prisma = getPrismaClient();
   const dayOfWeek = getInstitutionalDayOfWeek(query.date);
@@ -540,7 +541,7 @@ export const findAvailableClassrooms = async (
   const blocking = await prisma.activity.findMany({
     where: {
       date,
-      status: { in: [...BLOCKING_ACTIVITY_STATUSES] },
+      ...buildReservingActivityWhere(now),
       classroomId: { in: candidates.map((candidate) => candidate.id) },
       startTime: { lt: endTime },
       endTime: { gt: startTime },

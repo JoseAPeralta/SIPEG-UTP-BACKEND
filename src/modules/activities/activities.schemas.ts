@@ -8,25 +8,93 @@ import type {
   PaginatedEventProgramActivities,
 } from './activities.types.js';
 
+const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+
+const isValidCalendarDate = (value: string): boolean => {
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year as number, (month as number) - 1, day as number));
+
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === (month as number) - 1 &&
+    date.getUTCDate() === day
+  );
+};
+
+const activityStatusSchema = z
+  .enum(['DRAFT', 'SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED'], 'Status is invalid.')
+  .meta({
+    description:
+      'Effective status derived at read time. DRAFT and CANCELLED are administrative; published activities resolve to SCHEDULED before their start, ONGOING within [start, end) and COMPLETED at or after their end, using the institutional time zone America/Panama.',
+  });
+
+const activityTypeSchema = z.enum(
+  ['WORKSHOP', 'SEMINAR', 'TALK', 'CONFERENCE', 'PANEL', 'COURSE', 'COMPETITION', 'OTHER'],
+  'Type is invalid.',
+);
+
+export const activitiesListQuerySchema = z
+  .object({
+    page: z.coerce
+      .number('Page must be a number.')
+      .int('Page must be an integer.')
+      .min(1, 'Page must be at least 1.')
+      .default(1),
+    limit: z.coerce
+      .number('Limit must be a number.')
+      .int('Limit must be an integer.')
+      .min(1, 'Limit must be at least 1.')
+      .max(50, 'Limit cannot exceed 50.')
+      .default(20),
+    when: z.enum(['upcoming', 'past', 'all'], 'When is invalid.').optional(),
+    eventProgramId: z
+      .string()
+      .trim()
+      .min(1, 'Event program is invalid.')
+      .max(100, 'Event program cannot exceed 100 characters.')
+      .optional(),
+    organizationalUnitId: z
+      .string()
+      .trim()
+      .min(1, 'Organizational unit is invalid.')
+      .max(100, 'Organizational unit cannot exceed 100 characters.')
+      .optional(),
+    unitType: z.enum(['FACULTY', 'SUBDIRECTORATE'], 'Unit type is invalid.').optional(),
+    type: activityTypeSchema.optional(),
+    classroomId: z
+      .string()
+      .trim()
+      .min(1, 'Classroom is invalid.')
+      .max(100, 'Classroom cannot exceed 100 characters.')
+      .optional(),
+    dateFrom: z
+      .string()
+      .regex(datePattern, 'Date from must be in YYYY-MM-DD format.')
+      .refine(isValidCalendarDate, 'Date from must be a valid calendar date.')
+      .optional(),
+    dateTo: z
+      .string()
+      .regex(datePattern, 'Date to must be in YYYY-MM-DD format.')
+      .refine(isValidCalendarDate, 'Date to must be a valid calendar date.')
+      .optional(),
+    status: z
+      .enum(
+        ['DRAFT', 'SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED', 'ALL'],
+        'Status is invalid.',
+      )
+      .optional(),
+  })
+  .strict();
+
 export const listActivitiesQuerySchema = z.object({
-  query: z
-    .object({
-      page: z.coerce
-        .number('Page must be a number.')
-        .int('Page must be an integer.')
-        .min(1, 'Page must be at least 1.')
-        .default(1),
-      limit: z.coerce
-        .number('Limit must be a number.')
-        .int('Limit must be an integer.')
-        .min(1, 'Limit must be at least 1.')
-        .max(50, 'Limit cannot exceed 50.')
-        .default(20),
-    })
-    .strict(),
+  query: activitiesListQuerySchema.refine(
+    (value) => !value.dateFrom || !value.dateTo || value.dateFrom <= value.dateTo,
+    { message: 'dateFrom cannot be after dateTo.', path: ['dateTo'] },
+  ),
 });
 
-export type ListActivitiesQuery = z.infer<typeof listActivitiesQuerySchema>['query'];
+export type ListActivitiesQuery = z.infer<typeof activitiesListQuerySchema>;
 
 export const activityParamsSchema = z.object({
   params: z.object({
@@ -147,21 +215,18 @@ const activityListItemShape = {
   organizationalUnit: activityOrganizationalUnitSchema,
 };
 
-export const activityListItemSchema = z.object(activityListItemShape).meta({
-  id: 'ActivityListItem',
-  description: 'Activity as returned by the upcoming activities listing.',
-}) satisfies z.ZodType<ActivityListItem>;
+export const activityListItemSchema = z
+  .object({ ...activityListItemShape, status: activityStatusSchema })
+  .meta({
+    id: 'ActivityListItem',
+    description: 'Activity summary including its effective lifecycle status.',
+  }) satisfies z.ZodType<ActivityListItem>;
 
 export const eventProgramActivityItemSchema = z
-  .object({
-    ...activityListItemShape,
-    status: z.enum(['DRAFT', 'SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED']).meta({
-      description: 'Activity lifecycle status.',
-    }),
-  })
+  .object({ ...activityListItemShape, status: activityStatusSchema })
   .meta({
     id: 'EventProgramActivityItem',
-    description: 'Activity of an event program including its lifecycle status.',
+    description: 'Activity of an event program including its effective lifecycle status.',
   }) satisfies z.ZodType<EventProgramActivityItem>;
 
 export const paginatedEventProgramActivitiesSchema = z
@@ -189,20 +254,6 @@ export const paginatedActivitiesSchema = z
     id: 'PaginatedActivities',
     description: 'Paginated list of upcoming activities.',
   }) satisfies z.ZodType<PaginatedActivities>;
-
-const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
-const datePattern = /^\d{4}-\d{2}-\d{2}$/;
-
-const isValidCalendarDate = (value: string): boolean => {
-  const [year, month, day] = value.split('-').map(Number);
-  const date = new Date(Date.UTC(year as number, (month as number) - 1, day as number));
-
-  return (
-    date.getUTCFullYear() === year &&
-    date.getUTCMonth() === (month as number) - 1 &&
-    date.getUTCDate() === day
-  );
-};
 
 const programActivityStatuses = [
   'DRAFT',
@@ -422,7 +473,7 @@ export const activityDetailSchema = z
     capacity: z.number().int().nullable(),
     bannerUrl: z.string().nullable(),
     status: z.enum(['DRAFT', 'SCHEDULED', 'ONGOING', 'COMPLETED', 'CANCELLED']).meta({
-      description: 'Activity lifecycle status.',
+      description: 'Effective status derived at read time from the institutional date and time.',
     }),
     cancelReason: z
       .string()

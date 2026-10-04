@@ -17,14 +17,14 @@ import {
   createActivity as createActivityService,
   deleteActivity as deleteActivityService,
   getActivityById,
+  listActivities as listActivitiesService,
   listEventProgramActivities as listEventProgramActivitiesService,
-  listUpcomingActivities,
   updateActivity as updateActivityService,
 } from './activities.service.js';
 
 export const getActivities: RequestHandler = asyncHandler(async (req, res) => {
   const query = req.query as unknown as ListActivitiesQuery;
-  const result = await listUpcomingActivities(query);
+  const result = await listActivitiesService(query, req.user ?? null);
 
   res.status(200).json(successResponse('Activities retrieved successfully.', result));
 });

@@ -1,0 +1,50 @@
+meta {
+  name: Create a reserving activity for the overlap check
+  type: http
+  seq: 51
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Actividad temporal solape 5.8",
+    "type": "WORKSHOP",
+    "date": "2027-06-07",
+    "startTime": "14:00",
+    "endTime": "16:00",
+    "eventProgramId": "seed_program_fic_default",
+    "classroomId": "seed_classroom_aula-101"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.id) {
+    bru.setVar("reservingActivityId", body.data.id);
+  }
+}
+
+docs {
+  Creates the DRAFT activity that the next requests publish, overlap and finally delete so the run leaves no residue. Requires an authenticated admin.
+}
+
+tests {
+  test("the reserving activity starts as DRAFT", function () {
+    expect(res.getStatus()).to.equal(201);
+    const body = res.getBody();
+    expect(body.data.status).to.equal("DRAFT");
+  });
+}

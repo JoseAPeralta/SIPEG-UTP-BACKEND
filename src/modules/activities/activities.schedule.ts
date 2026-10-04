@@ -6,7 +6,7 @@ import { getInstitutionalDayOfWeek } from '../../utils/date.js';
 export const RESERVING_STATUSES: ActivityStatus[] = ['SCHEDULED', 'ONGOING'];
 
 export interface ActivityScheduleInput {
-  activityId: string;
+  activityId?: string | null;
   classroomId: string;
   date: Date;
   startTime: Date;
@@ -72,7 +72,7 @@ export const assertActivityScheduleIsAvailable = async (
 
   const overlapping = await prisma.activity.findFirst({
     where: {
-      id: { not: input.activityId },
+      ...(input.activityId ? { id: { not: input.activityId } } : {}),
       classroomId: input.classroomId,
       date: input.date,
       status: { in: [...RESERVING_STATUSES] },

@@ -1,0 +1,40 @@
+meta {
+  name: List draft activities as admin
+  type: http
+  seq: 45
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities?page=1&limit=50&when=all&status=DRAFT
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+params:query {
+  page: 1
+  limit: 50
+  when: all
+  status: DRAFT
+}
+
+docs {
+  The status filter is honored only for ADMIN. Non-admin callers receive the public set silently.
+}
+
+tests {
+  test("admin status filter returns only DRAFT activities", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    body.data.items.forEach(function (activity) {
+      expect(activity.status).to.equal("DRAFT");
+    });
+  })
+}

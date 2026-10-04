@@ -135,6 +135,27 @@ describe('assertActivityScheduleIsAvailable', () => {
     );
   });
 
+  it('checks availability without excluding any activity when creating', async () => {
+    const prisma = createSchedulePrismaMock();
+    prisma.classroom.findUnique.mockResolvedValue(activeClassroom);
+    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-001' });
+    prisma.activity.findFirst.mockResolvedValue(null);
+    const { assertActivityScheduleIsAvailable } = await loadSchedule(prisma);
+
+    await expect(
+      assertActivityScheduleIsAvailable({
+        classroomId: scheduleInput.classroomId,
+        date: scheduleInput.date,
+        startTime: scheduleInput.startTime,
+        endTime: scheduleInput.endTime,
+        maxCapacity: scheduleInput.maxCapacity,
+      }),
+    ).resolves.toBeUndefined();
+
+    const where = (prisma.activity.findFirst.mock.calls[0]?.[0] as { where: object }).where;
+    expect(where).not.toHaveProperty('id');
+  });
+
   it('rejects a missing classroom with 404 before any availability query', async () => {
     const prisma = createSchedulePrismaMock();
     prisma.classroom.findUnique.mockResolvedValue(null);

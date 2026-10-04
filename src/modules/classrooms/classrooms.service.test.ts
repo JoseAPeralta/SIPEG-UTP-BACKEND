@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+const NOW = new Date('2026-09-19T15:00:00.000Z');
+
 interface PrismaMock {
   classroom: {
     findUnique: ReturnType<typeof vi.fn>;
@@ -285,7 +287,7 @@ describe('updateClassroom', () => {
     prisma.activity.findMany.mockResolvedValue([{ id: 'activity-001' }]);
 
     await expect(
-      service.updateClassroom('classroom-001', { isActive: false }),
+      service.updateClassroom('classroom-001', { isActive: false }, {}, NOW),
     ).rejects.toMatchObject({
       statusCode: 409,
       message: 'Cannot deactivate a classroom with scheduled or ongoing activities.',
@@ -302,11 +304,21 @@ describe('updateClassroom', () => {
     prisma.activity.findMany.mockResolvedValue([]);
     prisma.classroom.update.mockResolvedValue({ ...detailRecord, isActive: false });
 
-    const result = await service.updateClassroom('classroom-001', { isActive: false });
+    const result = await service.updateClassroom('classroom-001', { isActive: false }, {}, NOW);
 
     expect(prisma.activity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { classroomId: 'classroom-001', status: { in: ['SCHEDULED', 'ONGOING'] } },
+        where: {
+          classroomId: 'classroom-001',
+          status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED'] },
+          OR: [
+            { date: { gt: new Date('2026-09-19T00:00:00.000Z') } },
+            {
+              date: new Date('2026-09-19T00:00:00.000Z'),
+              endTime: { gt: new Date('1970-01-01T10:00:00.000Z') },
+            },
+          ],
+        },
       }),
     );
     expect(result.isActive).toBe(false);
@@ -847,17 +859,27 @@ describe('findAvailableClassrooms', () => {
     prisma.classroom.findMany.mockResolvedValue([summaryRecord, laboratoryRecord]);
     prisma.activity.findMany.mockResolvedValue([{ classroomId: 'classroom-001' }]);
 
-    const result = await service.findAvailableClassrooms({
-      date: '2026-09-21',
-      startTime: '08:00',
-      endTime: '10:00',
-    } as never);
+    const result = await service.findAvailableClassrooms(
+      {
+        date: '2026-09-21',
+        startTime: '08:00',
+        endTime: '10:00',
+      } as never,
+      NOW,
+    );
 
     expect(prisma.activity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           date: new Date('2026-09-21T00:00:00.000Z'),
-          status: { in: ['SCHEDULED', 'ONGOING'] },
+          status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED'] },
+          OR: [
+            { date: { gt: new Date('2026-09-19T00:00:00.000Z') } },
+            {
+              date: new Date('2026-09-19T00:00:00.000Z'),
+              endTime: { gt: new Date('1970-01-01T10:00:00.000Z') },
+            },
+          ],
           classroomId: { in: ['classroom-001', 'classroom-lab'] },
           startTime: { lt: new Date('1970-01-01T10:00:00.000Z') },
           endTime: { gt: new Date('1970-01-01T08:00:00.000Z') },

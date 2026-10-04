@@ -1,0 +1,31 @@
+meta {
+  name: List activities with an invalid status returns 400
+  type: http
+  seq: 46
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities?page=1&limit=20&status=PENDING
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 20
+  status: PENDING
+}
+
+docs {
+  Public. An unknown status is rejected by the query schema with 400 before the service.
+}
+
+tests {
+  test("rejects an unknown status", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().message).to.equal("Validation error.");
+  })
+}

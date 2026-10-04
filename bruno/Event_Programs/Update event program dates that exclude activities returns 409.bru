@@ -19,8 +19,19 @@ auth:bearer {
 
 body:json {
   {
-    "startDate": "2026-10-06"
+    "startDate": "{{startDateExcludingFirstActivity}}"
   }
+}
+
+script:pre-request {
+  const startDate = bru.getVar("programStartDate");
+  const [year, month, day] = String(startDate).split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1, day + 1));
+  bru.setVar("startDateExcludingFirstActivity", next.toISOString().slice(0, 10));
+}
+
+docs {
+  The seed places the first activity of the program exactly on its start date, so moving the start one day later excludes it. The date is computed from the program detail captured by "Get an event program" to stay robust against the demo seed shifting its relative dates.
 }
 
 tests {

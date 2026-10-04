@@ -1,0 +1,43 @@
+meta {
+  name: Create an overlapping activity returns 409
+  type: http
+  seq: 53
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Actividad temporal solape duplicada 5.8",
+    "type": "WORKSHOP",
+    "date": "2027-06-07",
+    "startTime": "14:30",
+    "endTime": "15:30",
+    "eventProgramId": "seed_program_fic_default",
+    "classroomId": "seed_classroom_aula-101"
+  }
+}
+
+docs {
+  Rejects the create before any write because a SCHEDULED activity already reserves an overlapping interval in the same classroom and date. Requires an authenticated admin.
+}
+
+tests {
+  test("an overlapping schedule is rejected with 409", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Classroom is already reserved for an overlapping activity.");
+  });
+}

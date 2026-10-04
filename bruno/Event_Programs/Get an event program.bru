@@ -13,6 +13,14 @@ get {
   auth: none
 }
 
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.startDate) {
+    bru.setVar("programStartDate", body.data.startDate);
+  }
+}
+
 tests {
   test("anonymous callers receive the public activity count", function () {
     expect(res.getStatus()).to.equal(200);

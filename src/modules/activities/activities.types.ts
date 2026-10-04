@@ -57,15 +57,14 @@ export interface ActivityListItem {
   endTime: string;
   capacity: number | null;
   bannerUrl: string | null;
+  status: ActivityStatus;
   speakers: ActivitySpeakerSummary[];
   classroom: ActivityClassroomSummary | null;
   eventProgram: ActivityProgramSummary;
   organizationalUnit: ActivityOrganizationalUnit;
 }
 
-export interface EventProgramActivityItem extends ActivityListItem {
-  status: ActivityStatus;
-}
+export type EventProgramActivityItem = ActivityListItem;
 
 export interface PaginatedActivities {
   items: ActivityListItem[];

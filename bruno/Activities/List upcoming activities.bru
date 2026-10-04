@@ -16,10 +16,11 @@ get {
 params:query {
   page: 1
   limit: 20
+  when: upcoming
 }
 
 docs {
-  Public. Returns SCHEDULED and ONGOING activities of ACTIVE programs with date greater than or equal to today in the institutional time zone America/Panama. DRAFT activities are never exposed, so an unauthenticated caller sees only the public set.
+  Public. Returns SCHEDULED, ONGOING and COMPLETED activities of ACTIVE programs with date greater than or equal to today in the institutional time zone America/Panama. DRAFT and CANCELLED activities are never exposed to anonymous callers, so the public set is the only visible one.
 }
 
 tests {
@@ -37,7 +38,7 @@ tests {
   test("never exposes a DRAFT or a check-in code", function () {
     const body = res.getBody();
     body.data.items.forEach(function (activity) {
-      expect(activity.status).to.not.equal("DRAFT");
+      expect(["SCHEDULED", "ONGOING", "COMPLETED"]).to.include(activity.status);
       expect(activity).to.not.have.property("qrCode");
       expect(activity).to.not.have.property("manualCode");
     });
@@ -55,6 +56,7 @@ example {
     params:query: {
       page: 1
       limit: 20
+      when: upcoming
     }
   }
 
@@ -86,6 +88,7 @@ example {
                 "endTime": "11:00",
                 "capacity": 24,
                 "bannerUrl": null,
+                "status": "SCHEDULED",
                 "speakers": [],
                 "classroom": null,
                 "eventProgram": {

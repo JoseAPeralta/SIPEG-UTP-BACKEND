@@ -3243,8 +3243,8 @@
         "tags": [
           "Activities"
         ],
-        "summary": "List upcoming activities",
-        "description": "Public. Returns SCHEDULED and ONGOING activities of ACTIVE programs with date greater than or equal to today in the institutional time zone America/Panama.",
+        "summary": "List activities",
+        "description": "Public. Lists activities of ACTIVE event programs with offset pagination and filters by timeframe (when=upcoming|past|all, default upcoming), event program, organizational unit, unit type, activity type, classroom, inclusive institutional date range (dateFrom/dateTo) and status. Anonymous callers and non-admin users always receive the public set (SCHEDULED, ONGOING and COMPLETED); only an ADMIN can filter a non-public status (DRAFT or CANCELLED) or use status=ALL, and the status filter is silently ignored for other callers. The status exposed in every item is the effective status derived at read time from the stored lifecycle status and the institutional date and time: DRAFT and CANCELLED stay untouched, while published activities resolve to SCHEDULED before their start, ONGOING within [start, end) and COMPLETED at or after their end. The status filter matches that effective status. upcoming keeps date >= today and past keeps date <= yesterday in the institutional time zone America/Panama; past results are ordered newest first. A present but invalid bearer token responds 401 and an inactive account responds 403.",
         "parameters": [
           {
             "in": "query",
@@ -3265,11 +3265,109 @@
               "minimum": 1,
               "maximum": 50
             }
+          },
+          {
+            "in": "query",
+            "name": "when",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "upcoming",
+                "past",
+                "all"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "eventProgramId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "organizationalUnitId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "unitType",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "FACULTY",
+                "SUBDIRECTORATE"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "WORKSHOP",
+                "SEMINAR",
+                "TALK",
+                "CONFERENCE",
+                "PANEL",
+                "COURSE",
+                "COMPETITION",
+                "OTHER"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "classroomId",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateFrom",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "dateTo",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "SCHEDULED",
+                "ONGOING",
+                "COMPLETED",
+                "CANCELLED",
+                "ALL"
+              ]
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Paginated list of upcoming activities.",
+            "description": "Paginated list of activities.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3307,6 +3405,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
           }
         }
       },
@@ -3315,7 +3433,7 @@
           "Activities"
         ],
         "summary": "Create an activity",
-        "description": "Creates an activity in DRAFT status inside an ACTIVE event program. Accepts inline speakers; a speaker is reused when the email matches an existing catalog entry and linked to a platform user when the email matches an account. Speakers do not need a platform account. Requires the activity:create permission on the target program (or the ADMIN role).",
+        "description": "Creates an activity in DRAFT status inside an ACTIVE event program. Accepts inline speakers; a speaker is reused when the email matches an existing catalog entry and linked to a platform user when the email matches an account. Speakers do not need a platform account. When a classroom is requested, the same schedule validations as PATCH apply: the classroom must exist and be active (404/400), the activity capacity cannot exceed the classroom capacity (400), the schedule must fall inside one of its availability windows (409) and no SCHEDULED/ONGOING activity may reserve an overlapping interval (409). Requires the activity:create permission on the target program (or the ADMIN role).",
         "security": [
           {
             "bearerAuth": []
@@ -3502,6 +3620,16 @@
               }
             }
           },
+          "409": {
+            "description": "Error response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Error response.",
             "content": {
@@ -3521,7 +3649,7 @@
           "Activities"
         ],
         "summary": "Get an activity",
-        "description": "Public. Returns the activity detail with speakers, classroom, equipment, program, enrolled and check-in counts. Anonymous callers only see non-DRAFT activities of ACTIVE programs; a valid Bearer token of an ADMIN or of a collaborator with the activity:read permission on the scope can also read DRAFT activities and activities of non ACTIVE programs.",
+        "description": "Public. Returns the activity detail with speakers, classroom, equipment, program, enrolled and check-in counts. The status is the effective status derived at read time (SCHEDULED before the start, ONGOING within [start, end), COMPLETED at or after the end; DRAFT and CANCELLED stay administrative). Anonymous callers only see non-DRAFT activities of ACTIVE programs; a valid Bearer token of an ADMIN or of a collaborator with the activity:read permission on the scope can also read DRAFT activities and activities of non ACTIVE programs.",
         "parameters": [
           {
             "in": "path",
@@ -3602,7 +3730,7 @@
           "Activities"
         ],
         "summary": "Update an activity",
-        "description": "Partially updates an activity. Requires the activity:update permission on the activity scope (or the ADMIN role). COMPLETED and CANCELLED activities respond 409. The status field accepts DRAFT or SCHEDULED to unpublish or publish; ONGOING, COMPLETED and CANCELLED are rejected. When the resulting activity reserves a classroom (SCHEDULED/ONGOING), the availability window, overlaps and classroom capacity are validated. The event program is immutable.",
+        "description": "Partially updates an activity. Requires the activity:update permission on the activity scope (or the ADMIN role). Activities whose effective status is ONGOING respond 409 (ongoing activities cannot be modified) and those effectively COMPLETED or CANCELLED respond 409. The status field accepts DRAFT or SCHEDULED to unpublish or publish; ONGOING, COMPLETED and CANCELLED are rejected. When the resulting activity reserves a classroom (SCHEDULED/ONGOING), the availability window, overlaps and classroom capacity are validated. The event program is immutable.",
         "security": [
           {
             "bearerAuth": []
@@ -3902,7 +4030,7 @@
           "Activities"
         ],
         "summary": "Cancel an activity",
-        "description": "Cancels an activity and optionally records a reason. Requires the activity:cancel permission on the activity scope (or the ADMIN role). DRAFT, SCHEDULED and ONGOING activities can be cancelled; COMPLETED activities respond 409 and activities of non ACTIVE event programs also respond 409. Cancelling an already cancelled activity is idempotent: it responds 200 without overwriting the recorded reason. The optional body accepts a trimmed reason of up to 500 characters.",
+        "description": "Cancels an activity and optionally records a reason. Requires the activity:cancel permission on the activity scope (or the ADMIN role). Activities whose effective status is DRAFT, SCHEDULED or ONGOING can be cancelled; effectively COMPLETED activities respond 409 and activities of non ACTIVE event programs also respond 409. Cancelling an already cancelled activity is idempotent: it responds 200 without overwriting the recorded reason. The optional body accepts a trimmed reason of up to 500 characters.",
         "security": [
           {
             "bearerAuth": []
@@ -4028,7 +4156,7 @@
           "Activities"
         ],
         "summary": "List activities of an event program",
-        "description": "Public. Returns the activities of an event program with offset pagination. Anonymous callers only see SCHEDULED, ONGOING and COMPLETED activities of ACTIVE programs; the status filter is honored only for an ADMIN or a collaborator with the activity:read permission on the program scope, while other callers silently receive the public statuses. Non ACTIVE programs respond 404 unless the caller is authorized. Supports optional type, case-insensitive name/description search and inclusive institutional date range filters.",
+        "description": "Public. Returns the activities of an event program with offset pagination. Anonymous callers only see SCHEDULED, ONGOING and COMPLETED activities of ACTIVE programs; the status filter is honored only for an ADMIN or a collaborator with the activity:read permission on the program scope, while other callers silently receive the public statuses. The status filter and the status exposed in every item use the effective status derived at read time from the institutional date and time. Non ACTIVE programs respond 404 unless the caller is authorized. Supports optional type, case-insensitive name/description search and inclusive institutional date range filters.",
         "parameters": [
           {
             "in": "path",
@@ -4507,7 +4635,7 @@
           "Event Programs"
         ],
         "summary": "Get an event program",
-        "description": "Public. Returns an ACTIVE event program with its activity count. Anonymous callers receive the public visible count (SCHEDULED, ONGOING and COMPLETED activities); ADMIN users and collaborators with program:read on the program also receive the total and the per-status breakdown. Non-active or missing programs respond 404. A present but invalid bearer token responds 401.",
+        "description": "Public. Returns an ACTIVE event program with its activity count. Anonymous callers receive the public visible count (SCHEDULED, ONGOING and COMPLETED activities); ADMIN users and collaborators with program:read on the program also receive the total and the per-status breakdown. Both the visible count and the breakdown use the effective activity status derived at read time from the institutional date and time. Non-active or missing programs respond 404. A present but invalid bearer token responds 401.",
         "parameters": [
           {
             "in": "path",
@@ -4811,7 +4939,7 @@
           "Event Programs"
         ],
         "summary": "Archive an event program",
-        "description": "Archives an event program and stamps archivedAt. Requires the program:archive permission on the program scope, or the ADMIN role. Default programs cannot be archived while their organizational unit is active (409) and additional programs with SCHEDULED or ONGOING activities are rejected (409); DRAFT, COMPLETED and CANCELLED activities do not block. Archiving an already archived program is idempotent: it responds 200 without modifying archivedAt.",
+        "description": "Archives an event program and stamps archivedAt. Requires the program:archive permission on the program scope, or the ADMIN role. Default programs cannot be archived while their organizational unit is active (409) and additional programs with effectively SCHEDULED or ONGOING activities (published activities that have not ended) are rejected (409); activities that already ended, DRAFT and CANCELLED do not block. Archiving an already archived program is idempotent: it responds 200 without modifying archivedAt.",
         "security": [
           {
             "bearerAuth": []
@@ -8444,6 +8572,17 @@
           },
           "organizationalUnit": {
             "$ref": "#/components/schemas/ActivityOrganizationalUnit"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "DRAFT",
+              "SCHEDULED",
+              "ONGOING",
+              "COMPLETED",
+              "CANCELLED"
+            ],
+            "description": "Effective status derived at read time. DRAFT and CANCELLED are administrative; published activities resolve to SCHEDULED before their start, ONGOING within [start, end) and COMPLETED at or after their end, using the institutional time zone America/Panama."
           }
         },
         "required": [
@@ -8459,10 +8598,11 @@
           "speakers",
           "classroom",
           "eventProgram",
-          "organizationalUnit"
+          "organizationalUnit",
+          "status"
         ],
         "additionalProperties": false,
-        "description": "Activity as returned by the upcoming activities listing."
+        "description": "Activity summary including its effective lifecycle status."
       },
       "ActivitySpeakerSummary": {
         "type": "object",
@@ -8625,7 +8765,7 @@
               "COMPLETED",
               "CANCELLED"
             ],
-            "description": "Activity lifecycle status."
+            "description": "Effective status derived at read time from the institutional date and time."
           },
           "cancelReason": {
             "description": "Reason recorded when the activity was cancelled; null otherwise.",
@@ -8828,7 +8968,7 @@
               "COMPLETED",
               "CANCELLED"
             ],
-            "description": "Activity lifecycle status."
+            "description": "Effective status derived at read time. DRAFT and CANCELLED are administrative; published activities resolve to SCHEDULED before their start, ONGOING within [start, end) and COMPLETED at or after their end, using the institutional time zone America/Panama."
           }
         },
         "required": [
@@ -8848,7 +8988,7 @@
           "status"
         ],
         "additionalProperties": false,
-        "description": "Activity of an event program including its lifecycle status."
+        "description": "Activity of an event program including its effective lifecycle status."
       },
       "PaginatedEventPrograms": {
         "type": "object",

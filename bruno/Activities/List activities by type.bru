@@ -1,0 +1,36 @@
+meta {
+  name: List activities by type
+  type: http
+  seq: 42
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities?page=1&limit=50&when=all&type=WORKSHOP
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 50
+  when: all
+  type: WORKSHOP
+}
+
+docs {
+  Public. Filters by activity type from the catalog (WORKSHOP, SEMINAR, TALK, CONFERENCE, PANEL, COURSE, COMPETITION, OTHER).
+}
+
+tests {
+  test("returns only activities of the requested type", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    body.data.items.forEach(function (activity) {
+      expect(activity.type).to.equal("WORKSHOP");
+    });
+  })
+}

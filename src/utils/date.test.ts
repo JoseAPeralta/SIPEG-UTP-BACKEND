@@ -4,8 +4,10 @@ import {
   getInstitutionalDateKey,
   getInstitutionalDayOfWeek,
   getInstitutionalDayRange,
+  getInstitutionalTimeOfDay,
   INSTITUTIONAL_TIME_ZONE,
   startOfInstitutionalDay,
+  toInstitutionalInstant,
 } from './date.js';
 
 describe('institutional date helpers', () => {
@@ -77,5 +79,54 @@ describe('getInstitutionalDayRange', () => {
     expect(getInstitutionalDayRange('2026-01-01').start.toISOString()).toBe(
       '2026-01-01T05:00:00.000Z',
     );
+  });
+});
+
+describe('getInstitutionalTimeOfDay', () => {
+  it('resolves the last millisecond of the Panama day before local midnight', () => {
+    const time = getInstitutionalTimeOfDay(new Date('2026-09-20T04:59:59.999Z'));
+
+    expect(time.toISOString()).toBe('1970-01-01T23:59:59.999Z');
+  });
+
+  it('resolves midnight exactly at the institutional day start', () => {
+    const time = getInstitutionalTimeOfDay(new Date('2026-09-20T05:00:00.000Z'));
+
+    expect(time.toISOString()).toBe('1970-01-01T00:00:00.000Z');
+  });
+
+  it('resolves the Panama wall clock during the day', () => {
+    const time = getInstitutionalTimeOfDay(new Date('2026-09-20T14:30:15.250Z'));
+
+    expect(time.toISOString()).toBe('1970-01-01T09:30:15.250Z');
+  });
+});
+
+describe('toInstitutionalInstant', () => {
+  it('combines a calendar date and a time into the Panama instant', () => {
+    const instant = toInstitutionalInstant(
+      new Date('2026-09-20T00:00:00.000Z'),
+      new Date('1970-01-01T09:00:00.000Z'),
+    );
+
+    expect(instant.toISOString()).toBe('2026-09-20T14:00:00.000Z');
+  });
+
+  it('maps the time zero to the institutional midnight', () => {
+    const instant = toInstitutionalInstant(
+      new Date('2026-09-20T00:00:00.000Z'),
+      new Date('1970-01-01T00:00:00.000Z'),
+    );
+
+    expect(instant.toISOString()).toBe('2026-09-20T05:00:00.000Z');
+  });
+
+  it('stays independent from the process time zone', () => {
+    const instant = toInstitutionalInstant(
+      new Date('2026-01-01T00:00:00.000Z'),
+      new Date('1970-01-01T23:59:00.000Z'),
+    );
+
+    expect(instant.toISOString()).toBe('2026-01-02T04:59:00.000Z');
   });
 });
