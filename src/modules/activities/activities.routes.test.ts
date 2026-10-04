@@ -552,6 +552,21 @@ describe('activity routes', () => {
     expect(service.updateActivity).not.toHaveBeenCalled();
   });
 
+  it('rejects duplicated equipment regardless of case before the service', async () => {
+    const service = buildServiceMock();
+    const prisma = createPrismaMock();
+    prisma.user.findUnique.mockResolvedValue(adminRecord);
+    const app = await loadApp({ service, prisma });
+
+    await request(app)
+      .patch('/api/v1/activities/activity-002')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ equipment: ['Proyector', 'proyector'] })
+      .expect(400);
+
+    expect(service.updateActivity).not.toHaveBeenCalled();
+  });
+
   it('rejects a blank activity id on update before the service', async () => {
     const service = buildServiceMock();
     const prisma = createPrismaMock();

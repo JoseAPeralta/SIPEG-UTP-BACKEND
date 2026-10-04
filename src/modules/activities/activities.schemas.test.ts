@@ -286,6 +286,14 @@ describe('createActivitySchema', () => {
     ).toThrow();
   });
 
+  it('rejects equipment names that differ only in case', () => {
+    expect(() =>
+      createActivitySchema.parse({
+        body: { ...createPayload, equipment: ['Proyector', 'proyector'] },
+      }),
+    ).toThrow();
+  });
+
   it('rejects an activity type outside the catalog', () => {
     expect(() =>
       createActivitySchema.parse({ body: { ...createPayload, type: 'WEBINAR' } }),
@@ -468,6 +476,15 @@ describe('updateActivitySchema', () => {
             { firstName: 'Ana', lastName: 'Gomez', email: 'ANA@example.com' },
           ],
         },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects equipment names that differ only in case', () => {
+    expect(() =>
+      updateActivitySchema.parse({
+        params: { id: 'activity-001' },
+        body: { equipment: ['Proyector', 'proyector'] },
       }),
     ).toThrow();
   });

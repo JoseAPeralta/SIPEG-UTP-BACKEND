@@ -318,7 +318,10 @@ export const createActivitySchema = z.object({
       equipment: z
         .array(z.string().trim().min(1, 'Equipment name cannot be empty.').max(255))
         .max(20, 'No more than 20 equipment items are allowed.')
-        .refine((items) => new Set(items).size === items.length, 'Equipment items must be unique.')
+        .refine(
+          (items) => new Set(items.map((item) => item.toLowerCase())).size === items.length,
+          'Equipment items must be unique.',
+        )
         .optional(),
     })
     .strict()
@@ -380,7 +383,10 @@ export const updateActivitySchema = z.object({
       equipment: z
         .array(z.string().trim().min(1, 'Equipment name cannot be empty.').max(255))
         .max(20, 'No more than 20 equipment items are allowed.')
-        .refine((items) => new Set(items).size === items.length, 'Equipment items must be unique.')
+        .refine(
+          (items) => new Set(items.map((item) => item.toLowerCase())).size === items.length,
+          'Equipment items must be unique.',
+        )
         .optional(),
     })
     .strict()
