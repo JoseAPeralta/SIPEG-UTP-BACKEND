@@ -11,6 +11,12 @@ set -euo pipefail
 
 ADMIN_SSH_CIDR="${ADMIN_SSH_CIDR:-}"
 
+# Limpia reglas genericas previas del 22: en UFW gana el primer match, y un
+# ALLOW antiguo sombrea el LIMIT o el CIDR. `|| true`: pueden no existir.
+ufw delete allow OpenSSH >/dev/null 2>&1 || true
+ufw delete allow 22/tcp >/dev/null 2>&1 || true
+ufw delete limit 22/tcp >/dev/null 2>&1 || true
+
 ufw default deny incoming
 ufw default allow outgoing
 
