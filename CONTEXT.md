@@ -123,6 +123,7 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Rate limit por endpoint sensible (login 5/min, register 3/min, forgot/reset 3/min cada uno, verify-email 5/min y change-password 5/min por usuario).
 - Correo de identidad mediante Nodemailer/SMTP con TLS 1.2 minimo. Mailpit captura correo local en `127.0.0.1:8025`; produccion exige `MAIL_HOST` y `MAIL_FROM`. Errores y logs no contienen destinatarios, enlaces ni tokens.
 - Variables de auth: `AUTH_SECRET` (requerido), `AUTH_URL`, `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`; opcionales `AUTH_ISSUER`, `AUTH_AUDIENCE`, `AUTH_TOKEN_TTL`, `AUTH_REFRESH_TTL`, `AUTH_EMAIL_VERIFICATION_TTL`, `AUTH_PASSWORD_RESET_TTL`.
+- `GET /api/v1/health` limita la consulta al JWKS a 3 segundos y responde `200` con `authJwksReachable: false` ante error o timeout; una consulta exitosa informa `true`.
 - Documentacion detallada: `AGENTS.md` y `docs/adr/adr-0001-time-aware-collaboration-authorization.md`.
 
 ### Autorizacion Por Colaboracion
