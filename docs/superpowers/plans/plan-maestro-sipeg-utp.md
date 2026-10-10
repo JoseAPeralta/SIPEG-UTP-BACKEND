@@ -743,12 +743,28 @@ Pendientes accionables al cierre de la fase:
 
 **Entregable:** bandeja in-app y servicio reutilizable para eventos de dominio.
 
-- [ ] **7.1 Listar alertas - `GET /api/v1/alerts`.** Solo propias, paginacion y filtros `isRead`/`type`.
-- [ ] **7.2 Marcar alertas.** Crear `PATCH /alerts/:id/read` y `POST /alerts/read-all`.
-- [ ] **7.3 Crear helper interno.** Implementar `createAlert` reutilizable dentro de transacciones.
-- [ ] **7.4 Aislar usuarios.** Consultar o modificar alertas ajenas debe producir 404.
+- [x] **7.1 Listar alertas - `GET /api/v1/alerts`.** Solo propias, paginacion y filtros `isRead`/`type`.
+- [x] **7.2 Marcar alertas.** Crear `PATCH /alerts/:id/read` y `POST /alerts/read-all`.
+- [x] **7.3 Crear helper interno.** Implementar `createAlert` reutilizable dentro de transacciones.
+- [x] **7.4 Aislar usuarios.** Consultar o modificar alertas ajenas debe producir 404.
 
 **Criterio de salida:** aislamiento por usuario y rollback conjunto entre accion de dominio y alerta comprobados.
+
+**Registro de ejecucion (2026-10-04 - Fase 7):**
+
+- [x] Plan detallado en `docs/superpowers/plans/2026-10-04-fase-7-alertas.md`. Decision confirmada con el usuario: se agrega `GET /api/v1/alerts/:id` para que "consultar" una alerta ajena responda el mismo `404` que una inexistente (7.4 literal).
+- [x] Implementacion: modulo autocontenido `src/modules/alerts/` (tipos, esquemas, servicio, controlador, rutas y OpenAPI) montado en `src/routes.ts`. Sin migraciones, dependencias, permisos ni variables de entorno nuevas: el modelo `Alert`, sus indices y el CHECK `alerts_target_check` ya existian.
+- [x] 7.1: `GET /api/v1/alerts` con paginacion offset (`page` 1, `limit` 20 maximo 50), filtros estrictos `isRead`/`type`, orden `createdAt desc, id asc` y `recipientId` tomado del token. `userId`/`recipientId` en la query responde `400`.
+- [x] 7.2: `PATCH /api/v1/alerts/:id/read` idempotente que devuelve la alerta resultante y `POST /api/v1/alerts/read-all` que responde `{ updatedCount }` sin tocar a otro destinatario.
+- [x] 7.3: `createAlert(tx, input)` con `Prisma.TransactionClient` obligatorio, entrada discriminada que impide combinar un `AlertType` con un destino incorrecto, mapeo a exactamente una FK y propagacion de errores; no abre transacciones ni usa el cliente global y no deduplica (no existe clave de evento de dominio todavia).
+- [x] 7.4: detalle y marcas siempre con `where: { id, recipientId }`; alerta ajena e inexistente comparten el mismo `404 Alert not found.` (incluido `ADMIN`). El DTO expone `target` como union discriminada `{ kind, id }` y no expone `recipientId` ni las FK internas.
+- [x] Pruebas: `pnpm test` 1616 en 73 archivos + 2 omitidos (9 skip: 7 de auditoria y 2 de integracion de alertas sin URL aislada) en verde, +52 sobre el baseline previo de 1564; suite dirigida `src/modules/alerts` 52 en 3 archivos mas 2 de integracion con `AUDIT_TEST_DATABASE_URL`.
+- [x] Integracion real contra PostgreSQL aislado (`sipeg_utp_test` con las 17 migraciones aplicadas): rollback conjunto comprobado (la mutacion de dominio desaparece cuando el insert de la alerta viola FK) y commit conjunto con destino real; limpieza final con 0 usuarios, 0 unidades, 0 programas y 0 alertas residuales y el trigger `event_programs_prevent_delete` rehabilitado.
+- [x] Contrato: 4 operaciones nuevas, tag `Alerts` y componentes `Alert`/`AlertTarget`/`PaginatedAlerts`/`MarkAllAlertsReadResult`; una prueba de contrato afirma que `Alert` no documenta `recipientId` y que `AlertTarget` cubre las cuatro familias; `docs:generate` y `docs:check` sin drift.
+- [x] Bruno: nueva carpeta `Alerts` autocontenida con 14 requests y 17 tests (`bru run Alerts --env local` en verde), incluyendo aislamiento horizontal (detalle y marca ajenos `404`) y `read-all` seguido de listado sin pendientes. Variables `alertRecipientEmail`/`alertOtherEmail`/`alertPassword` en `bruno/environments/local.bru`.
+- [x] Verificacion real (stack Docker dev, seed demo, script temporal en `/tmp/opencode` eliminado): 25/25 checks con `organizador.fcyt` (A) y `editor.eventos` (B). A lista 3 alertas con pagina correcta, sin `recipientId` ni FK internos y con `target` discriminado (`PROPOSAL` y `ACTIVITY` verificados por tipo); filtros `isRead=false`/`true` y `type`; `userId`, `isRead=unread` y `limit=51` responden `400`; detalle propio `200`; detalle y marca ajenos `404` con cuerpo identico al de un id inexistente; `read-all` devuelve `updatedCount 1`, luego `0`, deja 0 pendientes y no toca la alerta de B (que sigue viendo solo la suya); body con `recipientId` `400`; sin token `401`. Estado del seed restaurado (`is_read=false` en las dos alertas de actividad cancelada) y logs recientes sin bearer, passwords ni tokens.
+- [x] Gates finales: `pnpm test` 1616 en 73 archivos + 2 omitidos, `typecheck`, `lint`, `build`, `docs:check`, `prisma:validate` y `prisma:migrate:status` (17 migraciones) en verde; `format:check` global solo reporta los 3 archivos ajenos preexistentes (`compose.prod.yaml`, `docs/despliegue.md`, `src/modules/auth/auth.cookie.test.ts`).
+- [x] Documentacion: README y CONTEXT describen la bandeja, los filtros, el aislamiento por token, la union discriminada y el helper transaccional. Sin migraciones, permisos, dependencias ni variables de entorno nuevas. Sin commit: el usuario no lo solicito.
 
 ---
 

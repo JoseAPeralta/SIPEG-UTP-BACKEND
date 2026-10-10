@@ -204,6 +204,13 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Evitar duplicados salvo solicitud explicita.
 - Proteger generacion y descarga con permisos (`certificate:generate` y `certificate:read` ya existen en el catalogo).
 
+### Alertas
+
+- `GET /api/v1/alerts` (privado) lista las alertas del usuario autenticado con paginacion offset (`page`/`limit`, maximo 50) y filtros `isRead`/`type`; `GET /api/v1/alerts/{id}` devuelve una propia. El aislamiento es estructural: `recipientId` sale del token y alerta ajena e inexistente responden el mismo `404 Alert not found.`, incluso para `ADMIN`.
+- `PATCH /api/v1/alerts/{id}/read` es idempotente y devuelve la alerta resultante; `POST /api/v1/alerts/read-all` responde `{ updatedCount }` y solo afecta al destinatario autenticado.
+- La respuesta expone `target` como union discriminada (`kind` + `id`) y nunca `recipientId` ni las columnas FK internas.
+- `createAlert(tx, input)` es la infraestructura reutilizable para emitir alertas dentro de transacciones; su tipo de entrada impide combinar un `AlertType` con un destino incorrecto y cualquier fallo del insert revierte la accion de dominio. Las notificaciones reales se conectan en 8.8, 10.6 y 12.1.
+
 ### Inventario De Aulas
 
 - `GET /api/v1/classrooms` y `GET /api/v1/classrooms/{id}` son publicos; el listado muestra solo activas salvo `isActive=false`, con paginacion y filtros `type`, `minCapacity` y `amenity`. El detalle incluye `amenities` y `availability`.

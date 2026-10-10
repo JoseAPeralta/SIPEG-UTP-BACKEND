@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { activitiesRoutes } from './modules/activities/activities.routes.js';
+import { alertsRoutes } from './modules/alerts/alerts.routes.js';
 import { auditRoutes } from './modules/audit/audit.routes.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { authorizationRoutes } from './modules/authorization/authorization.routes.js';
@@ -18,6 +19,7 @@ apiRoutes.use(authRoutes);
 apiRoutes.use(usersRoutes);
 apiRoutes.use(authorizationRoutes);
 apiRoutes.use(activitiesRoutes);
+apiRoutes.use(alertsRoutes);
 apiRoutes.use(classroomsRoutes);
 apiRoutes.use(eventProgramsRoutes);
 apiRoutes.use(organizationalUnitsRoutes);

@@ -1,0 +1,21 @@
+meta {
+  name: List my alerts without a token returns 401
+  type: http
+  seq: 7
+  tags: [
+    Alerts
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/alerts
+  body: none
+  auth: none
+}
+
+tests {
+  test("the inbox is private", function () {
+    expect(res.getStatus()).to.equal(401);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

@@ -68,6 +68,10 @@ const expectedOperations = [
   'DELETE /api/v1/classrooms/{id}/amenities/{amenity}',
   'POST /api/v1/classrooms/{id}/availability',
   'DELETE /api/v1/classrooms/{id}/availability/{availabilityId}',
+  'GET /api/v1/alerts',
+  'GET /api/v1/alerts/{id}',
+  'PATCH /api/v1/alerts/{id}/read',
+  'POST /api/v1/alerts/read-all',
   'GET /api/v1/audit-events',
   'GET /api/v1/health',
 ].sort();
@@ -872,5 +876,53 @@ describe('openApiDocument', () => {
     expect(pathItem?.patch).toBeUndefined();
     expect(pathItem?.put).toBeUndefined();
     expect(pathItem?.delete).toBeUndefined();
+  });
+
+  it('documents the alert inbox as private operations', () => {
+    const list = openApiDocument.paths?.['/api/v1/alerts']?.get;
+    const detail = openApiDocument.paths?.['/api/v1/alerts/{id}']?.get;
+    const mark = openApiDocument.paths?.['/api/v1/alerts/{id}/read']?.patch;
+    const readAll = openApiDocument.paths?.['/api/v1/alerts/read-all']?.post;
+
+    expect(list?.tags).toEqual(['Alerts']);
+    expect(list?.security).toEqual([{ bearerAuth: [] }]);
+    expect(list?.responses?.['200']).toBeDefined();
+    expect(list?.responses?.['400']).toBeDefined();
+    expect(list?.responses?.['401']).toBeDefined();
+
+    expect(detail?.security).toEqual([{ bearerAuth: [] }]);
+    expect(detail?.responses?.['404']).toBeDefined();
+
+    expect(mark?.security).toEqual([{ bearerAuth: [] }]);
+    expect(mark?.requestBody).toBeUndefined();
+    expect(mark?.responses?.['404']).toBeDefined();
+
+    expect(readAll?.security).toEqual([{ bearerAuth: [] }]);
+    expect(readAll?.requestBody).toBeUndefined();
+    expect(readAll?.responses?.['200']).toBeDefined();
+  });
+
+  it('documents the alert filters, the page and the discriminated target', () => {
+    const list = openApiDocument.paths?.['/api/v1/alerts']?.get;
+    const parameters = list?.parameters ?? [];
+    const names = parameters.map((parameter) => ('name' in parameter ? parameter.name : undefined));
+    const page = openApiDocument.components?.schemas?.['PaginatedAlerts'] as
+      { properties?: Record<string, unknown> } | undefined;
+    const alert = openApiDocument.components?.schemas?.['Alert'] as
+      { properties?: Record<string, unknown> } | undefined;
+    const serializedAlert = JSON.stringify(alert);
+    const serializedTarget = JSON.stringify(openApiDocument.components?.schemas?.['AlertTarget']);
+
+    expect(names).toEqual(expect.arrayContaining(['page', 'limit', 'isRead', 'type']));
+    expect(names).toHaveLength(4);
+    expect(page?.properties).toHaveProperty('items');
+    expect(page?.properties).toHaveProperty('totalPages');
+    expect(alert?.properties).toHaveProperty('createdAt');
+    expect(serializedAlert).not.to.include('recipientId');
+    expect(serializedTarget).to.include('PROPOSAL');
+    expect(serializedTarget).to.include('EVENT_PROGRAM');
+    expect(serializedTarget).to.include('ACTIVITY');
+    expect(serializedTarget).to.include('CERTIFICATE');
+    expect(openApiDocument.components?.schemas).toHaveProperty('MarkAllAlertsReadResult');
   });
 });

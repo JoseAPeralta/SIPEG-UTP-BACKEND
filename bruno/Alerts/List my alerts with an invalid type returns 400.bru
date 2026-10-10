@@ -1,0 +1,27 @@
+meta {
+  name: List my alerts with an invalid type returns 400
+  type: http
+  seq: 5
+  tags: [
+    Alerts
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/alerts?type=PROPOSAL_SENT
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("an unknown alert type is rejected before the query runs", function () {
+    expect(res.getStatus()).to.equal(400);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Validation error.");
+  });
+}

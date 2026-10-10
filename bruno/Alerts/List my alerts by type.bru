@@ -1,0 +1,30 @@
+meta {
+  name: List my alerts by type
+  type: http
+  seq: 4
+  tags: [
+    Alerts
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/alerts?type=ACTIVITY_CANCELLED
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the type filter narrows the list", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.data.total).to.be.at.least(1);
+
+    for (const item of body.data.items) {
+      expect(item.type).to.equal("ACTIVITY_CANCELLED");
+    }
+  });
+}

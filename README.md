@@ -377,6 +377,14 @@ El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET 
 - La respuesta NO expone `pdfUrl` ni `attendanceId`. El campo de archivo llega con 10.3, cuando exista el endpoint de descarga y el almacenamiento de la Fase 6; hoy el seed escribe rutas placeholder sin archivo detrás.
 - Sin auditoría ni rate limit propio: es una lectura autenticada de datos propios, no una acción administrativa.
 
+### Alertas
+
+- `GET /api/v1/alerts` (privado) lista las alertas del usuario autenticado, de la más reciente a la más antigua, con paginación offset (`page`/`limit`, máximo 50) y filtros `isRead` (`true`/`false`) y `type` (los ocho valores de `AlertType`). La query es estricta: `userId`, `recipientId` u otra clave desconocida responde `400`.
+- `GET /api/v1/alerts/{id}` (privado) devuelve una alerta propia. Alerta ajena e inexistente comparten el mismo `404 Alert not found.`, incluso para `ADMIN`: la bandeja es estrictamente propia y nunca revela la existencia de alertas ajenas.
+- `PATCH /api/v1/alerts/{id}/read` (privado) marca una alerta propia como leída y devuelve la alerta resultante. Es idempotente: repetir la marca responde `200`. `POST /api/v1/alerts/read-all` (privado) marca todas las no leídas del usuario y responde `{ updatedCount }`; nunca toca a otro destinatario.
+- El destino se expone como unión discriminada `target: { kind: 'PROPOSAL' | 'EVENT_PROGRAM' | 'ACTIVITY' | 'CERTIFICATE', id }`; no se exponen `recipientId` ni las columnas FK internas.
+- Crear alertas desde acciones de dominio llega en las fases 8, 10 y 12 mediante el helper `createAlert`, que exige un cliente transaccional para confirmar o revertir la alerta junto con la acción de dominio.
+
 ## Observabilidad Y Auditoria
 
 El backend emite logs estructurados (JSON de una linea) a stdout/stderr y registra

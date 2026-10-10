@@ -1,0 +1,35 @@
+meta {
+  name: Get my alert
+  type: http
+  seq: 8
+  tags: [
+    Alerts
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/alerts/{{myAlertId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the recipient reads a single own alert", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Alert retrieved successfully.");
+    expect(body.data.id).to.equal(bru.getVar("myAlertId"));
+    expect(body.data.target.kind).to.be.oneOf([
+      "PROPOSAL",
+      "EVENT_PROGRAM",
+      "ACTIVITY",
+      "CERTIFICATE",
+    ]);
+    expect(JSON.stringify(body)).to.not.include("recipientId");
+  });
+}

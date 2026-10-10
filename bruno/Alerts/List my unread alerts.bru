@@ -1,0 +1,31 @@
+meta {
+  name: List my unread alerts
+  type: http
+  seq: 3
+  tags: [
+    Alerts
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/alerts?isRead=false
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("every returned alert is unread", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.data.page).to.equal(1);
+    expect(body.data.limit).to.equal(20);
+
+    for (const item of body.data.items) {
+      expect(item.isRead).to.equal(false);
+    }
+  });
+}

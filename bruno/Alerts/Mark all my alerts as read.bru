@@ -1,0 +1,29 @@
+meta {
+  name: Mark all my alerts as read
+  type: http
+  seq: 10
+  tags: [
+    Alerts
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/alerts/read-all
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the bulk operation reports how many alerts changed", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Alerts marked as read successfully.");
+    expect(Number.isInteger(body.data.updatedCount)).to.equal(true);
+    expect(body.data.updatedCount).to.be.at.least(0);
+  });
+}
