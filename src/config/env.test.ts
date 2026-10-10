@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const importEnv = async () => {
   vi.resetModules();
@@ -6,7 +6,37 @@ const importEnv = async () => {
   return import('./env.js');
 };
 
+describe('env optional empty strings', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('treats empty AUTH_ISSUER, AUTH_AUDIENCE and TRUSTED_ORIGINS as undefined', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('AUTH_SECRET', 'a'.repeat(32));
+    vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173');
+    vi.stubEnv('AUTH_PASSWORD_RESET_URL', 'http://localhost:5173/reset-password');
+    vi.stubEnv('AUTH_ISSUER', '');
+    vi.stubEnv('AUTH_AUDIENCE', '');
+    vi.stubEnv('TRUSTED_ORIGINS', '');
+
+    const { env } = await importEnv();
+
+    expect(env.AUTH_ISSUER).toBeUndefined();
+    expect(env.AUTH_AUDIENCE).toBeUndefined();
+    expect(env.TRUSTED_ORIGINS).toBeUndefined();
+  });
+});
+
 describe('env LOG_LEVEL', () => {
+  beforeEach(() => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('AUTH_SECRET', 'a'.repeat(32));
+    vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173');
+    vi.stubEnv('AUTH_PASSWORD_RESET_URL', 'http://localhost:5173/reset-password');
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.resetModules();
