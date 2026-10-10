@@ -63,6 +63,8 @@ component_patches() {
   run apt-get install -y unattended-upgrades needrestart
   install_file "$HOST_DIR/apt/20auto-upgrades" /etc/apt/apt.conf.d/20auto-upgrades 0644
   install_file "$HOST_DIR/apt/50unattended-upgrades" /etc/apt/apt.conf.d/50unattended-upgrades 0644
+  install_file "$HOST_DIR/apt/docker.sources" /etc/apt/sources.list.d/docker.sources 0644
+  run apt-get update
   run install -d -m 0755 /etc/needrestart/conf.d
   install_file "$HOST_DIR/apt/99-sipeg-needrestart.conf" /etc/needrestart/conf.d/99-sipeg.conf 0644
   run systemctl enable --now unattended-upgrades

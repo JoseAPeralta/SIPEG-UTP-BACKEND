@@ -80,7 +80,7 @@
 
 **Files:** ninguno (solo diagnostico).
 
-- [ ] **Step 1: Registrar identidad y version del sistema [VPS]**
+- [x] **Step 1: Registrar identidad y version del sistema [VPS]**
 
 ```bash
 lsb_release -a
@@ -90,7 +90,7 @@ timedatectl
 
 Esperado: `Ubuntu 24.04.x LTS`, kernel 6.8+ y hora sincronizada. Anotar la version exacta.
 
-- [ ] **Step 2: Registrar cuentas y acceso [VPS]**
+- [x] **Step 2: Registrar cuentas y acceso [VPS]**
 
 ```bash
 getent passwd | awk -F: '$3>=1000 {print $1, $3, $6}'
@@ -105,7 +105,7 @@ Esperado: al menos un usuario no-root con sudo. Anotar si existe `50-cloud-init.
 ls -la /etc/ssh/sshd_config.d/
 ```
 
-- [ ] **Step 3: Registrar superficie de red y contenedores [VPS]**
+- [x] **Step 3: Registrar superficie de red y contenedores [VPS]**
 
 ```bash
 ss -tulpn
@@ -116,7 +116,7 @@ sudo ufw status verbose || echo 'ufw no instalado'
 
 Esperado: `:22` publico, `127.0.0.1:3000` y `127.0.0.1:3001` de loopback, `db` sin puertos. Anotar cualquier puerto en `0.0.0.0` distinto de 22.
 
-- [ ] **Step 4: Registrar recursos y estado [VPS]**
+- [x] **Step 4: Registrar recursos y estado [VPS]**
 
 ```bash
 df -h /
@@ -128,7 +128,7 @@ apt list --upgradable 2>/dev/null | wc -l
 
 Esperado: RAM disponible y swap (si no hay swap, la tarea 5 lo crea). Anotar fallos de systemd y paquetes pendientes.
 
-- [ ] **Step 5: Confirmar punto de rollback [VPS]**
+- [x] **Step 5: Confirmar punto de rollback [VPS]** — sin stack (VPS nuevo, despliegue posterior) y sin snapshot (OVH lo cobra aparte); mitigacion: respaldos por timestamp del instalador + prueba de sesion previa al cierre
 
 ```bash
 sudo docker compose \
@@ -149,7 +149,7 @@ Esperado: stack en ejecucion. Si el proveedor ofrece snapshot del VPS, crear uno
 - Create: `deploy/host/install.sh`
 - Modify: `.dockerignore`
 
-- [ ] **Step 1: Crear directorios [repo]**
+- [x] **Step 1: Crear directorios [repo]**
 
 ```bash
 mkdir -p deploy/host/{ssh,fail2ban,ufw,docker,sysctl,limits,apt,journald,auditd,sudoers}
@@ -157,7 +157,7 @@ mkdir -p deploy/backup
 mkdir -p observability/prometheus
 ```
 
-- [ ] **Step 2: Crear `deploy/host/install.sh` [repo]**
+- [x] **Step 2: Crear `deploy/host/install.sh` [repo]**
 
 Contenido completo:
 
@@ -290,13 +290,13 @@ main() {
 main "$@"
 ```
 
-- [ ] **Step 3: Dar permisos de ejecucion [repo]**
+- [x] **Step 3: Dar permisos de ejecucion [repo]**
 
 ```bash
 chmod +x deploy/host/install.sh
 ```
 
-- [ ] **Step 4: Crear `deploy/README.md` [repo]**
+- [x] **Step 4: Crear `deploy/README.md` [repo]**
 
 Contenido completo:
 
@@ -419,7 +419,7 @@ cuenta y la zona (manual, en el panel):
   `systemctl restart docker`.
 ````
 
-- [ ] **Step 5: Excluir `deploy/` del contexto Docker [repo]**
+- [x] **Step 5: Excluir `deploy/` del contexto Docker [repo]**
 
 En `.dockerignore`, agregar al final:
 
@@ -427,7 +427,7 @@ En `.dockerignore`, agregar al final:
 deploy
 ```
 
-- [ ] **Step 6: Verificar [repo]**
+- [x] **Step 6: Verificar [repo]**
 
 ```bash
 bash -n deploy/host/install.sh
@@ -445,7 +445,7 @@ Esperado: sintaxis valida; `deploy/` visible para Git (no ignorado).
 - Create: `deploy/host/ssh/10-sipeg-hardening.conf`
 - Create: `deploy/host/fail2ban/sshd.local`
 
-- [ ] **Step 1: Verificar que existe un usuario administrador no-root [VPS]**
+- [x] **Step 1: Verificar que existe un usuario administrador no-root [VPS]**
 
 ```bash
 getent passwd | awk -F: '$3>=1000 {print $1}'
@@ -465,7 +465,7 @@ sudo chmod 600 /home/sipeg-admin/.ssh/authorized_keys
 
 Probar en una terminal nueva: `ssh sipeg-admin@<VPS>` antes de continuar.
 
-- [ ] **Step 2: Crear `deploy/host/ssh/10-sipeg-hardening.conf` [repo]**
+- [x] **Step 2: Crear `deploy/host/ssh/10-sipeg-hardening.conf` [repo]**
 
 El prefijo `10-` es deliberado: `sshd` usa el primer valor que encuentra y
 Ubuntu incluye `/etc/ssh/sshd_config.d/*.conf` en orden alfabetico, de modo que
@@ -494,7 +494,7 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 ```
 
-- [ ] **Step 3: Crear `deploy/host/fail2ban/sshd.local` [repo]**
+- [x] **Step 3: Crear `deploy/host/fail2ban/sshd.local` [repo]**
 
 ```ini
 [DEFAULT]
@@ -509,7 +509,7 @@ enabled = true
 port = ssh
 ```
 
-- [ ] **Step 4: Aplicar el componente [VPS]**
+- [x] **Step 4: Aplicar el componente [VPS]**
 
 ```bash
 sudo deploy/host/install.sh ssh
@@ -519,7 +519,7 @@ Esperado: `sshd -t` sin errores; mensaje `ssh efectivo:` con
 `passwordauthentication no`, `permitrootlogin no`, `maxauthtries 3` y
 `authenticationmethods publickey`.
 
-- [ ] **Step 5: Probar una segunda sesion antes de cerrar la actual [VPS]**
+- [x] **Step 5: Probar una segunda sesion antes de cerrar la actual [VPS]** — probada con la clave real (alias `sipeg-vps`); el primer intento fallo solo porque ofrecio la clave default equivocada
 
 En una terminal nueva (sin cerrar la sesion actual):
 
@@ -530,7 +530,7 @@ ssh -o PreferredAuthentications=publickey sipeg-admin@<VPS> 'echo acceso-ok'
 Esperado: `acceso-ok`. Si falla, restaurar desde
 `/var/backups/sipeg-hardening/<timestamp>/` y recargar `ssh`.
 
-- [ ] **Step 6: Verificar fail2ban [VPS]**
+- [x] **Step 6: Verificar fail2ban [VPS]**
 
 ```bash
 sudo fail2ban-client status sshd
@@ -540,7 +540,7 @@ sudo sshd -T | grep -E '^(passwordauthentication|permitrootlogin|maxauthtries|au
 Esperado: jail activo con 0 banned al inicio y las cuatro directivas con los
 valores esperados.
 
-- [ ] **Step 7: Registrar cambios [repo]**
+- [x] **Step 7: Registrar cambios [repo]**
 
 ```bash
 git status --short
@@ -554,7 +554,7 @@ git diff --stat
 **Files:**
 - Create: `deploy/host/ufw/setup.sh`
 
-- [ ] **Step 1: Crear `deploy/host/ufw/setup.sh` [repo]**
+- [x] **Step 1: Crear `deploy/host/ufw/setup.sh` [repo]** — ampliado en aplicacion: limpieza de reglas genericas `OpenSSH` del 22 que sombreaban el LIMIT (primer match gana en UFW)
 
 ```bash
 #!/usr/bin/env bash
@@ -583,7 +583,7 @@ ufw --force enable
 ufw status verbose
 ```
 
-- [ ] **Step 2: Dar permisos y aplicar [repo + VPS]**
+- [x] **Step 2: Dar permisos y aplicar [repo + VPS]**
 
 ```bash
 chmod +x deploy/host/ufw/setup.sh
@@ -596,7 +596,7 @@ sudo deploy/host/install.sh firewall
 Esperado: `Status: active`, `Default: deny (incoming), allow (outgoing)` y la
 regla de 22 (limitada o restringida al CIDR).
 
-- [ ] **Step 3: Verificar que el SSH actual sigue vivo [VPS]**
+- [x] **Step 3: Verificar que el SSH actual sigue vivo [VPS]**
 
 ```bash
 ss -tulpn | grep ':22'
@@ -604,7 +604,7 @@ ss -tulpn | grep ':22'
 
 Esperado: `sshd` escuchando. No cerrar la sesion.
 
-- [ ] **Step 4: Verificar superficie desde el equipo del operador [operador]**
+- [x] **Step 4: Verificar superficie desde el equipo del operador [operador]** — solo `22/tcp` en IPv4; IPv6 sin puertos alcanzables
 
 ```bash
 nmap -Pn -p- <IP_DEL_VPS>
@@ -613,7 +613,7 @@ nmap -Pn -p- <IP_DEL_VPS>
 Esperado: solo `22/tcp` abierto (o filtrado). Cualquier otro puerto abierto es
 un fallo: revisar `docker ps` y `ss -tulpn` en el VPS.
 
-- [ ] **Step 5: Confirmar que Docker no publica nada fuera de loopback [VPS]**
+- [x] **Step 5: Confirmar que Docker no publica nada fuera de loopback [VPS]**
 
 ```bash
 sudo docker ps --format '{{.Names}}\t{{.Ports}}' | grep -v '127.0.0.1' || echo 'solo loopback'
@@ -632,7 +632,7 @@ Esperado: la segunda salida vacia.
 - Create: `deploy/host/apt/99-sipeg-needrestart.conf`
 - Create: `deploy/host/journald/limits.conf`
 
-- [ ] **Step 1: Crear `deploy/host/apt/20auto-upgrades` [repo]**
+- [x] **Step 1: Crear `deploy/host/apt/20auto-upgrades` [repo]**
 
 ```text
 APT::Periodic::Update-Package-Lists "1";
@@ -640,7 +640,7 @@ APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 ```
 
-- [ ] **Step 2: Crear `deploy/host/apt/50unattended-upgrades` [repo]**
+- [x] **Step 2: Crear `deploy/host/apt/50unattended-upgrades` [repo]**
 
 Reemplaza al archivo de fabrica (respaldado por el instalador). Incluye el
 origen de Docker y reinicio programado a las 03:00 hora local.
@@ -669,14 +669,14 @@ Unattended-Upgrade::Automatic-Reboot-Time "03:00";
 Unattended-Upgrade::SyslogEnable "true";
 ```
 
-- [ ] **Step 3: Crear `deploy/host/apt/99-sipeg-needrestart.conf` [repo]**
+- [x] **Step 3: Crear `deploy/host/apt/99-sipeg-needrestart.conf` [repo]**
 
 ```text
 $nrconf{restart} = 'a';
 $nrconf{kernelhints} = 0;
 ```
 
-- [ ] **Step 4: Crear `deploy/host/journald/limits.conf` [repo]**
+- [x] **Step 4: Crear `deploy/host/journald/limits.conf` [repo]**
 
 ```ini
 [Journal]
@@ -685,7 +685,7 @@ SystemKeepFree=1G
 MaxRetentionSec=1month
 ```
 
-- [ ] **Step 5: Aplicar el componente [VPS]**
+- [x] **Step 5: Aplicar el componente [VPS]** — patches aplicado con respaldos; kernel diferido a Tarea 6: el componente `kernel` instala los artefactos sysctl/limits de la Tarea 6 (bug de orden del plan), por lo que su aplicacion ocurre alli en una sola pasada
 
 ```bash
 sudo apt-get update
@@ -693,7 +693,7 @@ sudo deploy/host/install.sh patches
 sudo deploy/host/install.sh kernel
 ```
 
-- [ ] **Step 6: Verificar origenes y reinicio programado [VPS]**
+- [x] **Step 6: Verificar origenes y reinicio programado [VPS]** — hallazgo: el repo de Docker servia suite `noble` sobre un sistema `resolute`, por lo que el origen `o=Docker,a=resolute` no casaba con los paquetes (`a=noble`). Fix versionado: `deploy/host/apt/docker.sources` con `Suites: resolute` (suite publicado, HTTP 200 verificado), instalado por el componente `patches`
 
 ```bash
 sudo unattended-upgrade --dry-run --debug 2>&1 | grep -E 'Allowed origins|docker-ce|Packages that will be upgraded' | head -20
@@ -706,7 +706,7 @@ disponible; `enabled`; reboot `true` a las `03:00`. Si `docker-ce` no aparece,
 revisar el origen real con `apt-cache policy docker-ce` y ajustar la linea
 `"Docker:${distro_codename}"` al `a=` que reporte apt.
 
-- [ ] **Step 7: Ajustar hora y NTP [VPS]**
+- [x] **Step 7: Ajustar hora y NTP [VPS]**
 
 ```bash
 sudo timedatectl set-timezone America/Panama
@@ -716,7 +716,7 @@ timedatectl status
 
 Esperado: `Time zone: America/Panama` y `System clock synchronized: yes`.
 
-- [ ] **Step 8: Crear swap si no existe [VPS]**
+- [x] **Step 8: Crear swap si no existe [VPS]**
 
 ```bash
 swapon --show
