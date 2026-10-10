@@ -742,7 +742,7 @@ Esperado: `free -h` muestra 2.0Gi de swap y `swapon --show` lista `/swapfile`.
 - Create: `deploy/host/sysctl/99-sipeg-hardening.conf`
 - Create: `deploy/host/limits/99-sipeg-limits.conf`
 
-- [ ] **Step 1: Crear `deploy/host/sysctl/99-sipeg-hardening.conf` [repo]**
+- [x] **Step 1: Crear `deploy/host/sysctl/99-sipeg-hardening.conf` [repo]**
 
 ```text
 # Endurecimiento de kernel y red SIPEG UTP.
@@ -775,20 +775,20 @@ net.ipv6.conf.default.accept_redirects = 0
 vm.swappiness = 10
 ```
 
-- [ ] **Step 2: Crear `deploy/host/limits/99-sipeg-limits.conf` [repo]**
+- [x] **Step 2: Crear `deploy/host/limits/99-sipeg-limits.conf` [repo]**
 
 ```text
 * hard core 0
 * soft core 0
 ```
 
-- [ ] **Step 3: Aplicar [VPS]**
+- [x] **Step 3: Aplicar [VPS]** — aplicado en una sola pasada de `install.sh kernel` (sysctl+limits+journald), tras resolver el bug de orden con la Tarea 5
 
 ```bash
 sudo deploy/host/install.sh kernel
 ```
 
-- [ ] **Step 4: Verificar valores efectivos [VPS]**
+- [x] **Step 4: Verificar valores efectivos [VPS]** — 1, 2, 1, 10, 2; ulimit -c 0; docker operativo
 
 ```bash
 sysctl kernel.dmesg_restrict kernel.kptr_restrict kernel.yama.ptrace_scope vm.swappiness net.ipv4.conf.all.rp_filter
@@ -798,7 +798,7 @@ sudo docker info >/dev/null && echo 'docker sigue operativo'
 
 Esperado: `1`, `2`, `1`, `10`, `2`, `0` y Docker operativo.
 
-- [ ] **Step 5: Verificar journald [VPS]**
+- [x] **Step 5: Verificar journald [VPS]** — 8M en uso vs tope 500M; directivas presentes
 
 ```bash
 journalctl --disk-usage
