@@ -19,7 +19,7 @@ Componentes individuales de `deploy/host/install.sh`:
 | --- | --- |
 | `ssh` | Directivas SSH y jail de fail2ban |
 | `firewall` | UFW (deny incoming, allow outgoing, SSH limitado) |
-| `patches` | unattended-upgrades, needrestart y journald |
+| `patches` | unattended-upgrades, needrestart y source de apt de Docker (`resolute`) |
 | `kernel` | sysctl, limites de core y journald |
 | `docker` | `daemon.json` y reinicio del daemon |
 | `sudo` | Politica de sudo |
