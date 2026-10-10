@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ClassroomType" ADD VALUE 'CONFERENCE_ROOM';

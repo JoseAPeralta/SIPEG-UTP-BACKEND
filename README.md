@@ -361,7 +361,7 @@ El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET 
 
 ### Aulas
 
-- `GET /api/v1/classrooms` es público y devuelve solo aulas activas por defecto; `isActive=false` lista las inactivas. Paginación offset (`page`/`limit`, máximo 50) y filtros `type` (`LABORATORY`/`CLASSROOM`), `minCapacity` y `amenity` (insensible a mayúsculas).
+- `GET /api/v1/classrooms` es público y devuelve solo aulas activas por defecto; `isActive=false` lista las inactivas. Paginación offset (`page`/`limit`, máximo 50) y filtros `type` (`LABORATORY`/`CLASSROOM`/`CONFERENCE_ROOM`), `minCapacity` y `amenity` (insensible a mayúsculas).
 - `GET /api/v1/classrooms/{id}` es público e incluye `amenities` y las ventanas semanales `availability` (`dayOfWeek` ISO 1-7, `startTime`/`endTime` en `HH:mm`, `period` opcional).
 - `GET /api/v1/classrooms/available` es público y exige `date` (`YYYY-MM-DD`), `startTime` y `endTime`; acepta `minCapacity`, `type` y `amenity`. Devuelve las aulas activas cuya ventana cubre el intervalo en el día institucional solicitado y que no están reservadas por actividades con estado efectivo `SCHEDULED`/`ONGOING`; las que ya terminaron (efectivo `COMPLETED`), `DRAFT` y `CANCELLED` no bloquean.
 - `POST /api/v1/classrooms` y `PATCH /api/v1/classrooms/{id}` (solo `ADMIN`) gestionan `name`, `type`, `capacity` (> 0), `building` y `floor`; el PATCH admite `isActive` y rechaza con `409` desactivar un aula con actividades efectivamente `SCHEDULED`/`ONGOING`. Un body vacío o con claves desconocidas responde `400`.
@@ -710,7 +710,7 @@ mostrar `health=error` de la ultima evaluacion fallida.
 
 - 6 facultades y 4 subdirecciones, cada una con su programa predeterminado y encargado.
 - 25 carreras: 24 oficiales distribuidas por facultad más la carrera global `Otros` (sin unidad).
-- 39 usuarios demo + 15 aulas con amenidades y disponibilidad.
+- 39 usuarios demo + 23 aulas con amenidades y disponibilidad.
 - 8 programas adicionales (activos, completado, archivado y borrador) y 40 actividades con
   los 8 tipos del catálogo (`WORKSHOP`, `SEMINAR`, `TALK`, `CONFERENCE`, `PANEL`, `COURSE`,
   `COMPETITION`, `OTHER`), incluyendo variantes `DRAFT`, `CANCELLED` con motivo, sin aula,
@@ -745,7 +745,7 @@ seguro en produccion (no requiere `SEED_ALLOW_PRODUCTION`):
 - 10 unidades organizativas (6 facultades + 4 subdirecciones) con sus 10 programas
   de eventos predeterminados.
 - 25 carreras: 24 oficiales más la carrera global `Otros` (sin unidad).
-- 10 aulas con amenidades y ventanas de disponibilidad.
+- 23 aulas con amenidades y ventanas de disponibilidad.
 - ADMIN inicial opcional via `SEED_ADMIN_*` (ver `.env.example`).
 
 Reglas del modo base:
