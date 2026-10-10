@@ -99,6 +99,12 @@ describe('security middleware', () => {
     delete process.env['DOCS_ENABLED'];
   });
 
+  it('trusts exactly one proxy hop so req.ip uses X-Forwarded-For', async () => {
+    const { app } = await loadApp();
+
+    expect(app.get('trust proxy')).toBe(1);
+  });
+
   it('rejects requests from origins outside the allowlist and logs security.cors.denied', async () => {
     const { app } = await loadApp();
 

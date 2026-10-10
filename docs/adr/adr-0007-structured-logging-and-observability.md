@@ -287,10 +287,15 @@ automatica.
 | docker-socket-proxy  | `v0.5.0`      | `compose.observability.yaml`            | `sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459` |
 | PostgreSQL           | `18.6-alpine` | `compose.dev.yaml`, `compose.prod.yaml` | `sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd` |
 | Mailpit (desarrollo) | `v1.27.8`     | `compose.dev.yaml`                      | `sha256:6abc8e633df15eaf785cfcf38bae48e66f64beecdc03121e249d0f9ec15f0707` |
+| Cloudflare Tunnel    | `2026.9.3`    | `compose.cloudflare.yaml`               | `sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c` |
 
-Los digests se tomaron de `docker image inspect --format '{{index .RepoDigests 0}}'`
+Los digests del stack inicial se tomaron de `docker image inspect --format '{{index .RepoDigests 0}}'`
 sobre las imagenes efectivamente usadas por el stack, no de una pagina de
 releases, y se comprobaron con `docker compose pull` contra el registro.
+
+El tag y digest de `cloudflared` se verificaron con `docker buildx imagetools inspect`
+contra el registro (2026-10-10), tanto por tag como por la referencia fijada. El
+manifiesto incluye `linux/amd64` y `linux/arm64`.
 
 **Unica excepcion: la imagen de la API.** `compose.prod.yaml` construye
 `sipeg-utp-backend:${IMAGE_TAG:?...}` localmente. Un digest solo existe cuando la

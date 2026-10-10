@@ -13,7 +13,7 @@
 #       docker compose -f compose.dev.yaml -f compose.observability.yaml up -d
 #   Produccion (se une a compose.prod.yaml, .env.prod):
 #     docker compose -f compose.prod.yaml -f compose.observability.yaml \
-#       --env-file .env.prod up -d
+#       -f compose.cloudflare.yaml --env-file .env.prod up -d
 #
 # `LOKI_CONFIG` elige la ventana de retencion (168 h en dev, 720 h + 90 dias de
 # seguridad en produccion). Ver observability/loki/.
@@ -173,8 +173,9 @@ services:
       # debe permanecer estable entre reinicios.
       GF_SECURITY_SECRET_KEY: ${GRAFANA_SECRET_KEY:?GRAFANA_SECRET_KEY is required}
     ports:
-      # Solo loopback. En produccion debe quedar detras de un proxy con TLS
-      # (T9.7); publicar 3000 sin restriccion lo dejaria en la red institucional.
+      # Solo loopback para comprobaciones desde el host. En produccion,
+      # Cloudflare Tunnel (compose.cloudflare.yaml) alcanza `grafana:3000` por
+      # `observability`; Cloudflare termina HTTPS y Access protege el hostname.
       - '127.0.0.1:${GRAFANA_PORT:-3001}:3000'
     volumes:
       # Persistencia propia: usuarios, datasource, paneles, alertas y la base

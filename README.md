@@ -487,7 +487,13 @@ docker compose -f compose.prod.yaml -f compose.observability.yaml --env-file .en
   cliente previsto es un proxy TLS en el host que **aun no existe**: hoy la API se
   serviria en HTTP plano. Ver la seccion "Puertos Publicados" de
   `docs/adr/adr-0007-structured-logging-and-observability.md`, que incluye la
-  condicion `trust proxy: 1` que ese proxy debe respetar.
+  condicion `trust proxy: 1` que ese proxy debe respetar: Express confia en el
+  salto del socket y selecciona la IP mas a la derecha de `X-Forwarded-For`.
+  Lo que determina la agrupacion por IP es el valor controlado por la frontera
+  confiable, no el numero total de intermediarios de red. Con Cloudflare Tunnel,
+  `cloudflared` es el salto del socket y Cloudflare escribe o anade al final la
+  IP de quien se conecta a su frontera. La cadena real y el aislamiento de los
+  buckets se verifican contra la API publica (tarea 9 del plan de despliegue).
 - `GRAFANA_ADMIN_PASSWORD` solo se aplica al inicializar un volumen vacio: si el
   volumen `grafana_data` ya existe, cambiar la variable no cambia la contrasena.
   `GRAFANA_SECRET_KEY` debe permanecer igual entre reinicios, o se invalidan las
