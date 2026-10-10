@@ -7,7 +7,7 @@ import type { HealthStatusResponse } from './health.model.js';
 const checkJwks = async (): Promise<boolean> => {
   try {
     const url = new URL('/api/auth/jwks', env.AUTH_URL).toString();
-    const response = await fetch(url);
+    const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
     return response.ok;
   } catch {
     return false;

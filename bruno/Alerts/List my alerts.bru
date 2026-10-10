@@ -1,0 +1,69 @@
+meta {
+  name: List my alerts
+  type: http
+  seq: 2
+  tags: [
+    Alerts
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/alerts?page=1&limit=20
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+script:post-response {
+  const data = res.getBody()?.data;
+
+  if (data?.items?.length) {
+    bru.setVar("myAlertId", data.items[0].id);
+  }
+}
+
+tests {
+  test("the recipient sees their own alerts", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Alerts retrieved successfully.");
+    expect(body.data.page).to.equal(1);
+    expect(body.data.limit).to.equal(20);
+    expect(body.data.total).to.be.at.least(1);
+    expect(body.data.totalPages).to.be.at.least(1);
+    expect(body.data.items.length).to.be.at.least(1);
+  });
+
+  test("each item carries a discriminated target and no internal columns", function () {
+    const first = res.getBody().data.items[0];
+    expect(first.id).to.be.a("string");
+    expect(first.type).to.be.a("string");
+    expect(first.isRead).to.be.a("boolean");
+    expect(Date.parse(first.createdAt)).to.not.equal(NaN);
+    expect(first.target.kind).to.be.oneOf(["PROPOSAL", "EVENT_PROGRAM", "ACTIVITY", "CERTIFICATE"]);
+    expect(first.target.id).to.be.a("string");
+
+    const serialized = JSON.stringify(res.getBody());
+    expect(serialized).to.not.include("recipientId");
+    expect(serialized).to.not.include("proposalId");
+    expect(serialized).to.not.include("activityId");
+    expect(serialized).to.not.include("eventProgramId");
+    expect(serialized).to.not.include("certificateId");
+  });
+
+  test("the ordering is descending by creation", function () {
+    const created = res
+      .getBody()
+      .data.items.map(function (item) {
+        return Date.parse(item.createdAt);
+      });
+
+    for (let index = 1; index < created.length; index += 1) {
+      expect(created[index - 1] >= created[index]).to.equal(true);
+    }
+  });
+}

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { OrganizationalUnitDetail } from './organizational-units.types.js';
 
+const NOW = new Date('2026-09-19T15:00:00.000Z');
+
 interface PrismaMock {
   user: { findUnique: ReturnType<typeof vi.fn> };
   organizationalUnit: {
@@ -451,13 +453,23 @@ describe('organizational units service', () => {
     prisma.activity.count.mockResolvedValue(2);
     const { deactivateOrganizationalUnit } = await loadService(prisma);
 
-    await expect(deactivateOrganizationalUnit('unit-001')).rejects.toMatchObject({
+    await expect(deactivateOrganizationalUnit('unit-001', {}, NOW)).rejects.toMatchObject({
       statusCode: 409,
       message:
         'Cannot deactivate an organizational unit whose default event program has scheduled or ongoing activities.',
     });
     expect(prisma.activity.count).toHaveBeenCalledWith({
-      where: { eventProgramId: 'program-001', status: { in: ['SCHEDULED', 'ONGOING'] } },
+      where: {
+        eventProgramId: 'program-001',
+        status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED'] },
+        OR: [
+          { date: { gt: new Date('2026-09-19T00:00:00.000Z') } },
+          {
+            date: new Date('2026-09-19T00:00:00.000Z'),
+            endTime: { gt: new Date('1970-01-01T10:00:00.000Z') },
+          },
+        ],
+      },
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });

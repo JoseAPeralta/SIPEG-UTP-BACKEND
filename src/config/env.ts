@@ -20,14 +20,13 @@ const envSchema = z
     CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
     AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 chars.'),
     AUTH_URL: z.string().url().default('http://localhost:3000'),
-    AUTH_ISSUER: z.string().min(1).optional(),
-    AUTH_AUDIENCE: z.string().min(1).optional(),
+    AUTH_ISSUER: optionalNonEmptyString,
+    AUTH_AUDIENCE: optionalNonEmptyString,
     AUTH_TOKEN_TTL: ttlSchema.default('15m'),
     AUTH_REFRESH_TTL: ttlSchema.default('7d'),
-    // Donde vive el frontend respecto de la API. Mismo host exige `lax`; un
-    // frontend aparte (Workers, Vercel) exige `none`, que obliga a `Secure` y a
-    // validar el `Origin`. En produccion es obligatoria: descubrirlo con usuarios
-    // dentro seria una sesion que no persiste entre pestanas.
+    // Mismo dominio registrable y esquema permiten `lax`, tambien con Workers
+    // o Vercel. Otro sitio exige `none`, `Secure` y validar el `Origin`.
+    // En produccion la politica debe configurarse explicitamente.
     AUTH_REFRESH_COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).optional(),
     AUTH_EMAIL_VERIFICATION_URL: z.string().url().default('http://localhost:5173/verify-email'),
     AUTH_PASSWORD_RESET_URL: z.string().url().default('http://localhost:5173/reset-password'),
@@ -42,7 +41,7 @@ const envSchema = z
     MAIL_USER: optionalNonEmptyString,
     MAIL_PASSWORD: optionalNonEmptyString,
     MAIL_FROM: z.string().min(1).default('SIPEG UTP <no-reply@sipeg.local>'),
-    TRUSTED_ORIGINS: z.string().min(1).optional(),
+    TRUSTED_ORIGINS: optionalNonEmptyString,
     DOCS_ENABLED: z
       .enum(['true', 'false'])
       .transform((value) => value === 'true')

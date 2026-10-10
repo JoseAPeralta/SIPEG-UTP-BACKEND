@@ -1,0 +1,37 @@
+meta {
+  name: List activities by classroom
+  type: http
+  seq: 43
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities?page=1&limit=50&when=all&classroomId={{classroomId}}
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 50
+  when: all
+  classroomId: {{classroomId}}
+}
+
+docs {
+  Public. Filters the global list by classroom. Activities without a classroom are excluded.
+}
+
+tests {
+  test("returns a page of activities", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.be.an("array");
+    body.data.items.forEach(function (activity) {
+      expect(activity.classroom).to.be.an("object");
+    });
+  })
+}

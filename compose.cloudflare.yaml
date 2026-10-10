@@ -1,0 +1,31 @@
+# Overlay de produccion: Cloudflare Tunnel para la API y Grafana.
+# Combinar con compose.prod.yaml y compose.observability.yaml, en ese orden.
+# Las redes las declaran los archivos base; el token vive solo en .env.prod.
+# El conector inicia sin esperar a la API, para que la ruta publica del JWKS
+# pueda estar disponible durante el arranque.
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c
+    command: ['tunnel', '--no-autoupdate', 'run']
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?CLOUDFLARE_TUNNEL_TOKEN is required}
+    restart: unless-stopped
+    logging:
+      driver: local
+      options:
+        max-size: '20m'
+        max-file: '5'
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - sipeg-utp-prod
+      - observability
+
+  grafana:
+    environment:
+      GF_SERVER_DOMAIN: grafana.sipeg-utp.com
+      GF_SERVER_ROOT_URL: https://grafana.sipeg-utp.com/
+      GF_SERVER_PROTOCOL: http
+      GF_SECURITY_COOKIE_SECURE: 'true'

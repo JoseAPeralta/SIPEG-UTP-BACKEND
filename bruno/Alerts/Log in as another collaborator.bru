@@ -1,0 +1,40 @@
+meta {
+  name: Log in as another collaborator
+  type: http
+  seq: 12
+  tags: [
+    Alerts
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  X-Forwarded-For: 203.0.113.243
+}
+
+body:json {
+  {
+    "email": "{{alertOtherEmail}}",
+    "password": "{{alertPassword}}"
+  }
+}
+
+script:post-response {
+  const body = res.getBody();
+
+  if (body?.success && body.data?.accessToken) {
+    bru.setVar("token", body.data.accessToken);
+  }
+}
+
+tests {
+  test("the second user logs in to attempt a horizontal access", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().data.accessToken).to.be.a("string");
+  });
+}

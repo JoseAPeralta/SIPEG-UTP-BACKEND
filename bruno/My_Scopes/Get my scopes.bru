@@ -1,0 +1,59 @@
+meta {
+  name: Get my scopes
+  type: http
+  seq: 2
+  tags: [
+    My_Scopes
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/scopes
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the head discovers its direct program scopes", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.page).to.equal(1);
+    expect(body.data.limit).to.equal(20);
+    expect(body.data.total).to.be.at.least(1);
+    expect(body.data.items).to.be.an("array");
+    expect(body.data.totalPages).to.be.at.least(1);
+    expect(
+      body.data.items.every(function (item) {
+        return item.type === "program";
+      })
+    ).to.equal(true);
+  });
+
+  test("the congreso-cit scope carries its bounded permission:grant", function () {
+    const item = res.getBody().data.items.find(function (entry) {
+      return entry.id === "seed_program_congreso-cit";
+    });
+    expect(item).to.be.an("object");
+    expect(item.eventProgram).to.equal(null);
+    expect(item.organizationalUnit).to.be.an("object");
+    const grant = item.permissions.find(function (entry) {
+      return entry.name === "permission:grant";
+    });
+    expect(grant).to.be.an("object");
+    expect(grant.origin).to.equal("LOCAL");
+    expect(grant.validFrom).to.be.a("string");
+    expect(grant.validUntil).to.be.a("string");
+  });
+
+  test("the response does not expose audit fields or emails", function () {
+    const serialized = JSON.stringify(res.getBody());
+    expect(serialized).to.not.include("grantedById");
+    expect(serialized).to.not.include("grantedAt");
+    expect(serialized).to.not.include("@utp.ac.pa");
+  });
+}

@@ -1,0 +1,38 @@
+meta {
+  name: Get my program scopes
+  type: http
+  seq: 3
+  tags: [
+    My_Scopes
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/scopes?type=program
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the type filter keeps only program scopes", function () {
+    expect(res.getStatus()).to.equal(200);
+    const items = res.getBody().data.items;
+    expect(items.length).to.be.at.least(1);
+    expect(
+      items.every(function (item) {
+        return item.type === "program" && item.eventProgram === null;
+      })
+    ).to.equal(true);
+  });
+
+  test("the FISC default program appears as a program scope", function () {
+    const ids = res.getBody().data.items.map(function (item) {
+      return item.id;
+    });
+    expect(ids).to.include("seed_program_fisc_default");
+  });
+}

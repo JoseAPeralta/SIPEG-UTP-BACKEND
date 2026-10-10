@@ -6,10 +6,13 @@ import {
   collaboratorParamsSchema,
   collaboratorUserParamsSchema,
   grantPermissionSchema,
+  listUserScopesQuerySchema,
   ownPermissionsQuerySchema,
   ownPermissionsSchema,
+  paginatedUserScopesSchema,
   revokePermissionSchema,
   updateCollaboratorRoleSchema,
+  userScopeSchema,
 } from './authorization.schemas.js';
 
 describe('collaborator request schemas', () => {
@@ -371,6 +374,101 @@ describe('own permissions response schema', () => {
       ownPermissionsSchema.parse({
         scope: { type: 'program', id: 'program-001' },
         permissions: [{ name: 'activity:read', validFrom: null, validUntil: null }],
+      }),
+    ).toThrow();
+  });
+});
+
+describe('list user scopes query schema', () => {
+  it('applies pagination defaults without a type filter', () => {
+    const parsed = listUserScopesQuerySchema.parse({ query: {} });
+
+    expect(parsed.query).toEqual({ page: 1, limit: 20 });
+  });
+
+  it('coerces pagination and accepts the scope type', () => {
+    const parsed = listUserScopesQuerySchema.parse({
+      query: { type: 'activity', page: '2', limit: '5' },
+    });
+
+    expect(parsed.query).toEqual({ type: 'activity', page: 2, limit: 5 });
+  });
+
+  it('rejects an unknown type', () => {
+    expect(() => listUserScopesQuerySchema.parse({ query: { type: 'team' } })).toThrow();
+  });
+
+  it('rejects a page below 1', () => {
+    expect(() => listUserScopesQuerySchema.parse({ query: { page: '0' } })).toThrow();
+  });
+
+  it('rejects a limit above 50', () => {
+    expect(() => listUserScopesQuerySchema.parse({ query: { limit: '51' } })).toThrow();
+  });
+
+  it('rejects unknown query keys', () => {
+    expect(() => listUserScopesQuerySchema.parse({ query: { userId: 'user-002' } })).toThrow();
+  });
+});
+
+describe('user scopes response schema', () => {
+  const programItem = {
+    type: 'program',
+    id: 'program-001',
+    name: 'Programa Uno',
+    status: 'DRAFT',
+    eventProgram: null,
+    organizationalUnit: { id: 'unit-001', name: 'Facultad', type: 'FACULTY' },
+    permissions: [{ name: 'program:read', origin: 'LOCAL', validFrom: null, validUntil: null }],
+  };
+
+  const activityItem = {
+    type: 'activity',
+    id: 'activity-001',
+    name: 'Actividad Uno',
+    status: 'ONGOING',
+    eventProgram: {
+      id: 'program-001',
+      name: 'Programa Uno',
+      label: 'Congreso',
+      status: 'ACTIVE',
+    },
+    organizationalUnit: { id: 'unit-001', name: 'Facultad', type: 'FACULTY' },
+    permissions: [
+      { name: 'activity:read', origin: 'INHERITED', validFrom: null, validUntil: null },
+    ],
+  };
+
+  it('accepts program and activity items', () => {
+    expect(userScopeSchema.parse(programItem).eventProgram).toBeNull();
+    expect(userScopeSchema.parse(activityItem).eventProgram?.label).toBe('Congreso');
+  });
+
+  it('accepts an empty page', () => {
+    const parsed = paginatedUserScopesSchema.parse({
+      items: [],
+      page: 1,
+      limit: 20,
+      total: 0,
+      totalPages: 0,
+    });
+
+    expect(parsed.items).toEqual([]);
+  });
+
+  it('rejects a missing organizational unit', () => {
+    const { organizationalUnit: _organizationalUnit, ...withoutUnit } = programItem;
+
+    expect(() => userScopeSchema.parse(withoutUnit)).toThrow();
+  });
+
+  it('rejects an unknown permission origin', () => {
+    expect(() =>
+      userScopeSchema.parse({
+        ...programItem,
+        permissions: [
+          { name: 'program:read', origin: 'REMOTE', validFrom: null, validUntil: null },
+        ],
       }),
     ).toThrow();
   });

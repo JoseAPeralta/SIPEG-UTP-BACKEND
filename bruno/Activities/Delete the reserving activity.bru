@@ -1,0 +1,28 @@
+meta {
+  name: Delete the reserving activity
+  type: http
+  seq: 55
+  tags: [
+    Activities
+  ]
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/activities/{{reservingActivityId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+docs {
+  Deletes the DRAFT reserving activity so this chain leaves no residue. Requires the activity:delete permission or the ADMIN role.
+}
+
+tests {
+  test("the reserving activity is deleted", function () {
+    expect(res.getStatus()).to.equal(204);
+  });
+}

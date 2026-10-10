@@ -17,9 +17,9 @@ import type { CookieOptions, Request, Response } from 'express';
  *   siempre.
  *
  * `path` se limita a `/api/v1/auth` para que la cookie no viaje en cada llamada
- * de negocio. `SameSite` depende de donde se despliegue el frontend: mismo
- * dominio que la API permite `lax`, y un frontend aparte (Workers, Vercel) exige
- * `none`, que a su vez obliga a `Secure` y a validar el `Origin` en el servidor.
+ * de negocio. `SameSite` depende del dominio registrable y del esquema: compartir
+ * ambos permite `lax`, tambien con un frontend en Workers o Vercel. Otro sitio
+ * exige `none`, que obliga a `Secure` y a validar el `Origin` en el servidor.
  * Ver `resolveRefreshCookiePolicy`.
  */
 export const REFRESH_COOKIE_NAME = 'sipeg-refresh';

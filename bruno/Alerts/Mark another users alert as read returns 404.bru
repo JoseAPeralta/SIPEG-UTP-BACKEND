@@ -1,0 +1,27 @@
+meta {
+  name: Mark another users alert as read returns 404
+  type: http
+  seq: 14
+  tags: [
+    Alerts
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/alerts/{{myAlertId}}/read
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("a foreign alert cannot be marked as read", function () {
+    expect(res.getStatus()).to.equal(404);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Alert not found.");
+  });
+}

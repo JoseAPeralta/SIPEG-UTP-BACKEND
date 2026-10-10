@@ -1,0 +1,37 @@
+meta {
+  name: List activities by unit and unit type
+  type: http
+  seq: 41
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities?page=1&limit=50&when=all&organizationalUnitId={{unitId}}&unitType=FACULTY
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 50
+  when: all
+  organizationalUnitId: {{unitId}}
+  unitType: FACULTY
+}
+
+docs {
+  Public. Filters by organizational unit and unit type. unitType must be FACULTY or SUBDIRECTORATE.
+}
+
+tests {
+  test("returns activities of the requested unit type", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    body.data.items.forEach(function (activity) {
+      expect(activity.organizationalUnit.type).to.equal("FACULTY");
+    });
+  })
+}

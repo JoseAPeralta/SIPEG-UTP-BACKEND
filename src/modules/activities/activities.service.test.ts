@@ -13,6 +13,7 @@ interface ActivityRecord {
   endTime: Date;
   maxCapacity: number | null;
   bannerUrl: string | null;
+  status: 'DRAFT' | 'SCHEDULED' | 'ONGOING' | 'COMPLETED' | 'CANCELLED';
   speakers: { speaker: { id: string; firstName: string; lastName: string } }[];
   classroom: { id: string; name: string; building: string | null } | null;
   eventProgram: {
@@ -60,6 +61,7 @@ const buildRecord = (overrides: Partial<ActivityRecord> = {}): ActivityRecord =>
   endTime: new Date('1970-01-01T17:00:00.000Z'),
   maxCapacity: 35,
   bannerUrl: null,
+  status: 'SCHEDULED',
   speakers: [
     { speaker: { id: 'speaker-001', firstName: 'Carlos', lastName: 'Rivera' } },
     { speaker: { id: 'speaker-002', firstName: 'Ana', lastName: 'Zapata' } },
@@ -85,18 +87,18 @@ describe('activities service', () => {
     vi.doUnmock('../../config/prisma.js');
   });
 
-  it('queries upcoming active activities with pagination', async () => {
+  it('queries upcoming public activities with pagination', async () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([buildRecord()]);
     prisma.activity.count.mockResolvedValue(37);
-    const { listUpcomingActivities } = await loadService(prisma);
+    const { listActivities } = await loadService(prisma);
 
-    const result = await listUpcomingActivities({ page: 2, limit: 20 }, NOW);
+    const result = await listActivities({ page: 2, limit: 20 }, null, NOW);
 
     expect(prisma.activity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          status: { in: ['SCHEDULED', 'ONGOING'] },
+          status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED'] },
           eventProgram: { status: 'ACTIVE' },
           date: { gte: new Date('2026-09-19T00:00:00.000Z') },
         },
@@ -113,9 +115,9 @@ describe('activities service', () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([]);
     prisma.activity.count.mockResolvedValue(0);
-    const { listUpcomingActivities } = await loadService(prisma);
+    const { listActivities } = await loadService(prisma);
 
-    await listUpcomingActivities({ page: 1, limit: 20 }, new Date('2026-09-20T03:00:00.000Z'));
+    await listActivities({ page: 1, limit: 20 }, null, new Date('2026-09-20T03:00:00.000Z'));
 
     expect(prisma.activity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -126,13 +128,151 @@ describe('activities service', () => {
     );
   });
 
+  it('filters past activities with an inclusive upper bound and descending order', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.activity.count.mockResolvedValue(0);
+    const { listActivities } = await loadService(prisma);
+
+    await listActivities({ page: 1, limit: 20, when: 'past' }, null, NOW);
+
+    expect(prisma.activity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED'] },
+          date: { lte: new Date('2026-09-18T00:00:00.000Z') },
+        }),
+        orderBy: [{ date: 'desc' }, { startTime: 'desc' }, { id: 'asc' }],
+      }),
+    );
+  });
+
+  it('drops the date boundary when when is all', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.activity.count.mockResolvedValue(0);
+    const { listActivities } = await loadService(prisma);
+
+    await listActivities({ page: 1, limit: 20, when: 'all' }, null, NOW);
+
+    const where = prisma.activity.findMany.mock.calls[0]?.[0]?.where;
+    expect(where).not.toHaveProperty('date');
+  });
+
+  it('intersects when with an explicit date range', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.activity.count.mockResolvedValue(0);
+    const { listActivities } = await loadService(prisma);
+
+    await listActivities(
+      { page: 1, limit: 20, when: 'upcoming', dateFrom: '2026-12-01', dateTo: '2026-12-31' },
+      null,
+      NOW,
+    );
+
+    expect(prisma.activity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          date: {
+            gte: new Date('2026-12-01T00:00:00.000Z'),
+            lte: new Date('2026-12-31T00:00:00.000Z'),
+          },
+        }),
+      }),
+    );
+  });
+
+  it('applies the program, unit, type and classroom filters', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.activity.count.mockResolvedValue(0);
+    const { listActivities } = await loadService(prisma);
+
+    await listActivities(
+      {
+        page: 1,
+        limit: 20,
+        when: 'all',
+        eventProgramId: 'program-001',
+        organizationalUnitId: 'unit-001',
+        unitType: 'FACULTY',
+        type: 'SEMINAR',
+        classroomId: 'classroom-001',
+      },
+      null,
+      NOW,
+    );
+
+    expect(prisma.activity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          eventProgramId: 'program-001',
+          type: 'SEMINAR',
+          classroomId: 'classroom-001',
+          eventProgram: {
+            status: 'ACTIVE',
+            organizationalUnitId: 'unit-001',
+            organizationalUnit: { type: 'FACULTY' },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('lets an admin filter a non public status and ALL', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.activity.count.mockResolvedValue(0);
+    const { listActivities } = await loadService(prisma);
+
+    await listActivities({ page: 1, limit: 20, when: 'all', status: 'DRAFT' }, adminViewer, NOW);
+    expect(prisma.activity.findMany.mock.calls[0]?.[0]?.where?.status).toEqual('DRAFT');
+
+    await listActivities({ page: 1, limit: 20, when: 'all', status: 'ALL' }, adminViewer, NOW);
+    expect(prisma.activity.findMany.mock.calls[1]?.[0]?.where).not.toHaveProperty('status');
+  });
+
+  it('resolves the admin status filter with the effective temporal predicate', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.activity.count.mockResolvedValue(0);
+    const { listActivities } = await loadService(prisma);
+
+    await listActivities({ page: 1, limit: 20, when: 'all', status: 'ONGOING' }, adminViewer, NOW);
+
+    expect(prisma.activity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED'] },
+          date: new Date('2026-09-19T00:00:00.000Z'),
+          startTime: { lte: new Date('1970-01-01T10:00:00.000Z') },
+          endTime: { gt: new Date('1970-01-01T10:00:00.000Z') },
+        }),
+      }),
+    );
+  });
+
+  it('ignores a non public status filter for non admins', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.activity.count.mockResolvedValue(0);
+    const { listActivities } = await loadService(prisma);
+
+    await listActivities({ page: 1, limit: 20, when: 'all', status: 'DRAFT' }, regularViewer, NOW);
+
+    expect(prisma.activity.findMany.mock.calls[0]?.[0]?.where?.status).toEqual({
+      in: ['SCHEDULED', 'ONGOING', 'COMPLETED'],
+    });
+  });
+
   it('maps a full activity without leaking check-in codes', async () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([buildRecord()]);
     prisma.activity.count.mockResolvedValue(1);
-    const { listUpcomingActivities } = await loadService(prisma);
+    const { listActivities } = await loadService(prisma);
 
-    const result = await listUpcomingActivities({ page: 1, limit: 20 }, NOW);
+    const result = await listActivities({ page: 1, limit: 20 }, null, NOW);
 
     expect(result.items).toEqual([
       {
@@ -145,6 +285,7 @@ describe('activities service', () => {
         endTime: '17:00',
         capacity: 35,
         bannerUrl: null,
+        status: 'SCHEDULED',
         speakers: [
           { id: 'speaker-001', firstName: 'Carlos', lastName: 'Rivera' },
           { id: 'speaker-002', firstName: 'Ana', lastName: 'Zapata' },
@@ -160,6 +301,42 @@ describe('activities service', () => {
     ]);
     expect(JSON.stringify(result.items[0])).not.toContain('qrCode');
     expect(JSON.stringify(result.items[0])).not.toContain('manualCode');
+  });
+
+  it('derives the status of each listed activity at read time', async () => {
+    const prisma = createPrismaMock();
+    prisma.activity.findMany.mockResolvedValue([
+      buildRecord({ id: 'future', status: 'SCHEDULED' }),
+      buildRecord({
+        id: 'ongoing',
+        status: 'SCHEDULED',
+        startTime: new Date('1970-01-01T10:00:00.000Z'),
+        endTime: new Date('1970-01-01T14:00:00.000Z'),
+      }),
+      buildRecord({
+        id: 'past',
+        status: 'SCHEDULED',
+        date: new Date('2026-09-01T00:00:00.000Z'),
+      }),
+      buildRecord({ id: 'draft', status: 'DRAFT' }),
+      buildRecord({ id: 'cancelled', status: 'CANCELLED' }),
+    ]);
+    prisma.activity.count.mockResolvedValue(5);
+    const { listActivities } = await loadService(prisma);
+
+    const result = await listActivities(
+      { page: 1, limit: 20, when: 'all' },
+      null,
+      new Date('2026-09-20T17:00:00.000Z'),
+    );
+
+    expect(result.items.map((item) => [item.id, item.status])).toEqual([
+      ['future', 'SCHEDULED'],
+      ['ongoing', 'ONGOING'],
+      ['past', 'COMPLETED'],
+      ['draft', 'DRAFT'],
+      ['cancelled', 'CANCELLED'],
+    ]);
   });
 
   it('maps a subdirectorate program', async () => {
@@ -181,9 +358,9 @@ describe('activities service', () => {
       }),
     ]);
     prisma.activity.count.mockResolvedValue(1);
-    const { listUpcomingActivities } = await loadService(prisma);
+    const { listActivities } = await loadService(prisma);
 
-    const result = await listUpcomingActivities({ page: 1, limit: 20 }, NOW);
+    const result = await listActivities({ page: 1, limit: 20 }, null, NOW);
 
     expect(result.items[0]?.organizationalUnit).toEqual({
       type: 'SUBDIRECTORATE',
@@ -198,9 +375,9 @@ describe('activities service', () => {
     const prisma = createPrismaMock();
     prisma.activity.findMany.mockResolvedValue([]);
     prisma.activity.count.mockResolvedValue(0);
-    const { listUpcomingActivities } = await loadService(prisma);
+    const { listActivities } = await loadService(prisma);
 
-    const result = await listUpcomingActivities({ page: 1, limit: 20 }, NOW);
+    const result = await listActivities({ page: 1, limit: 20 }, null, NOW);
 
     expect(result).toEqual({ items: [], page: 1, limit: 20, total: 0, totalPages: 0 });
   });
@@ -209,8 +386,9 @@ describe('activities service', () => {
 interface CreatePrismaMock {
   eventProgram: { findUnique: ReturnType<typeof vi.fn> };
   classroom: { findUnique: ReturnType<typeof vi.fn> };
+  classroomAvailability: { findFirst: ReturnType<typeof vi.fn> };
   user: { findMany: ReturnType<typeof vi.fn> };
-  activity: { create: ReturnType<typeof vi.fn> };
+  activity: { create: ReturnType<typeof vi.fn>; findFirst: ReturnType<typeof vi.fn> };
   auditEvent: { create: ReturnType<typeof vi.fn> };
   $transaction: ReturnType<typeof vi.fn>;
 }
@@ -219,8 +397,9 @@ const createCreatePrismaMock = (): CreatePrismaMock => {
   const prisma: CreatePrismaMock = {
     eventProgram: { findUnique: vi.fn() },
     classroom: { findUnique: vi.fn() },
+    classroomAvailability: { findFirst: vi.fn() },
     user: { findMany: vi.fn() },
-    activity: { create: vi.fn() },
+    activity: { create: vi.fn(), findFirst: vi.fn() },
     auditEvent: { create: vi.fn().mockResolvedValue({ id: 'audit-001' }) },
     $transaction: vi.fn(),
   };
@@ -320,7 +499,7 @@ describe('createActivity', () => {
     await expect(createActivity(createBody)).rejects.toMatchObject({ statusCode: 400 });
   });
 
-  it('rejects a missing or inactive classroom', async () => {
+  it('rejects a missing or inactive classroom before any availability query', async () => {
     const missing = createCreatePrismaMock();
     missing.eventProgram.findUnique.mockResolvedValue(activeProgram);
     missing.classroom.findUnique.mockResolvedValue(null);
@@ -329,15 +508,137 @@ describe('createActivity', () => {
     await expect(
       createWithMissing({ ...createBody, classroomId: 'classroom-001' }),
     ).rejects.toMatchObject({ statusCode: 404 });
+    expect(missing.classroomAvailability.findFirst).not.toHaveBeenCalled();
+    expect(missing.activity.findFirst).not.toHaveBeenCalled();
 
     const inactive = createCreatePrismaMock();
     inactive.eventProgram.findUnique.mockResolvedValue(activeProgram);
-    inactive.classroom.findUnique.mockResolvedValue({ id: 'classroom-001', isActive: false });
+    inactive.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: false,
+      capacity: 40,
+    });
     const { createActivity: createWithInactive } = await loadCreateService(inactive);
 
     await expect(
       createWithInactive({ ...createBody, classroomId: 'classroom-001' }),
     ).rejects.toMatchObject({ statusCode: 400 });
+    expect(inactive.classroomAvailability.findFirst).not.toHaveBeenCalled();
+    expect(inactive.activity.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('validates the classroom availability window when a classroom is requested', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: true,
+      capacity: 60,
+    });
+    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-001' });
+    prisma.activity.findFirst.mockResolvedValue(null);
+    prisma.activity.create.mockResolvedValue(createdRecord);
+    const { createActivity } = await loadCreateService(prisma);
+
+    await createActivity({ ...createBody, classroomId: 'classroom-001', maxCapacity: 30 });
+
+    expect(prisma.classroom.findUnique).toHaveBeenCalledWith({
+      where: { id: 'classroom-001' },
+      select: { id: true, isActive: true, capacity: true },
+    });
+    expect(prisma.classroomAvailability.findFirst).toHaveBeenCalledWith({
+      where: {
+        classroomId: 'classroom-001',
+        dayOfWeek: expect.any(Number),
+        startTime: { lte: new Date('1970-01-01T08:00:00.000Z') },
+        endTime: { gte: new Date('1970-01-01T10:00:00.000Z') },
+      },
+      select: { id: true },
+    });
+    expect(prisma.activity.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ classroomId: 'classroom-001' }),
+      }),
+    );
+  });
+
+  it('rejects a classroom outside its availability window with 409', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: true,
+      capacity: 60,
+    });
+    prisma.classroomAvailability.findFirst.mockResolvedValue(null);
+    const { createActivity } = await loadCreateService(prisma);
+
+    await expect(
+      createActivity({ ...createBody, classroomId: 'classroom-001' }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Classroom is not available in the requested time window.',
+    });
+    expect(prisma.activity.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an overlapping reservation with 409 without excluding any activity', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: true,
+      capacity: 60,
+    });
+    prisma.classroomAvailability.findFirst.mockResolvedValue({ id: 'slot-001' });
+    prisma.activity.findFirst.mockResolvedValue({ id: 'activity-999' });
+    const { createActivity } = await loadCreateService(prisma);
+
+    await expect(
+      createActivity({ ...createBody, classroomId: 'classroom-001' }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Classroom is already reserved for an overlapping activity.',
+    });
+
+    const where = (prisma.activity.findFirst.mock.calls[0]?.[0] as { where: object }).where;
+    expect(where).not.toHaveProperty('id');
+    expect(prisma.activity.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an activity capacity above the classroom capacity with 400', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    prisma.classroom.findUnique.mockResolvedValue({
+      id: 'classroom-001',
+      isActive: true,
+      capacity: 20,
+    });
+    const { createActivity } = await loadCreateService(prisma);
+
+    await expect(
+      createActivity({ ...createBody, classroomId: 'classroom-001', maxCapacity: 30 }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'Classroom capacity is below the activity capacity.',
+    });
+    expect(prisma.classroomAvailability.findFirst).not.toHaveBeenCalled();
+    expect(prisma.activity.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid time range at the service boundary with 400', async () => {
+    const prisma = createCreatePrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(activeProgram);
+    const { createActivity } = await loadCreateService(prisma);
+
+    await expect(
+      createActivity({ ...createBody, startTime: '10:00', endTime: '08:00' }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: 'End time must be after start time.',
+    });
+    expect(prisma.classroom.findUnique).not.toHaveBeenCalled();
+    expect(prisma.activity.create).not.toHaveBeenCalled();
   });
 
   it('reuses speakers by email and links the matching platform user', async () => {
@@ -553,6 +854,9 @@ const buildDetailRecord = (
     programStatus?: 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
     enrolledCount?: number;
     cancelReason?: string | null;
+    date?: Date;
+    startTime?: Date;
+    endTime?: Date;
   } = {},
 ) => {
   const base = buildRecord();
@@ -560,6 +864,9 @@ const buildDetailRecord = (
   return {
     ...base,
     status: overrides.status ?? 'SCHEDULED',
+    date: overrides.date ?? base.date,
+    startTime: overrides.startTime ?? base.startTime,
+    endTime: overrides.endTime ?? base.endTime,
     cancelReason: overrides.cancelReason ?? null,
     equipment: [{ name: 'Proyector' }],
     eventProgram: { ...base.eventProgram, status: overrides.programStatus ?? 'ACTIVE' },
@@ -601,7 +908,7 @@ describe('getActivityById', () => {
     prisma.attendance.count.mockResolvedValue(4);
     const { getActivityById } = await loadDetailService(prisma);
 
-    const result = await getActivityById('activity-001');
+    const result = await getActivityById('activity-001', undefined, NOW);
 
     const query = prisma.activity.findUnique.mock.calls[0]?.[0] as {
       select: { _count: unknown; eventProgram: { select: { status: boolean } } };
@@ -651,19 +958,28 @@ describe('getActivityById', () => {
     },
   );
 
-  it.each(['ONGOING', 'COMPLETED', 'CANCELLED'] as const)(
-    'exposes %s activities of ACTIVE programs publicly',
-    async (status) => {
-      const prisma = createDetailPrismaMock();
-      prisma.activity.findUnique.mockResolvedValue(buildDetailRecord({ status }));
-      prisma.attendance.count.mockResolvedValue(0);
-      const { getActivityById } = await loadDetailService(prisma);
+  it.each([
+    ['SCHEDULED', {}],
+    [
+      'ONGOING',
+      {
+        date: new Date('2026-09-19T00:00:00.000Z'),
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T11:00:00.000Z'),
+      },
+    ],
+    ['COMPLETED', { date: new Date('2026-09-01T00:00:00.000Z') }],
+    ['CANCELLED', {}],
+  ] as const)('exposes %s activities of ACTIVE programs publicly', async (status, overrides) => {
+    const prisma = createDetailPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(buildDetailRecord({ status, ...overrides }));
+    prisma.attendance.count.mockResolvedValue(0);
+    const { getActivityById } = await loadDetailService(prisma);
 
-      const result = await getActivityById('activity-001');
+    const result = await getActivityById('activity-001', undefined, NOW);
 
-      expect(result.status).toBe(status);
-    },
-  );
+    expect(result.status).toBe(status);
+  });
 
   it('lets a collaborator with activity:read see a DRAFT activity', async () => {
     const prisma = createDetailPrismaMock();
@@ -696,7 +1012,7 @@ describe('getActivityById', () => {
     prisma.attendance.count.mockResolvedValue(0);
     const { getActivityById } = await loadDetailService(prisma);
 
-    const result = await getActivityById('activity-001', regularViewer);
+    const result = await getActivityById('activity-001', regularViewer, NOW);
 
     expect(result.status).toBe('SCHEDULED');
     expect(permissionsMock).toHaveBeenCalledWith(regularViewer, { activityId: 'activity-001' });
@@ -788,7 +1104,13 @@ const updateRecord = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe('updateActivity', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
     vi.doUnmock('../../config/prisma.js');
   });
 
@@ -807,7 +1129,12 @@ describe('updateActivity', () => {
     'rejects updates of %s activities with 409',
     async (status) => {
       const prisma = createUpdatePrismaMock();
-      prisma.activity.findUnique.mockResolvedValue({ ...updateRecord(), status });
+      prisma.activity.findUnique.mockResolvedValue(
+        updateRecord({
+          status,
+          ...(status === 'COMPLETED' ? { date: new Date('2026-01-15T00:00:00.000Z') } : {}),
+        }),
+      );
       const { updateActivity } = await loadUpdateService(prisma);
 
       await expect(updateActivity('activity-001', { name: 'X' })).rejects.toMatchObject({
@@ -941,14 +1268,35 @@ describe('updateActivity', () => {
     expect(prisma.classroomAvailability.findFirst).not.toHaveBeenCalled();
   });
 
-  it('rejects status transitions from ONGOING with 400', async () => {
+  it('rejects updating an effectively ongoing activity', async () => {
     const prisma = createUpdatePrismaMock();
-    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'ONGOING' }));
+    prisma.activity.findUnique.mockResolvedValue(
+      updateRecord({
+        status: 'SCHEDULED',
+        date: new Date('2026-09-19T00:00:00.000Z'),
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T11:00:00.000Z'),
+      }),
+    );
     const { updateActivity } = await loadUpdateService(prisma);
 
-    await expect(updateActivity('activity-001', { status: 'SCHEDULED' })).rejects.toMatchObject({
-      statusCode: 400,
-      message: 'Activity status transition is not allowed.',
+    await expect(updateActivity('activity-001', { name: 'X' })).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Ongoing activities cannot be modified.',
+    });
+    expect(prisma.activity.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects updating an effectively completed activity stored as scheduled', async () => {
+    const prisma = createUpdatePrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(
+      updateRecord({ status: 'SCHEDULED', date: new Date('2026-01-15T00:00:00.000Z') }),
+    );
+    const { updateActivity } = await loadUpdateService(prisma);
+
+    await expect(updateActivity('activity-001', { name: 'X' })).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Completed or cancelled activities cannot be modified.',
     });
     expect(prisma.activity.update).not.toHaveBeenCalled();
   });
@@ -1365,10 +1713,12 @@ describe('updateActivity', () => {
 
   it('does not audit a status transition rejected as invalid', async () => {
     const prisma = createUpdatePrismaMock();
-    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'ONGOING' }));
+    prisma.activity.findUnique.mockResolvedValue(updateRecord({ status: 'SCHEDULED' }));
     const { updateActivity } = await loadUpdateService(prisma);
 
-    await expect(updateActivity('activity-001', { status: 'DRAFT' })).rejects.toMatchObject({
+    await expect(
+      updateActivity('activity-001', { status: 'ONGOING' as unknown as 'DRAFT' }),
+    ).rejects.toMatchObject({
       statusCode: 400,
       message: 'Activity status transition is not allowed.',
     });
@@ -1464,7 +1814,12 @@ describe('listEventProgramActivities', () => {
     prisma.activity.count.mockResolvedValue(2);
     const { listEventProgramActivities } = await loadProgramActivitiesService({ prisma });
 
-    const result = await listEventProgramActivities('program-001', { page: 1, limit: 20 });
+    const result = await listEventProgramActivities(
+      'program-001',
+      { page: 1, limit: 20 },
+      null,
+      NOW,
+    );
 
     expect(prisma.eventProgram.findUnique).toHaveBeenCalledWith({
       where: { id: 'program-001' },
@@ -1532,10 +1887,45 @@ describe('listEventProgramActivities', () => {
     expect(permissionsMock).toHaveBeenCalledWith(regularViewer, { eventProgramId: 'program-001' });
     expect(prisma.activity.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ status: { in: ['DRAFT'] } }),
+        where: expect.objectContaining({ AND: [{ status: 'DRAFT' }] }),
       }),
     );
     expect(result.items[0]).toMatchObject({ status: 'DRAFT' });
+  });
+
+  it('resolves the collaborator status filter with the effective temporal predicate', async () => {
+    const prisma = createProgramActivitiesPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue({ id: 'program-001', status: 'ACTIVE' });
+    prisma.activity.findMany.mockResolvedValue([]);
+    prisma.activity.count.mockResolvedValue(0);
+    permissionsMock.mockResolvedValue(new Set(['activity:read']));
+    const { listEventProgramActivities } = await loadProgramActivitiesService({ prisma });
+
+    await listEventProgramActivities(
+      'program-001',
+      { page: 1, limit: 20, status: 'COMPLETED' },
+      regularViewer,
+      NOW,
+    );
+
+    expect(prisma.activity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          AND: [
+            {
+              status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED'] },
+              OR: [
+                { date: { lt: new Date('2026-09-19T00:00:00.000Z') } },
+                {
+                  date: new Date('2026-09-19T00:00:00.000Z'),
+                  endTime: { lte: new Date('1970-01-01T10:00:00.000Z') },
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
   });
 
   it('shows every status to an authorized collaborator by default and with ALL', async () => {
@@ -1675,7 +2065,13 @@ const loadCancelService = async (prisma: CancelPrismaMock) => {
 };
 
 describe('cancelActivity', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+  });
+
   afterEach(() => {
+    vi.useRealTimers();
     vi.doUnmock('../../config/prisma.js');
   });
 
@@ -1690,7 +2086,9 @@ describe('cancelActivity', () => {
 
   it('rejects COMPLETED activities with 409', async () => {
     const prisma = createCancelPrismaMock();
-    prisma.activity.findUnique.mockResolvedValue(buildDetailRecord({ status: 'COMPLETED' }));
+    prisma.activity.findUnique.mockResolvedValue(
+      buildDetailRecord({ status: 'COMPLETED', date: new Date('2026-01-15T00:00:00.000Z') }),
+    );
     const { cancelActivity } = await loadCancelService(prisma);
 
     await expect(cancelActivity('activity-001', 'Lluvia')).rejects.toMatchObject({
@@ -1700,7 +2098,47 @@ describe('cancelActivity', () => {
     expect(prisma.activity.update).not.toHaveBeenCalled();
   });
 
-  it.each(['DRAFT', 'SCHEDULED', 'ONGOING'] as const)(
+  it('rejects cancelling an effectively completed activity stored as scheduled', async () => {
+    const prisma = createCancelPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(
+      buildDetailRecord({ status: 'SCHEDULED', date: new Date('2026-01-15T00:00:00.000Z') }),
+    );
+    const { cancelActivity } = await loadCancelService(prisma);
+
+    await expect(cancelActivity('activity-001', 'Lluvia')).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Completed activities cannot be cancelled.',
+    });
+    expect(prisma.activity.update).not.toHaveBeenCalled();
+  });
+
+  it('cancels an effectively ongoing activity', async () => {
+    const prisma = createCancelPrismaMock();
+    prisma.activity.findUnique.mockResolvedValue(
+      buildDetailRecord({
+        status: 'SCHEDULED',
+        date: new Date('2026-09-19T00:00:00.000Z'),
+        startTime: new Date('1970-01-01T09:00:00.000Z'),
+        endTime: new Date('1970-01-01T11:00:00.000Z'),
+      }),
+    );
+    prisma.activity.update.mockResolvedValue(
+      buildDetailRecord({ status: 'CANCELLED', cancelReason: 'Lluvia' }),
+    );
+    prisma.attendance.count.mockResolvedValue(0);
+    const { cancelActivity } = await loadCancelService(prisma);
+
+    await cancelActivity('activity-001', 'Lluvia');
+
+    expect(prisma.activity.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'activity-001' },
+        data: { status: 'CANCELLED', cancelReason: 'Lluvia' },
+      }),
+    );
+  });
+
+  it.each(['DRAFT', 'SCHEDULED'] as const)(
     'cancels a %s activity and stores the reason',
     async (status) => {
       const prisma = createCancelPrismaMock();
@@ -1857,7 +2295,11 @@ describe('cancelActivity', () => {
   it('checks COMPLETED before the program state', async () => {
     const prisma = createCancelPrismaMock();
     prisma.activity.findUnique.mockResolvedValue(
-      buildDetailRecord({ status: 'COMPLETED', programStatus: 'ARCHIVED' }),
+      buildDetailRecord({
+        status: 'COMPLETED',
+        programStatus: 'ARCHIVED',
+        date: new Date('2026-01-15T00:00:00.000Z'),
+      }),
     );
     const { cancelActivity } = await loadCancelService(prisma);
 

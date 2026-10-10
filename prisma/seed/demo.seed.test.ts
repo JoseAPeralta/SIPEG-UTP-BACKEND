@@ -243,6 +243,8 @@ describe('catalogos del seed demo', () => {
     expect(ACTIVITIES.some((activity) => activity.bannerUrl)).toBe(true);
     expect(ACTIVITIES.some((activity) => activity.cancelReason)).toBe(true);
     expect(CLASSROOMS.some((classroom) => classroom.floor === null)).toBe(true);
+    expect(CLASSROOMS.some((classroom) => classroom.type === 'CONFERENCE_ROOM')).toBe(true);
+    expect(CLASSROOMS.filter((classroom) => classroom.name.startsWith('A-')).length).toBe(17);
     expect(
       PROPOSALS.some((proposal) => proposal.feedback.some((feedback) => feedback.imageUrl)),
     ).toBe(true);

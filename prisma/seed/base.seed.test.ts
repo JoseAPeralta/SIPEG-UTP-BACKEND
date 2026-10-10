@@ -86,7 +86,7 @@ describe('seedBaseDatabase (modo ensure)', () => {
 
     const unitId = seedId('unit', 'fic');
     const programId = seedId('program', 'fic', 'default');
-    const classroomId = seedId('classroom', 'aula-101');
+    const classroomId = seedId('classroom', 'a-1');
 
     await client.organizationalUnit.create({
       data: {
@@ -241,7 +241,7 @@ describe('modo sync (demo)', () => {
 
   it('seedClassrooms reactiva y reescribe amenidades existentes', async () => {
     const { client } = createFakePrisma();
-    const classroomId = seedId('classroom', 'aula-101');
+    const classroomId = seedId('classroom', 'a-1');
     await client.classroom.create({
       data: {
         id: classroomId,
@@ -255,8 +255,8 @@ describe('modo sync (demo)', () => {
     await seedClassrooms(asClient(client), 'sync');
 
     const classroom = await client.classroom.findUnique({ where: { id: classroomId } });
-    expect(classroom?.['name']).toBe('Aula 101');
-    expect(classroom?.['capacity']).toBe(40);
+    expect(classroom?.['name']).toBe('A-1');
+    expect(classroom?.['capacity']).toBe(30);
     expect(classroom?.['isActive']).toBe(true);
     expect(
       client.classroomAmenity.rows.filter((row) => row['classroomId'] === classroomId).length,

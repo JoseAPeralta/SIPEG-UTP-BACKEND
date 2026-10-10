@@ -1,0 +1,25 @@
+meta {
+  name: Get my scopes with an invalid type returns 400
+  type: http
+  seq: 5
+  tags: [
+    My_Scopes
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/me/scopes?type=team
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("an unknown scope type is rejected by validation", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().success).to.equal(false);
+  });
+}

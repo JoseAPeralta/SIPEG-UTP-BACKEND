@@ -1,0 +1,29 @@
+meta {
+  name: Mark my alert as read
+  type: http
+  seq: 9
+  tags: [
+    Alerts
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/alerts/{{myAlertId}}/read
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+tests {
+  test("the alert is marked as read and returned", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.message).to.equal("Alert marked as read successfully.");
+    expect(body.data.id).to.equal(bru.getVar("myAlertId"));
+    expect(body.data.isRead).to.equal(true);
+  });
+}

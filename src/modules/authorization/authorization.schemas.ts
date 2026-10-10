@@ -5,6 +5,8 @@ import type {
   CollaboratorList,
   CollaboratorListDetail,
   OwnPermissions,
+  PaginatedUserScopes,
+  UserScopeItem,
 } from './authorization.types.js';
 import { PERMISSION_NAMES } from './permissions.js';
 
@@ -205,3 +207,86 @@ export const ownPermissionsSchema = z
     description:
       'Effective permissions of the authenticated user in an event program or activity scope.',
   }) satisfies z.ZodType<OwnPermissions>;
+
+const userScopeTypes = ['program', 'activity'] as const;
+
+export const listUserScopesQuerySchema = z.object({
+  query: z
+    .object({
+      type: z.enum(userScopeTypes, 'Scope type is invalid.').optional(),
+      page: z.coerce
+        .number('Page must be a number.')
+        .int('Page must be an integer.')
+        .min(1, 'Page must be at least 1.')
+        .default(1),
+      limit: z.coerce
+        .number('Limit must be a number.')
+        .int('Limit must be an integer.')
+        .min(1, 'Limit must be at least 1.')
+        .max(50, 'Limit cannot exceed 50.')
+        .default(20),
+    })
+    .strict(),
+});
+
+export type ListUserScopesQueryInput = z.infer<typeof listUserScopesQuerySchema>['query'];
+
+const userScopeEventProgramSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    label: z.string().nullable(),
+    status: z.enum(['DRAFT', 'ACTIVE', 'COMPLETED', 'CANCELLED', 'ARCHIVED']),
+  })
+  .meta({
+    id: 'UserScopeEventProgram',
+    description: 'Parent event program of an activity scope.',
+  });
+
+const userScopeOrganizationalUnitSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    type: z.enum(['FACULTY', 'SUBDIRECTORATE']),
+  })
+  .meta({
+    id: 'UserScopeOrganizationalUnit',
+    description: 'Owning organizational unit of a program or activity scope.',
+  });
+
+export const userScopeSchema = z
+  .object({
+    type: z.enum(userScopeTypes),
+    id: z.string(),
+    name: z.string(),
+    status: z.enum([
+      'DRAFT',
+      'ACTIVE',
+      'COMPLETED',
+      'CANCELLED',
+      'ARCHIVED',
+      'SCHEDULED',
+      'ONGOING',
+    ]),
+    eventProgram: userScopeEventProgramSchema.nullable(),
+    organizationalUnit: userScopeOrganizationalUnitSchema,
+    permissions: z.array(ownPermissionSchema),
+  })
+  .meta({
+    id: 'UserScope',
+    description:
+      'Program or activity scope where the authenticated user holds at least one effective permission.',
+  }) satisfies z.ZodType<UserScopeItem>;
+
+export const paginatedUserScopesSchema = z
+  .object({
+    items: z.array(userScopeSchema),
+    page: z.number().int(),
+    limit: z.number().int(),
+    total: z.number().int(),
+    totalPages: z.number().int(),
+  })
+  .meta({
+    id: 'PaginatedUserScopes',
+    description: 'Paginated scopes of the authenticated user.',
+  }) satisfies z.ZodType<PaginatedUserScopes>;

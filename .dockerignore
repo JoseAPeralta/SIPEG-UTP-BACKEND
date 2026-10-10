@@ -46,3 +46,4 @@ Dockerfile
 .dockerignore
 compose*.yaml
 docker-compose*.yml
+deploy

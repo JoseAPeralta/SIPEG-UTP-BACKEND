@@ -43,6 +43,7 @@ enum ActivityStatus {
 enum ClassroomType {
   LABORATORY
   CLASSROOM
+  CONFERENCE_ROOM
 }
 
 enum ActivityType {

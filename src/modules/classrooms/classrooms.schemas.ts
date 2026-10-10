@@ -23,7 +23,10 @@ const classroomIdSchema = z
   .min(1, 'Classroom id is required.')
   .max(100, 'Classroom id cannot exceed 100 characters.');
 
-const classroomTypeSchema = z.enum(['LABORATORY', 'CLASSROOM'], 'Classroom type is invalid.');
+const classroomTypeSchema = z.enum(
+  ['LABORATORY', 'CLASSROOM', 'CONFERENCE_ROOM'],
+  'Classroom type is invalid.',
+);
 
 const capacitySchema = z
   .number('Capacity must be a number.')
@@ -240,7 +243,7 @@ export const classroomSummarySchema = z
   .object({
     id: z.string(),
     name: z.string(),
-    type: z.enum(['LABORATORY', 'CLASSROOM']),
+    type: z.enum(['LABORATORY', 'CLASSROOM', 'CONFERENCE_ROOM']),
     capacity: z.number().int(),
     building: z.string().nullable(),
     floor: z.number().int().nullable(),
@@ -256,7 +259,7 @@ export const classroomDetailSchema = z
   .object({
     id: z.string(),
     name: z.string(),
-    type: z.enum(['LABORATORY', 'CLASSROOM']),
+    type: z.enum(['LABORATORY', 'CLASSROOM', 'CONFERENCE_ROOM']),
     capacity: z.number().int(),
     building: z.string().nullable(),
     floor: z.number().int().nullable(),

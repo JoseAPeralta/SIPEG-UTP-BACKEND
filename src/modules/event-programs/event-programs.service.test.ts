@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CreateEventProgramBody, UpdateEventProgramBody } from './event-programs.schemas.js';
 
 interface PrismaMock {
-  activity: { count: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> };
+  activity: { count: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
   organizationalUnit: { findUnique: ReturnType<typeof vi.fn> };
   eventProgram: {
     count: ReturnType<typeof vi.fn>;
@@ -18,7 +18,7 @@ interface PrismaMock {
 
 const createPrismaMock = (): PrismaMock => {
   const prisma: PrismaMock = {
-    activity: { count: vi.fn(), groupBy: vi.fn() },
+    activity: { count: vi.fn(), findMany: vi.fn() },
     organizationalUnit: { findUnique: vi.fn() },
     eventProgram: {
       count: vi.fn(),
@@ -664,12 +664,52 @@ describe('getEventProgramById', () => {
     },
   };
 
-  const statusGroups = [
-    { status: 'DRAFT' as const, _count: { _all: 2 } },
-    { status: 'SCHEDULED' as const, _count: { _all: 3 } },
-    { status: 'ONGOING' as const, _count: { _all: 1 } },
-    { status: 'COMPLETED' as const, _count: { _all: 2 } },
-    { status: 'CANCELLED' as const, _count: { _all: 1 } },
+  const NOW = new Date('2026-09-19T15:00:00.000Z');
+  const time = (hour: number) => new Date(`1970-01-01T${String(hour).padStart(2, '0')}:00:00.000Z`);
+
+  const activityStatusRows = [
+    {
+      status: 'DRAFT' as const,
+      date: new Date('2026-09-25T00:00:00.000Z'),
+      startTime: time(9),
+      endTime: time(11),
+    },
+    {
+      status: 'SCHEDULED' as const,
+      date: new Date('2026-09-20T00:00:00.000Z'),
+      startTime: time(14),
+      endTime: time(17),
+    },
+    {
+      status: 'SCHEDULED' as const,
+      date: new Date('2026-09-25T00:00:00.000Z'),
+      startTime: time(9),
+      endTime: time(11),
+    },
+    {
+      status: 'SCHEDULED' as const,
+      date: new Date('2026-09-19T00:00:00.000Z'),
+      startTime: time(9),
+      endTime: time(11),
+    },
+    {
+      status: 'COMPLETED' as const,
+      date: new Date('2026-09-01T00:00:00.000Z'),
+      startTime: time(9),
+      endTime: time(11),
+    },
+    {
+      status: 'COMPLETED' as const,
+      date: new Date('2026-08-01T00:00:00.000Z'),
+      startTime: time(9),
+      endTime: time(11),
+    },
+    {
+      status: 'CANCELLED' as const,
+      date: new Date('2026-09-25T00:00:00.000Z'),
+      startTime: time(9),
+      endTime: time(11),
+    },
   ];
 
   const viewer = {
@@ -684,59 +724,58 @@ describe('getEventProgramById', () => {
   it('returns the public count for anonymous callers', async () => {
     const prisma = createPrismaMock();
     prisma.eventProgram.findUnique.mockResolvedValue(activeRecord);
-    prisma.activity.groupBy.mockResolvedValue(statusGroups);
+    prisma.activity.findMany.mockResolvedValue(activityStatusRows);
     const { getEventProgramById } = await loadService(prisma);
 
-    const result = await getEventProgramById('program-001');
+    const result = await getEventProgramById('program-001', undefined, NOW);
 
     expect(prisma.eventProgram.findUnique).toHaveBeenCalledWith({
       where: { id: 'program-001' },
       select: expect.any(Object),
     });
-    expect(prisma.activity.groupBy).toHaveBeenCalledWith({
-      by: ['status'],
+    expect(prisma.activity.findMany).toHaveBeenCalledWith({
       where: { eventProgramId: 'program-001' },
-      _count: { _all: true },
+      select: { status: true, date: true, startTime: true, endTime: true },
     });
     expect(hasPermissionMock).not.toHaveBeenCalled();
     expect(result).toEqual({
       ...activeRecord,
       startDate: '2026-10-12',
       endDate: '2026-10-16',
-      activityCount: { visible: 6 },
+      activityCount: { visible: 5 },
     });
   });
 
-  it('adds the total and the per-status breakdown for authorized viewers', async () => {
+  it('adds the total and the derived per-status breakdown for authorized viewers', async () => {
     const prisma = createPrismaMock();
     prisma.eventProgram.findUnique.mockResolvedValue(activeRecord);
-    prisma.activity.groupBy.mockResolvedValue(statusGroups);
+    prisma.activity.findMany.mockResolvedValue(activityStatusRows);
     const { getEventProgramById } = await loadService(prisma);
     const { PERMISSIONS } = await import('../authorization/permissions.js');
     hasPermissionMock.mockResolvedValue(true);
 
-    const result = await getEventProgramById('program-001', viewer);
+    const result = await getEventProgramById('program-001', viewer, NOW);
 
     expect(hasPermissionMock).toHaveBeenCalledWith(viewer, PERMISSIONS.PROGRAM_READ, {
       eventProgramId: 'program-001',
     });
     expect(result.activityCount).toEqual({
-      visible: 6,
-      total: 9,
-      byStatus: { DRAFT: 2, SCHEDULED: 3, ONGOING: 1, COMPLETED: 2, CANCELLED: 1 },
+      visible: 5,
+      total: 7,
+      byStatus: { DRAFT: 1, SCHEDULED: 2, ONGOING: 1, COMPLETED: 2, CANCELLED: 1 },
     });
   });
 
   it('falls back to the public count when the viewer lacks program:read', async () => {
     const prisma = createPrismaMock();
     prisma.eventProgram.findUnique.mockResolvedValue(activeRecord);
-    prisma.activity.groupBy.mockResolvedValue(statusGroups);
+    prisma.activity.findMany.mockResolvedValue(activityStatusRows);
     const { getEventProgramById } = await loadService(prisma);
     hasPermissionMock.mockResolvedValue(false);
 
-    const result = await getEventProgramById('program-001', viewer);
+    const result = await getEventProgramById('program-001', viewer, NOW);
 
-    expect(result.activityCount).toEqual({ visible: 6 });
+    expect(result.activityCount).toEqual({ visible: 5 });
     expect(result.activityCount).not.toHaveProperty('total');
   });
 
@@ -746,7 +785,7 @@ describe('getEventProgramById', () => {
     const { getEventProgramById } = await loadService(prisma);
 
     await expect(getEventProgramById('missing')).rejects.toMatchObject({ statusCode: 404 });
-    expect(prisma.activity.groupBy).not.toHaveBeenCalled();
+    expect(prisma.activity.findMany).not.toHaveBeenCalled();
   });
 
   it('rejects non-active event programs as not found', async () => {
@@ -757,14 +796,14 @@ describe('getEventProgramById', () => {
     await expect(getEventProgramById('program-001', viewer)).rejects.toMatchObject({
       statusCode: 404,
     });
-    expect(prisma.activity.groupBy).not.toHaveBeenCalled();
+    expect(prisma.activity.findMany).not.toHaveBeenCalled();
     expect(hasPermissionMock).not.toHaveBeenCalled();
   });
 
   it('returns zero visible activities when the program has none', async () => {
     const prisma = createPrismaMock();
     prisma.eventProgram.findUnique.mockResolvedValue(activeRecord);
-    prisma.activity.groupBy.mockResolvedValue([]);
+    prisma.activity.findMany.mockResolvedValue([]);
     const { getEventProgramById } = await loadService(prisma);
 
     const result = await getEventProgramById('program-001');
@@ -778,6 +817,8 @@ describe('archiveEventProgram', () => {
     vi.doUnmock('../../config/prisma.js');
     vi.doUnmock('../authorization/authorization.service.js');
   });
+
+  const NOW = new Date('2026-09-19T15:00:00.000Z');
 
   const archivableRecord = {
     ...createdRecord,
@@ -797,10 +838,20 @@ describe('archiveEventProgram', () => {
     prisma.eventProgram.update.mockResolvedValue({ ...createdRecord, status: 'ARCHIVED' });
     const { archiveEventProgram } = await loadService(prisma);
 
-    const result = await archiveEventProgram('program-001');
+    const result = await archiveEventProgram('program-001', {}, NOW);
 
     expect(prisma.activity.count).toHaveBeenCalledWith({
-      where: { eventProgramId: 'program-001', status: { in: ['SCHEDULED', 'ONGOING'] } },
+      where: {
+        eventProgramId: 'program-001',
+        status: { in: ['SCHEDULED', 'ONGOING', 'COMPLETED'] },
+        OR: [
+          { date: { gt: new Date('2026-09-19T00:00:00.000Z') } },
+          {
+            date: new Date('2026-09-19T00:00:00.000Z'),
+            endTime: { gt: new Date('1970-01-01T10:00:00.000Z') },
+          },
+        ],
+      },
     });
     expect(prisma.eventProgram.update).toHaveBeenCalledWith({
       where: { id: 'program-001' },
@@ -866,11 +917,25 @@ describe('archiveEventProgram', () => {
     prisma.activity.count.mockResolvedValue(2);
     const { archiveEventProgram } = await loadService(prisma);
 
-    await expect(archiveEventProgram('program-001')).rejects.toMatchObject({
+    await expect(archiveEventProgram('program-001', {}, NOW)).rejects.toMatchObject({
       statusCode: 409,
       message: 'An event program with scheduled or ongoing activities cannot be archived.',
     });
     expect(prisma.eventProgram.update).not.toHaveBeenCalled();
+  });
+
+  it('archives a program whose published activities already ended', async () => {
+    const prisma = createPrismaMock();
+    prisma.eventProgram.findUnique.mockResolvedValue(archivableRecord);
+    prisma.activity.count.mockResolvedValue(0);
+    prisma.eventProgram.update.mockResolvedValue({ ...createdRecord, status: 'ARCHIVED' });
+    const { archiveEventProgram } = await loadService(prisma);
+
+    const result = await archiveEventProgram('program-001', {}, NOW);
+
+    expect(prisma.activity.count).toHaveBeenCalledTimes(1);
+    expect(prisma.eventProgram.update).toHaveBeenCalled();
+    expect(result.status).toBe('ARCHIVED');
   });
 
   it('rejects a missing program with 404', async () => {

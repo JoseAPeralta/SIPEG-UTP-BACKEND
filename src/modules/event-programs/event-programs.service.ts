@@ -5,6 +5,10 @@ import { writeAuditEvent } from '../audit/audit.service.js';
 import type { AuditContext, AuditEventInput, AuditScalar } from '../audit/audit.types.js';
 import { hasPermission } from '../authorization/authorization.service.js';
 import { PERMISSIONS } from '../authorization/permissions.js';
+import {
+  buildReservingActivityWhere,
+  resolveActivityStatus,
+} from '../activities/activities.status.js';
 import type {
   CreateEventProgramBody,
   ListEventProgramsQuery,
@@ -126,12 +130,12 @@ const buildProgramUpdateAuditEvent = (
 const countEventProgramActivities = async (
   eventProgramId: string,
   includeBreakdown: boolean,
+  now: Date = new Date(),
 ): Promise<EventProgramActivityCount> => {
   const prisma = getPrismaClient();
-  const groups = await prisma.activity.groupBy({
-    by: ['status'],
+  const activities = await prisma.activity.findMany({
     where: { eventProgramId },
-    _count: { _all: true },
+    select: { status: true, date: true, startTime: true, endTime: true },
   });
 
   const byStatus = Object.fromEntries(ACTIVITY_STATUSES.map((status) => [status, 0])) as Record<
@@ -139,8 +143,8 @@ const countEventProgramActivities = async (
     number
   >;
 
-  for (const group of groups) {
-    byStatus[group.status] = group._count._all;
+  for (const activity of activities) {
+    byStatus[resolveActivityStatus(activity, now)] += 1;
   }
 
   const visible = PUBLIC_ACTIVITY_STATUSES.reduce((total, status) => total + byStatus[status], 0);
@@ -201,6 +205,7 @@ export const listEventPrograms = async (
 export const getEventProgramById = async (
   id: string,
   viewer: Express.AuthenticatedUser | null = null,
+  now: Date = new Date(),
 ): Promise<EventProgramPublicDetail> => {
   const prisma = getPrismaClient();
   const record = await prisma.eventProgram.findUnique({
@@ -218,7 +223,7 @@ export const getEventProgramById = async (
 
   return {
     ...toEventProgramDetail(record),
-    activityCount: await countEventProgramActivities(id, includeBreakdown),
+    activityCount: await countEventProgramActivities(id, includeBreakdown, now),
   };
 };
 
@@ -402,6 +407,7 @@ export const updateEventProgram = async (
 export const archiveEventProgram = async (
   id: string,
   auditContext: AuditContext = {},
+  now: Date = new Date(),
 ): Promise<EventProgramDetail> => {
   const prisma = getPrismaClient();
   const program = await prisma.eventProgram.findUnique({
@@ -426,7 +432,7 @@ export const archiveEventProgram = async (
 
   if (!program.isDefault) {
     const blockingActivities = await prisma.activity.count({
-      where: { eventProgramId: program.id, status: { in: ['SCHEDULED', 'ONGOING'] } },
+      where: { eventProgramId: program.id, ...buildReservingActivityWhere(now) },
     });
 
     if (blockingActivities > 0) {

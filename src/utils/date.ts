@@ -50,6 +50,22 @@ const getZoneOffsetMilliseconds = (instant: Date): number => {
   return (sign === '-' ? -totalMinutes : totalMinutes) * 60_000;
 };
 
+const EPOCH_UTC = Date.UTC(1970, 0, 1);
+
+export const getInstitutionalTimeOfDay = (instant: Date): Date => {
+  const dateKey = getInstitutionalDateKey(instant);
+  const { start } = getInstitutionalDayRange(dateKey);
+
+  return new Date(EPOCH_UTC + (instant.getTime() - start.getTime()));
+};
+
+export const toInstitutionalInstant = (date: Date, time: Date): Date => {
+  const dateKey = date.toISOString().slice(0, 10);
+  const { start } = getInstitutionalDayRange(dateKey);
+
+  return new Date(start.getTime() + (time.getTime() - EPOCH_UTC));
+};
+
 export const getInstitutionalDayRange = (
   dateKey: string,
 ): {

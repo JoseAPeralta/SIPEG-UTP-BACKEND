@@ -22,7 +22,9 @@ Todo lo siguiente es un hecho verificable del repositorio, no una propuesta:
 - La regla de no publicar nada en `0.0.0.0` y las condiciones que debe cumplir el
   proxy estan fijadas en `ADR-0007`, seccion "Puertos Publicados". En particular,
   `app.set('trust proxy', 1)` esta activo y el rate limiting construye su llave
-  con `req.ip`, lo que exige **exactamente un salto de proxy**.
+  con `req.ip`. Express confia en el salto del socket y toma la direccion mas a
+  la derecha de `X-Forwarded-For`; ese valor debe representar al cliente y estar
+  controlado por la frontera confiable.
 - `CORS_ORIGIN` admite un unico origen y `TRUSTED_ORIGINS` anade CSV. Deben
   contener el **origen** del frontend, no su URL base ni su ruta.
 - `DOCS_ENABLED` queda deshabilitado por defecto en produccion.
@@ -40,7 +42,7 @@ Todo lo siguiente es un hecho verificable del repositorio, no una propuesta:
 | **A** | Un host con proxy inverso (nginx/Caddy) y subdominios del mismo dominio registrable | Menor coste; un solo lugar que operar, respaldar y asegurar | Todo en la institucion |
 | **B** | Dos hosts separados: API y frontend en equipos distintos | Dos superficies que asegurar, dos pipelines de despliegue | Repartidos |
 | **C** | Plataforma gestionada (Railway, Render, Fly) con dominios distintos | Menor carga operativa; coste variable y proveedor atado | Salen de la institucion |
-| **D** | Opcion A mas CDN o WAF delante del proxy | Mas superficie que asumir, y rompe el requisito de un solo salto | Todo en la institucion |
+| **D** | Opcion A mas CDN o WAF delante del proxy | Mas superficie que asumir; exige verificar la cadena `X-Forwarded-For` | Todo en la institucion |
 
 ### Criterios para decidir
 
@@ -68,9 +70,14 @@ registrable) por estas razones:
   persiguen. Adoptar cross-site es decidir con handicap antes de tener que
   hacerlo.
 
-La opcion D queda descartada mientras `trust proxy = 1` siga fijo, porque anadir
-un salto cambia en silencio la agrupacion de los buckets de rate limit
-(comportamiento de seguridad, segun `ADR-0007`).
+La opcion D exige revisar la cadena `X-Forwarded-For`, pero sumar un intermediario
+de red no rompe por si solo `trust proxy = 1`. Con Cloudflare Tunnel,
+`cloudflared` es el salto del socket que Express confia y el valor situado mas a
+la derecha del encabezado debe ser la IP de quien se conecta a Cloudflare.
+Cloudflare escribe esa IP si el encabezado no existia o la anade al final si ya
+existia; no es la IP del edge de Cloudflare. El rate limiting requiere comprobar
+esta cadena real y el aislamiento de clientes en la tarea 9 del plan de
+despliegue.
 
 ### El criterio que decide `lax` o `none`
 
@@ -104,7 +111,7 @@ Cada fila queda bloqueada hasta que se elija la opcion de despliegue.
 | 1 | Dominio registrable de API y frontend | Opcion | Si difieren, `none` y HTTPS obligatorio |
 | 2 | `AUTH_REFRESH_COOKIE_SAME_SITE` | #1 | Sin esta variable el stack no arranca |
 | 3 | `Secure` de cookies | Entorno | Ya forzado a `true` en produccion |
-| 4 | Numero de saltos de proxy delante de la API | Opcion | `>1` rompe `req.ip` y los limitadores por IP |
+| 4 | Frontera confiable y cadena `X-Forwarded-For` | Opcion | Una IP incorrecta en el valor seleccionado por `trust proxy = 1` agrupa mal los limitadores |
 | 5 | `CORS_ORIGIN` y `TRUSTED_ORIGINS` | Origen real del frontend | Origen equivocado bloquea login y verificacion |
 | 6 | `AUTH_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE` | URL publica de la API | Issuer o audience incorrectos invalidan el JWT |
 | 7 | `VITE_API_BASE_URL` | URL publica de la API | El frontend lanza al arrancar |
@@ -132,3 +139,5 @@ Cada fila queda bloqueada hasta que se elija la opcion de despliegue.
 - `docs/adr/adr-0009-refresh-token-cookie-httponly.md`, seccion "Decision de
   topologia".
 - `compose.prod.yaml` y `.env.example`.
+- [Express detras de proxies](https://expressjs.com/en/guide/behind-proxies).
+- [Cabeceras HTTP de Cloudflare](https://developers.cloudflare.com/fundamentals/reference/http-headers/).

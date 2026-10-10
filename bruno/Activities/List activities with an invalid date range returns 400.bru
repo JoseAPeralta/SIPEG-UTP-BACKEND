@@ -1,0 +1,32 @@
+meta {
+  name: List activities with an invalid date range returns 400
+  type: http
+  seq: 47
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities?page=1&limit=20&dateFrom=2026-10-01&dateTo=2026-09-01
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 20
+  dateFrom: 2026-10-01
+  dateTo: 2026-09-01
+}
+
+docs {
+  Public. dateFrom after dateTo is rejected with 400 before the service.
+}
+
+tests {
+  test("rejects an inverted date range", function () {
+    expect(res.getStatus()).to.equal(400);
+    expect(res.getBody().message).to.equal("Validation error.");
+  })
+}

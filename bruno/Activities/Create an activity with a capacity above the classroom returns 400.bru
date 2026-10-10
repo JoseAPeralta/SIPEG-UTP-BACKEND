@@ -1,0 +1,44 @@
+meta {
+  name: Create an activity with a capacity above the classroom returns 400
+  type: http
+  seq: 49
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Actividad temporal capacidad 5.8",
+    "type": "WORKSHOP",
+    "date": "2027-06-07",
+    "startTime": "14:00",
+    "endTime": "16:00",
+    "maxCapacity": 1000,
+    "eventProgramId": "seed_program_fic_default",
+    "classroomId": "seed_classroom_a-1"
+  }
+}
+
+docs {
+  Rejects the create before any write when the activity capacity exceeds the classroom capacity (30 in the seed). Requires an authenticated admin.
+}
+
+tests {
+  test("capacity above the classroom is rejected with 400", function () {
+    expect(res.getStatus()).to.equal(400);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Classroom capacity is below the activity capacity.");
+  });
+}

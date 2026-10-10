@@ -1,0 +1,38 @@
+meta {
+  name: List past activities
+  type: http
+  seq: 39
+  tags: [
+    Activities
+  ]
+}
+
+get {
+  url: {{baseUrl}}/api/v1/activities?page=1&limit=20&when=past
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  limit: 20
+  when: past
+}
+
+docs {
+  Public. Returns activities with date before today in the institutional time zone, ordered newest first. Only the public statuses are exposed to anonymous callers.
+}
+
+tests {
+  test("returns a paginated past list", function () {
+    expect(res.getStatus()).to.equal(200);
+    const body = res.getBody();
+    expect(body.success).to.equal(true);
+    expect(body.data.items).to.be.an("array");
+    body.data.items.forEach(function (activity) {
+      expect(["SCHEDULED", "ONGOING", "COMPLETED"]).to.include(activity.status);
+      expect(activity).to.not.have.property("qrCode");
+      expect(activity).to.not.have.property("manualCode");
+    });
+  })
+}

@@ -73,7 +73,7 @@ export const eventProgramsPaths: ZodOpenApiPathsObject = {
       tags: ['Event Programs'],
       summary: 'Get an event program',
       description:
-        'Public. Returns an ACTIVE event program with its activity count. Anonymous callers receive the public visible count (SCHEDULED, ONGOING and COMPLETED activities); ADMIN users and collaborators with program:read on the program also receive the total and the per-status breakdown. Non-active or missing programs respond 404. A present but invalid bearer token responds 401.',
+        'Public. Returns an ACTIVE event program with its activity count. Anonymous callers receive the public visible count (SCHEDULED, ONGOING and COMPLETED activities); ADMIN users and collaborators with program:read on the program also receive the total and the per-status breakdown. Both the visible count and the breakdown use the effective activity status derived at read time from the institutional date and time. Non-active or missing programs respond 404. A present but invalid bearer token responds 401.',
       requestParams: { path: eventProgramParamsSchema.shape.params },
       responses: {
         200: {
@@ -128,7 +128,7 @@ export const eventProgramsPaths: ZodOpenApiPathsObject = {
       tags: ['Event Programs'],
       summary: 'Archive an event program',
       description:
-        'Archives an event program and stamps archivedAt. Requires the program:archive permission on the program scope, or the ADMIN role. Default programs cannot be archived while their organizational unit is active (409) and additional programs with SCHEDULED or ONGOING activities are rejected (409); DRAFT, COMPLETED and CANCELLED activities do not block. Archiving an already archived program is idempotent: it responds 200 without modifying archivedAt.',
+        'Archives an event program and stamps archivedAt. Requires the program:archive permission on the program scope, or the ADMIN role. Default programs cannot be archived while their organizational unit is active (409) and additional programs with effectively SCHEDULED or ONGOING activities (published activities that have not ended) are rejected (409); activities that already ended, DRAFT and CANCELLED do not block. Archiving an already archived program is idempotent: it responds 200 without modifying archivedAt.',
       security: [{ bearerAuth: [] }],
       requestParams: { path: eventProgramParamsSchema.shape.params },
       responses: {

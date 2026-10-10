@@ -43,6 +43,56 @@ describe('listActivitiesQuerySchema', () => {
   it('rejects unknown query parameters', () => {
     expect(() => listActivitiesQuerySchema.parse({ query: { sort: 'name' } })).toThrow();
   });
+
+  it('defaults when to upcoming and keeps the other filters optional', () => {
+    const parsed = listActivitiesQuerySchema.parse({ query: {} });
+
+    expect(parsed.query).toEqual({ page: 1, limit: 20 });
+  });
+
+  it('accepts every when value and every public filter', () => {
+    const parsed = listActivitiesQuerySchema.parse({
+      query: {
+        when: 'past',
+        eventProgramId: 'program-001',
+        organizationalUnitId: 'unit-001',
+        unitType: 'FACULTY',
+        type: 'SEMINAR',
+        classroomId: 'classroom-001',
+        dateFrom: '2026-09-01',
+        dateTo: '2026-09-30',
+        status: 'CANCELLED',
+      },
+    });
+
+    expect(parsed.query).toMatchObject({
+      when: 'past',
+      eventProgramId: 'program-001',
+      organizationalUnitId: 'unit-001',
+      unitType: 'FACULTY',
+      type: 'SEMINAR',
+      classroomId: 'classroom-001',
+      dateFrom: '2026-09-01',
+      dateTo: '2026-09-30',
+      status: 'CANCELLED',
+    });
+  });
+
+  it('rejects an invalid when, status, unit type, activity type or date', () => {
+    expect(() => listActivitiesQuerySchema.parse({ query: { when: 'later' } })).toThrow();
+    expect(() => listActivitiesQuerySchema.parse({ query: { status: 'PENDING' } })).toThrow();
+    expect(() => listActivitiesQuerySchema.parse({ query: { unitType: 'CAMPUS' } })).toThrow();
+    expect(() => listActivitiesQuerySchema.parse({ query: { type: 'WEBINAR' } })).toThrow();
+    expect(() => listActivitiesQuerySchema.parse({ query: { dateFrom: '2026-02-30' } })).toThrow();
+  });
+
+  it('rejects a range that starts after it ends', () => {
+    const result = listActivitiesQuerySchema.safeParse({
+      query: { dateFrom: '2026-10-01', dateTo: '2026-09-01' },
+    });
+
+    expect(result.success).toBe(false);
+  });
 });
 
 const activityPayload = {
@@ -55,6 +105,7 @@ const activityPayload = {
   endTime: '10:00',
   capacity: 30,
   bannerUrl: null,
+  status: 'SCHEDULED',
   speakers: [
     { id: 'speaker-001', firstName: 'Ana', lastName: 'Gomez' },
     { id: 'speaker-002', firstName: 'Luis', lastName: 'Mora' },
@@ -107,6 +158,13 @@ describe('activityListItemSchema', () => {
         organizationalUnit: { ...activityPayload.organizationalUnit, type: 'DEPARTMENT' },
       }),
     ).toThrow();
+  });
+
+  it('exposes the lifecycle status', () => {
+    expect(activityListItemSchema.parse(activityPayload).status).toBe('SCHEDULED');
+    expect(
+      activityListItemSchema.safeParse({ ...activityPayload, status: 'PENDING' }).success,
+    ).toBe(false);
   });
 });
 
@@ -282,6 +340,14 @@ describe('createActivitySchema', () => {
     expect(() =>
       createActivitySchema.parse({
         body: { ...createPayload, equipment: ['Proyector', 'Proyector'] },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects equipment names that differ only in case', () => {
+    expect(() =>
+      createActivitySchema.parse({
+        body: { ...createPayload, equipment: ['Proyector', 'proyector'] },
       }),
     ).toThrow();
   });
@@ -468,6 +534,15 @@ describe('updateActivitySchema', () => {
             { firstName: 'Ana', lastName: 'Gomez', email: 'ANA@example.com' },
           ],
         },
+      }),
+    ).toThrow();
+  });
+
+  it('rejects equipment names that differ only in case', () => {
+    expect(() =>
+      updateActivitySchema.parse({
+        params: { id: 'activity-001' },
+        body: { equipment: ['Proyector', 'proyector'] },
       }),
     ).toThrow();
   });

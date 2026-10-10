@@ -47,6 +47,12 @@ describe('listClassroomsQuerySchema', () => {
 
     expect(query.amenity).toBe('Aire Acondicionado');
   });
+
+  it('accepts the conference room type filter', () => {
+    const query = listClassroomsQuerySchema.parse({ query: { type: 'CONFERENCE_ROOM' } }).query;
+
+    expect(query.type).toBe('CONFERENCE_ROOM');
+  });
 });
 
 describe('availableClassroomsQuerySchema', () => {
@@ -100,6 +106,14 @@ describe('createClassroomSchema', () => {
     }).body;
 
     expect(body).toMatchObject({ name: 'Aula 303', building: null, floor: null });
+  });
+
+  it('accepts a conference room type', () => {
+    const body = createClassroomSchema.parse({
+      body: { ...baseBody, type: 'CONFERENCE_ROOM' },
+    }).body;
+
+    expect(body.type).toBe('CONFERENCE_ROOM');
   });
 
   it('rejects a capacity of zero or less', () => {

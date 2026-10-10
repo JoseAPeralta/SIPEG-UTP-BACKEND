@@ -1,11 +1,23 @@
 import { getPrismaClient } from '../../config/prisma.js';
 import type { ActivityStatus, ActivityType } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
-import { getInstitutionalDayOfWeek, startOfInstitutionalDay } from '../../utils/date.js';
+import { startOfInstitutionalDay } from '../../utils/date.js';
 import { writeAuditEvent } from '../audit/audit.service.js';
 import type { AuditContext, AuditEventInput, AuditScalar } from '../audit/audit.types.js';
 import { getEffectivePermissions } from '../authorization/authorization.service.js';
 import { PERMISSIONS } from '../authorization/permissions.js';
+import {
+  assertActivityScheduleIsAvailable,
+  assertActivityTimeRange,
+  assertClassroomIsAssignable,
+  isExclusionViolation,
+  RESERVING_STATUSES,
+} from './activities.schedule.js';
+import {
+  buildEffectiveStatusWhere,
+  PUBLISHED_ACTIVITY_STATUSES,
+  resolveActivityStatus,
+} from './activities.status.js';
 import type {
   CreateActivityBody,
   ListActivitiesQuery,
@@ -15,14 +27,12 @@ import type {
 import type {
   ActivityDetail,
   ActivityListItem,
-  EventProgramActivityItem,
   PaginatedActivities,
   PaginatedEventProgramActivities,
 } from './activities.types.js';
 
-const UPCOMING_STATUSES = ['SCHEDULED', 'ONGOING'] as const;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
-const PROGRAM_PUBLIC_ACTIVITY_STATUSES: ActivityStatus[] = ['SCHEDULED', 'ONGOING', 'COMPLETED'];
 const ALL_ACTIVITY_STATUSES: ActivityStatus[] = [
   'DRAFT',
   'SCHEDULED',
@@ -41,6 +51,7 @@ const activitySelect = {
   endTime: true,
   maxCapacity: true,
   bannerUrl: true,
+  status: true,
   speakers: {
     select: { speaker: { select: { id: true, firstName: true, lastName: true } } },
     orderBy: { speaker: { lastName: 'asc' } },
@@ -66,6 +77,7 @@ interface ActivityRecord {
   endTime: Date;
   maxCapacity: number | null;
   bannerUrl: string | null;
+  status: ActivityStatus;
   speakers: { speaker: { id: string; firstName: string; lastName: string } }[];
   classroom: { id: string; name: string; building: string | null } | null;
   eventProgram: {
@@ -80,7 +92,7 @@ const formatDate = (value: Date): string => value.toISOString().slice(0, 10);
 
 const formatTime = (value: Date): string => value.toISOString().slice(11, 16);
 
-const toActivityListItem = (record: ActivityRecord): ActivityListItem => {
+const toActivityListItem = (record: ActivityRecord, now: Date): ActivityListItem => {
   const { organizationalUnit } = record.eventProgram;
 
   return {
@@ -93,6 +105,7 @@ const toActivityListItem = (record: ActivityRecord): ActivityListItem => {
     endTime: formatTime(record.endTime),
     capacity: record.maxCapacity,
     bannerUrl: record.bannerUrl,
+    status: resolveActivityStatus(record, now),
     speakers: record.speakers.map(({ speaker }) => ({
       id: speaker.id,
       firstName: speaker.firstName,
@@ -120,7 +133,6 @@ const toActivityListItem = (record: ActivityRecord): ActivityListItem => {
 
 const activityDetailSelect = {
   ...activitySelect,
-  status: true,
   cancelReason: true,
   equipment: { select: { name: true }, orderBy: { name: 'asc' } },
 } as const;
@@ -134,7 +146,6 @@ const activityDetailWithCountSelect = {
 } as const;
 
 interface ActivityDetailRecord extends ActivityRecord {
-  status: ActivityStatus;
   cancelReason: string | null;
   equipment: { name: string }[];
 }
@@ -143,49 +154,18 @@ const toActivityDetail = (
   record: ActivityDetailRecord,
   enrolledCount: number,
   checkedInCount: number,
+  now: Date,
 ): ActivityDetail => ({
-  ...toActivityListItem(record),
-  status: record.status,
+  ...toActivityListItem(record, now),
   cancelReason: record.cancelReason,
   equipment: record.equipment.map((item) => item.name),
   enrolledCount,
   checkedInCount,
 });
 
-const programActivitySelect = {
-  ...activitySelect,
-  status: true,
-} as const;
-
-interface ProgramActivityRecord extends ActivityRecord {
-  status: ActivityStatus;
-}
-
-const toProgramActivityItem = (record: ProgramActivityRecord): EventProgramActivityItem => ({
-  ...toActivityListItem(record),
-  status: record.status,
-});
-
-const RESERVING_STATUSES: ActivityStatus[] = ['SCHEDULED', 'ONGOING'];
-
 const parseActivityDate = (value: string): Date => new Date(`${value}T00:00:00.000Z`);
 
 const parseActivityTime = (value: string): Date => new Date(`1970-01-01T${value}:00.000Z`);
-
-const isExclusionViolation = (error: unknown): boolean => {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-
-  const candidate = error as { code?: unknown; message?: unknown; meta?: { code?: unknown } };
-
-  return (
-    candidate.code === '23P01' ||
-    candidate.meta?.code === '23P01' ||
-    (typeof candidate.message === 'string' &&
-      candidate.message.includes('activities_classroom_no_overlap'))
-  );
-};
 
 const ACTIVITY_DELETION_CONFLICT_MESSAGE =
   'The activity changed while it was being deleted. Retry the request.';
@@ -210,82 +190,67 @@ const isDeletionRetentionConflict = (error: unknown): boolean => {
   );
 };
 
-const assertActivityScheduleIsAvailable = async (input: {
-  activityId: string;
-  classroomId: string;
-  date: Date;
-  startTime: Date;
-  endTime: Date;
-  maxCapacity: number | null;
-}): Promise<void> => {
-  const prisma = getPrismaClient();
-
-  const classroom = await prisma.classroom.findUnique({
-    where: { id: input.classroomId },
-    select: { id: true, isActive: true, capacity: true },
-  });
-
-  if (!classroom) {
-    throw new ApiError(404, 'Classroom not found.');
-  }
-  if (!classroom.isActive) {
-    throw new ApiError(400, 'Classroom is not active.');
-  }
-  if (input.maxCapacity !== null && classroom.capacity < input.maxCapacity) {
-    throw new ApiError(400, 'Classroom capacity is below the activity capacity.');
-  }
-
-  const dateKey = input.date.toISOString().slice(0, 10);
-
-  const window = await prisma.classroomAvailability.findFirst({
-    where: {
-      classroomId: input.classroomId,
-      dayOfWeek: getInstitutionalDayOfWeek(dateKey),
-      startTime: { lte: input.startTime },
-      endTime: { gte: input.endTime },
-    },
-    select: { id: true },
-  });
-
-  if (!window) {
-    throw new ApiError(409, 'Classroom is not available in the requested time window.');
-  }
-
-  const overlapping = await prisma.activity.findFirst({
-    where: {
-      id: { not: input.activityId },
-      classroomId: input.classroomId,
-      date: input.date,
-      status: { in: [...RESERVING_STATUSES] },
-      startTime: { lt: input.endTime },
-      endTime: { gt: input.startTime },
-    },
-    select: { id: true },
-  });
-
-  if (overlapping) {
-    throw new ApiError(409, 'Classroom is already reserved for an overlapping activity.');
-  }
-};
-
-export const listUpcomingActivities = async (
+export const listActivities = async (
   query: ListActivitiesQuery,
+  viewer: Express.AuthenticatedUser | null = null,
   now: Date = new Date(),
 ): Promise<PaginatedActivities> => {
   const prisma = getPrismaClient();
 
+  const requestedStatus = viewer?.globalRole === 'ADMIN' ? query.status : undefined;
+  const statusWhere =
+    requestedStatus && requestedStatus !== 'ALL'
+      ? buildEffectiveStatusWhere(requestedStatus, now)
+      : requestedStatus === 'ALL'
+        ? {}
+        : { status: { in: [...PUBLISHED_ACTIVITY_STATUSES] } };
+
+  const when = query.when ?? 'upcoming';
+  const today = startOfInstitutionalDay(now);
+  let lowerBound: Date | undefined = when === 'upcoming' ? today : undefined;
+  let upperBound: Date | undefined =
+    when === 'past' ? new Date(today.getTime() - DAY_MS) : undefined;
+
+  if (query.dateFrom) {
+    const from = parseActivityDate(query.dateFrom);
+    lowerBound = lowerBound && lowerBound > from ? lowerBound : from;
+  }
+  if (query.dateTo) {
+    const to = parseActivityDate(query.dateTo);
+    upperBound = upperBound && upperBound < to ? upperBound : to;
+  }
+
   const where = {
-    status: { in: [...UPCOMING_STATUSES] },
-    eventProgram: { status: 'ACTIVE' as const },
-    date: { gte: startOfInstitutionalDay(now) },
+    ...statusWhere,
+    eventProgram: {
+      status: 'ACTIVE' as const,
+      ...(query.organizationalUnitId ? { organizationalUnitId: query.organizationalUnitId } : {}),
+      ...(query.unitType ? { organizationalUnit: { type: query.unitType } } : {}),
+    },
+    ...(query.eventProgramId ? { eventProgramId: query.eventProgramId } : {}),
+    ...(query.type ? { type: query.type } : {}),
+    ...(query.classroomId ? { classroomId: query.classroomId } : {}),
+    ...(lowerBound || upperBound
+      ? {
+          date: {
+            ...(lowerBound ? { gte: lowerBound } : {}),
+            ...(upperBound ? { lte: upperBound } : {}),
+          },
+        }
+      : {}),
   };
+
+  const orderBy =
+    when === 'past'
+      ? ([{ date: 'desc' }, { startTime: 'desc' }, { id: 'asc' }] as const)
+      : ([{ date: 'asc' }, { startTime: 'asc' }, { id: 'asc' }] as const);
 
   const skip = (query.page - 1) * query.limit;
 
   const [records, total] = await Promise.all([
     prisma.activity.findMany({
       where,
-      orderBy: [{ date: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
+      orderBy: [...orderBy],
       skip,
       take: query.limit,
       select: activitySelect,
@@ -294,7 +259,7 @@ export const listUpcomingActivities = async (
   ]);
 
   return {
-    items: records.map((record) => toActivityListItem(record)),
+    items: records.map((record) => toActivityListItem(record, now)),
     page: query.page,
     limit: query.limit,
     total,
@@ -306,6 +271,7 @@ export const listEventProgramActivities = async (
   eventProgramId: string,
   query: ListEventProgramActivitiesQuery,
   viewer: Express.AuthenticatedUser | null = null,
+  now: Date = new Date(),
 ): Promise<PaginatedEventProgramActivities> => {
   const prisma = getPrismaClient();
 
@@ -327,11 +293,11 @@ export const listEventProgramActivities = async (
     throw new ApiError(404, 'Event program not found.');
   }
 
-  const statuses = canRead
+  const statusWhere = canRead
     ? query.status && query.status !== 'ALL'
-      ? [query.status]
-      : ALL_ACTIVITY_STATUSES
-    : PROGRAM_PUBLIC_ACTIVITY_STATUSES;
+      ? { AND: [buildEffectiveStatusWhere(query.status, now)] }
+      : { status: { in: [...ALL_ACTIVITY_STATUSES] } }
+    : { status: { in: [...PUBLISHED_ACTIVITY_STATUSES] } };
 
   const dateFilter =
     query.dateFrom || query.dateTo
@@ -343,7 +309,7 @@ export const listEventProgramActivities = async (
 
   const where = {
     eventProgramId,
-    status: { in: statuses },
+    ...statusWhere,
     ...(query.type ? { type: query.type } : {}),
     ...(query.q
       ? {
@@ -364,13 +330,13 @@ export const listEventProgramActivities = async (
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
       skip,
       take: query.limit,
-      select: programActivitySelect,
+      select: activitySelect,
     }),
     prisma.activity.count({ where }),
   ]);
 
   return {
-    items: records.map((record) => toProgramActivityItem(record)),
+    items: records.map((record) => toActivityListItem(record, now)),
     page: query.page,
     limit: query.limit,
     total,
@@ -381,6 +347,7 @@ export const listEventProgramActivities = async (
 export const getActivityById = async (
   id: string,
   viewer?: Express.AuthenticatedUser,
+  now: Date = new Date(),
 ): Promise<ActivityDetail> => {
   const prisma = getPrismaClient();
 
@@ -407,7 +374,7 @@ export const getActivityById = async (
     where: { activityId: id, checkedInAt: { not: null } },
   });
 
-  return toActivityDetail(record, record._count.attendance, checkedInCount);
+  return toActivityDetail(record, record._count.attendance, checkedInCount, now);
 };
 
 type SpeakerInput = NonNullable<CreateActivityBody['speakers']>[number];
@@ -489,22 +456,21 @@ export const createActivity = async (
     }
   }
 
-  if (input.classroomId) {
-    const classroom = await prisma.classroom.findUnique({
-      where: { id: input.classroomId },
-      select: { id: true, isActive: true },
-    });
-
-    if (!classroom) {
-      throw new ApiError(404, 'Classroom not found.');
-    }
-    if (!classroom.isActive) {
-      throw new ApiError(400, 'Classroom is not active.');
-    }
-  }
-
   const startTime = new Date(`1970-01-01T${input.startTime}:00.000Z`);
   const endTime = new Date(`1970-01-01T${input.endTime}:00.000Z`);
+
+  assertActivityTimeRange(startTime, endTime);
+
+  if (input.classroomId) {
+    await assertActivityScheduleIsAvailable({
+      classroomId: input.classroomId,
+      date,
+      startTime,
+      endTime,
+      maxCapacity: input.maxCapacity ?? null,
+    });
+  }
+
   const speakerCreates = input.speakers?.length ? await buildSpeakerCreates(input.speakers) : null;
 
   const record = await prisma.$transaction(async (tx) => {
@@ -560,7 +526,7 @@ export const createActivity = async (
     return created;
   });
 
-  return toActivityDetail(record, 0, 0);
+  return toActivityDetail(record, 0, 0, new Date());
 };
 
 interface ActivityScheduleSnapshot {
@@ -763,19 +729,26 @@ export const updateActivity = async (
   if (!current) {
     throw new ApiError(404, 'Activity not found.');
   }
-  if (current.status === 'COMPLETED' || current.status === 'CANCELLED') {
+
+  const now = new Date();
+  const effectiveStatus = resolveActivityStatus(current, now);
+
+  if (effectiveStatus === 'COMPLETED' || effectiveStatus === 'CANCELLED') {
     throw new ApiError(409, 'Completed or cancelled activities cannot be modified.');
+  }
+  if (effectiveStatus === 'ONGOING') {
+    throw new ApiError(409, 'Ongoing activities cannot be modified.');
   }
   if (current.eventProgram.status !== 'ACTIVE') {
     throw new ApiError(409, 'Event programs must be active to modify their activities.');
   }
 
-  const status = input.status ?? current.status;
+  const status = input.status ?? effectiveStatus;
 
-  if (input.status !== undefined && input.status !== current.status) {
+  if (input.status !== undefined && input.status !== effectiveStatus) {
     const allowed =
-      (current.status === 'DRAFT' && input.status === 'SCHEDULED') ||
-      (current.status === 'SCHEDULED' && input.status === 'DRAFT');
+      (effectiveStatus === 'DRAFT' && input.status === 'SCHEDULED') ||
+      (effectiveStatus === 'SCHEDULED' && input.status === 'DRAFT');
 
     if (!allowed) {
       throw new ApiError(400, 'Activity status transition is not allowed.');
@@ -787,9 +760,7 @@ export const updateActivity = async (
     input.startTime !== undefined ? parseActivityTime(input.startTime) : current.startTime;
   const endTime = input.endTime !== undefined ? parseActivityTime(input.endTime) : current.endTime;
 
-  if (endTime <= startTime) {
-    throw new ApiError(400, 'End time must be after start time.');
-  }
+  assertActivityTimeRange(startTime, endTime);
 
   if (
     input.date !== undefined &&
@@ -824,17 +795,7 @@ export const updateActivity = async (
       maxCapacity,
     });
   } else if (classroomChanged && classroomId) {
-    const classroom = await prisma.classroom.findUnique({
-      where: { id: classroomId },
-      select: { id: true, isActive: true },
-    });
-
-    if (!classroom) {
-      throw new ApiError(404, 'Classroom not found.');
-    }
-    if (!classroom.isActive) {
-      throw new ApiError(400, 'Classroom is not active.');
-    }
+    await assertClassroomIsAssignable(classroomId);
   }
 
   const data = {
@@ -932,7 +893,7 @@ export const updateActivity = async (
     where: { activityId: id, checkedInAt: { not: null } },
   });
 
-  return toActivityDetail(record, record._count.attendance, checkedInCount);
+  return toActivityDetail(record, record._count.attendance, checkedInCount, now);
 };
 
 export const cancelActivity = async (
@@ -950,13 +911,17 @@ export const cancelActivity = async (
   if (!current) {
     throw new ApiError(404, 'Activity not found.');
   }
-  if (current.status === 'COMPLETED') {
+
+  const now = new Date();
+  const effectiveStatus = resolveActivityStatus(current, now);
+
+  if (effectiveStatus === 'COMPLETED') {
     throw new ApiError(409, 'Completed activities cannot be cancelled.');
   }
 
   let record = current;
 
-  if (current.status !== 'CANCELLED') {
+  if (effectiveStatus !== 'CANCELLED') {
     if (current.eventProgram.status !== 'ACTIVE') {
       throw new ApiError(409, 'Event programs must be active to cancel their activities.');
     }
@@ -990,7 +955,7 @@ export const cancelActivity = async (
     where: { activityId: id, checkedInAt: { not: null } },
   });
 
-  return toActivityDetail(record, record._count.attendance, checkedInCount);
+  return toActivityDetail(record, record._count.attendance, checkedInCount, now);
 };
 
 export const deleteActivity = async (

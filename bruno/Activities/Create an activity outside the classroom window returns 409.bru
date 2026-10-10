@@ -1,0 +1,43 @@
+meta {
+  name: Create an activity outside the classroom window returns 409
+  type: http
+  seq: 50
+  tags: [
+    Activities
+  ]
+}
+
+post {
+  url: {{baseUrl}}/api/v1/activities
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Actividad temporal ventana 5.8",
+    "type": "WORKSHOP",
+    "date": "2027-06-07",
+    "startTime": "18:00",
+    "endTime": "19:00",
+    "eventProgramId": "seed_program_fic_default",
+    "classroomId": "seed_classroom_a-1"
+  }
+}
+
+docs {
+  Rejects the create before any write when the schedule falls outside every availability window of the classroom. Requires an authenticated admin.
+}
+
+tests {
+  test("a schedule outside the window is rejected with 409", function () {
+    expect(res.getStatus()).to.equal(409);
+    const body = res.getBody();
+    expect(body.success).to.equal(false);
+    expect(body.message).to.equal("Classroom is not available in the requested time window.");
+  });
+}

@@ -1,0 +1,35 @@
+meta {
+  name: Unpublish the reserving activity
+  type: http
+  seq: 54
+  tags: [
+    Activities
+  ]
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/activities/{{reservingActivityId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "status": "DRAFT"
+  }
+}
+
+docs {
+  Unpublishes the reserving activity so the retention rule allows deleting it. Requires the activity:update permission or the ADMIN role.
+}
+
+tests {
+  test("the reserving activity returns to DRAFT", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().data.status).to.equal("DRAFT");
+  });
+}

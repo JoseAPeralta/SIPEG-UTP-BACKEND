@@ -3,6 +3,7 @@ import type { ProgramStatus, UnitType } from '../../generated/prisma/enums.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { writeAuditEvent } from '../audit/audit.service.js';
 import type { AuditContext, AuditEventInput } from '../audit/audit.types.js';
+import { buildReservingActivityWhere } from '../activities/activities.status.js';
 import type { ListOrganizationalUnitsQuery } from './organizational-units.schemas.js';
 import type {
   CreateOrganizationalUnitInput,
@@ -292,6 +293,7 @@ export const updateOrganizationalUnit = async (
 export const deactivateOrganizationalUnit = async (
   id: string,
   auditContext: AuditContext = {},
+  now: Date = new Date(),
 ): Promise<OrganizationalUnitDetail> => {
   const prisma = getPrismaClient();
   const unit = await prisma.organizationalUnit.findUnique({
@@ -316,7 +318,7 @@ export const deactivateOrganizationalUnit = async (
   }
 
   const blockingActivities = await prisma.activity.count({
-    where: { eventProgramId: defaultProgram.id, status: { in: ['SCHEDULED', 'ONGOING'] } },
+    where: { eventProgramId: defaultProgram.id, ...buildReservingActivityWhere(now) },
   });
 
   if (blockingActivities > 0) {
