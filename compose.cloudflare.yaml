@@ -19,6 +19,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    mem_limit: ${CLOUDFLARED_MEM_LIMIT:-128m}
+    cpus: ${CLOUDFLARED_CPUS:-0.5}
+    pids_limit: 128
     networks:
       - sipeg-utp-prod
       - observability
