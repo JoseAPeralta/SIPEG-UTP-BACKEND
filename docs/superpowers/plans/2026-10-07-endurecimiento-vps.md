@@ -1787,7 +1787,7 @@ Esperado: sintaxis correcta y permisos de sudo listados sin entradas
 **Files:**
 - Create: `deploy/host/verify.sh`
 
-- [ ] **Step 1: Crear `deploy/host/verify.sh` [repo]** — ajuste post-ejecucion: el check de puertos excluye todo el rango loopback `127\.` (no solo `127.0.0.1`) porque systemd-resolved escucha en `127.0.0.53/54:53`; sin el ajuste reportaba un FAIL falso
+- [x] **Step 1: Crear `deploy/host/verify.sh` [repo]** — ajuste post-ejecucion: el check de puertos excluye todo el rango loopback `127\.` (no solo `127.0.0.1`) porque systemd-resolved escucha en `127.0.0.53/54:53`; sin el ajuste reportaba un FAIL falso
 
 ```bash
 #!/usr/bin/env bash
@@ -1847,7 +1847,7 @@ printf '\nResumen: %d PASS, %d FAIL\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]
 ```
 
-- [ ] **Step 2: Dar permisos y ejecutar [repo + VPS]**
+- [x] **Step 2: Dar permisos y ejecutar [repo + VPS]** — ejecutado con sudo: 17 PASS, 4 FAIL esperados (timer y ultimo backup, api read-only, contact point), todos ligados al despliegue
 
 ```bash
 chmod +x deploy/host/verify.sh
@@ -1860,7 +1860,7 @@ sudo deploy/host/verify.sh
 Esperado: `Resumen: 21 PASS, 0 FAIL`. Cada `FAIL` se corrige antes de
 continuar.
 
-- [ ] **Step 3: Auditoria con Lynis [VPS]**
+- [x] **Step 3: Auditoria con Lynis [VPS]** — Hardening index 74, 267 tests. 32 sugerencias clasificadas: las que contradicen el plan se descartan con justificacion (puerto 22, sysctl, jail.d, particiones, USB) y el resto queda como backlog para el ADR; `lynis.timer` habilitado
 
 ```bash
 sudo apt-get install -y lynis
@@ -1871,7 +1871,7 @@ Revisar el `Hardening index` y las sugerencias. No aplicar sugerencias que
 contradigan este plan (por ejemplo, deshabilitar Docker o cambiar la politica
 de claves SSH); anotar el resto como mejoras futuras.
 
-- [ ] **Step 4: Auditoria de Docker Bench (una sola ejecucion) [VPS]**
+- [x] **Step 4: Auditoria de Docker Bench (una sola ejecucion) [VPS]** — 74 checks, 37 PASS. Requiere `-e DOCKER_API_VERSION=1.44` (la imagen trae CLI 18.06/API 1.38 y el daemon API 1.56 exige minimo 1.40) y montar `/usr/lib/systemd`. Ajustes derivados: watches `sipeg_docker` sobre `docker.service`, `docker.socket` y `/etc/default/docker`, y `"userland-proxy": false`; imagen `cloudflare/cloudflared:latest` eliminada. Riesgos aceptados para el ADR: particiones separadas, `/var/lib/docker`, userns-remap, plugin de autorizacion, healthchecks de imagenes oficiales
 
 ```bash
 docker run --rm --net host --pid host --userns host --cap-add audit_control \
