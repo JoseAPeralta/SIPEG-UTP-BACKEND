@@ -1702,7 +1702,7 @@ un valor (`Explore` con el datasource Prometheus).
 - Create: `deploy/host/auditd/99-sipeg.rules`
 - Create: `deploy/host/sudoers/90-sipeg`
 
-- [ ] **Step 1: Crear `deploy/host/auditd/99-sipeg.rules` [repo]**
+- [x] **Step 1: Crear `deploy/host/auditd/99-sipeg.rules` [repo]** — revisado y aprobado; el watch de `/var/run/docker.sock` puede generar volumen alto cuando Alloy sondee el socket tras el despliegue (retirar solo esa regla si es excesivo)
 
 `__DEPLOY_ENV_PROD__` lo sustituye el instalador por la ruta real de
 `.env.prod`; si el archivo no existe, la linea se omite.
@@ -1721,7 +1721,7 @@ un valor (`Explore` con el datasource Prometheus).
 -w __DEPLOY_ENV_PROD__ -p rwa -k sipeg_secrets
 ```
 
-- [ ] **Step 2: Crear `deploy/host/sudoers/90-sipeg` [repo]**
+- [x] **Step 2: Crear `deploy/host/sudoers/90-sipeg` [repo]** — revisado y aprobado
 
 ```text
 Defaults timestamp_timeout=5
@@ -1729,7 +1729,7 @@ Defaults use_pty
 Defaults passwd_tries=3
 ```
 
-- [ ] **Step 3: Aplicar [VPS]**
+- [x] **Step 3: Aplicar [VPS]** — `install.sh audit` + `install.sh sudo` aplicados; la regla `sipeg_secrets` se omite hasta que exista `.env.prod` (re-ejecutar `install.sh audit` al desplegar); postfix quedo instalado inerte ("No configuration")
 
 ```bash
 sudo apt-get install -y auditd aide aide-common
@@ -1737,7 +1737,7 @@ sudo deploy/host/install.sh audit
 sudo deploy/host/install.sh sudo
 ```
 
-- [ ] **Step 4: Verificar auditd [VPS]**
+- [x] **Step 4: Verificar auditd [VPS]** — 8 reglas `sipeg_*` cargadas y servicio `active`
 
 ```bash
 sudo auditctl -l | grep sipeg_
@@ -1746,7 +1746,7 @@ sudo systemctl is-active auditd
 
 Esperado: las reglas con clave `sipeg_*` cargadas y el servicio activo.
 
-- [ ] **Step 5: Inicializar AIDE y habilitar el chequeo diario [VPS]**
+- [x] **Step 5: Inicializar AIDE y habilitar el chequeo diario [VPS]** — `aide.db` creado (37 MB) y `dailyaidecheck.timer` activo
 
 ```bash
 sudo aideinit
@@ -1770,7 +1770,7 @@ systemctl list-timers --all | grep -i aide
 Esperado: base AIDE creada y un timer diario listado. La primera
 `sudo aide --check` puede tardar varios minutos.
 
-- [ ] **Step 6: Verificar sudoers [VPS]**
+- [x] **Step 6: Verificar sudoers [VPS]** — `visudo -c` parsed OK; `(ALL : ALL) ALL` sin `NOPASSWD` no intencionadas
 
 ```bash
 sudo visudo -c
@@ -1787,7 +1787,7 @@ Esperado: sintaxis correcta y permisos de sudo listados sin entradas
 **Files:**
 - Create: `deploy/host/verify.sh`
 
-- [ ] **Step 1: Crear `deploy/host/verify.sh` [repo]**
+- [ ] **Step 1: Crear `deploy/host/verify.sh` [repo]** — ajuste post-ejecucion: el check de puertos excluye todo el rango loopback `127\.` (no solo `127.0.0.1`) porque systemd-resolved escucha en `127.0.0.53/54:53`; sin el ajuste reportaba un FAIL falso
 
 ```bash
 #!/usr/bin/env bash
