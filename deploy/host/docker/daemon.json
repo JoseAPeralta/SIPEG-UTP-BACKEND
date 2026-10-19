@@ -6,5 +6,6 @@
     "max-size": "20m",
     "max-file": "5"
   },
-  "no-new-privileges": true
+  "no-new-privileges": true,
+  "userland-proxy": false
 }
