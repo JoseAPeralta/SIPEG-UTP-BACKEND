@@ -5,6 +5,9 @@
 -w /etc/sudoers -p wa -k sipeg_sudo
 -w /etc/sudoers.d/ -p wa -k sipeg_sudo
 -w /etc/docker/daemon.json -p wa -k sipeg_docker
+-w /etc/default/docker -p wa -k sipeg_docker
+-w /usr/lib/systemd/system/docker.service -p wa -k sipeg_docker
+-w /usr/lib/systemd/system/docker.socket -p wa -k sipeg_docker
 -w /etc/ufw/ -p wa -k sipeg_firewall
 -w /var/run/docker.sock -p rwa -k sipeg_docker_socket
 -w /etc/systemd/system/sipeg-pg-backup.timer -p wa -k sipeg_backup
