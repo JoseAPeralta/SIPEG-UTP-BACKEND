@@ -1,0 +1,14 @@
+# Politica de notificacion por defecto: todo va al contact point sipeg-email.
+# Provisionada por archivo; recrear Grafana para aplicarla.
+
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: sipeg-email
+    group_by:
+      - grafana_folder
+      - alertname
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

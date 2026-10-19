@@ -1,0 +1,16 @@
+# Contact point de correo para las alertas de Grafana (SIPEG UTP).
+# Provisionado por archivo; recrear Grafana para aplicarlo.
+# `$ALERT_EMAIL_TO` se interpola desde el entorno del contenedor.
+
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: sipeg-email
+    receivers:
+      - uid: sipeg-email
+        type: email
+        settings:
+          addresses: $ALERT_EMAIL_TO
+          singleEmail: true
+        disableResolveMessage: false
