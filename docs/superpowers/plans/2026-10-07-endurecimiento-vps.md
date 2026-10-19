@@ -814,7 +814,7 @@ Esperado: uso por debajo de 500M y directivas presentes.
 **Files:**
 - Create: `deploy/host/docker/daemon.json`
 
-- [ ] **Step 1: Crear `deploy/host/docker/daemon.json` [repo]**
+- [x] **Step 1: Crear `deploy/host/docker/daemon.json` [repo]**
 
 ```json
 {
@@ -838,7 +838,7 @@ Notas:
 - `log-driver` global replica la politica `x-logging` que ya declaran los
   compose.
 
-- [ ] **Step 2: Aplicar y levantar el stack [VPS]**
+- [x] **Step 2: Aplicar y levantar el stack [VPS]** — `install.sh docker` aplicado; sin `up -d` porque el stack aun no esta desplegado
 
 ```bash
 sudo deploy/host/install.sh docker
@@ -852,7 +852,7 @@ sudo docker compose \
 Si `compose.cloudflare.yaml` ya existe, agregarlo con `-f`. Esperado: el daemon
 reinicia (los contenedores se detienen) y el stack vuelve a `running`.
 
-- [ ] **Step 3: Verificar defaults del daemon [VPS]**
+- [x] **Step 3: Verificar defaults del daemon [VPS]** — `LiveRestoreEnabled true`, `LoggingDriver local`, `icc false`, `NoNewPrivs 1`
 
 ```bash
 docker info -f '{{.LiveRestoreEnabled}}'
@@ -862,7 +862,7 @@ docker run --rm --entrypoint cat postgres:18.6-alpine@sha256:6c538e7206ea40ff740
 
 Esperado: `true`, `false`, `NoNewPrivs: 1`.
 
-- [ ] **Step 4: Auditar el grupo docker y el socket [VPS]**
+- [x] **Step 4: Auditar el grupo docker y el socket [VPS]** — grupo `docker` sin miembros; socket `660 root docker`
 
 ```bash
 getent group docker
@@ -873,7 +873,7 @@ Esperado: solo el usuario administrador en el grupo (o ninguno si se usa
 `sudo docker`); socket `660 root docker`. Retirar del grupo a cualquier cuenta
 que no lo necesite: `sudo gpasswd -d <usuario> docker`.
 
-- [ ] **Step 5: Confirmar que el stack quedo sano [VPS]**
+- [ ] **Step 5: Confirmar que el stack quedo sano [VPS]** — pendiente del despliegue del stack
 
 ```bash
 sudo docker compose \
@@ -1253,7 +1253,7 @@ bash -n deploy/backup/pg-backup.sh
 bash -n deploy/backup/pg-restore-verify.sh
 ```
 
-- [ ] **Step 8: Generar la clave de cifrado [VPS]** — ejecutable hoy; no depende del stack
+- [x] **Step 8: Generar la clave de cifrado [VPS]** — clave generada, copiada al gestor de secretos fuera del VPS y temporales borrados en ambos lados; original intacto en `/etc/sipeg/backup.key` (600 root)
 
 ```bash
 sudo install -d -m 0700 /etc/sipeg
