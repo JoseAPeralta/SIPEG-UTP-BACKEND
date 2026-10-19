@@ -36,6 +36,10 @@ services:
     logging: *logging
     security_opt:
       - no-new-privileges:true
+    mem_limit: ${MIGRATE_MEM_LIMIT:-512m}
+    pids_limit: 256
+    cap_drop:
+      - ALL
     networks:
       - sipeg-utp-prod
 
@@ -64,6 +68,10 @@ services:
     logging: *logging
     security_opt:
       - no-new-privileges:true
+    mem_limit: ${MIGRATE_MEM_LIMIT:-512m}
+    pids_limit: 256
+    cap_drop:
+      - ALL
     networks:
       - sipeg-utp-prod
 
@@ -133,6 +141,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    mem_limit: ${API_MEM_LIMIT:-768m}
+    cpus: ${API_CPUS:-2.0}
+    pids_limit: 256
+    read_only: true
+    tmpfs:
+      - /tmp
     networks:
       - sipeg-utp-prod
 
@@ -154,6 +168,17 @@ services:
     logging: *logging
     security_opt:
       - no-new-privileges:true
+    mem_limit: ${DB_MEM_LIMIT:-1g}
+    cpus: ${DB_CPUS:-2.0}
+    pids_limit: 512
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     networks:
       - sipeg-utp-prod
 

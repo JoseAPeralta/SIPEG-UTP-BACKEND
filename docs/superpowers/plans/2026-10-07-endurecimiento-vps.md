@@ -814,7 +814,7 @@ Esperado: uso por debajo de 500M y directivas presentes.
 **Files:**
 - Create: `deploy/host/docker/daemon.json`
 
-- [ ] **Step 1: Crear `deploy/host/docker/daemon.json` [repo]**
+- [x] **Step 1: Crear `deploy/host/docker/daemon.json` [repo]**
 
 ```json
 {
@@ -838,7 +838,7 @@ Notas:
 - `log-driver` global replica la politica `x-logging` que ya declaran los
   compose.
 
-- [ ] **Step 2: Aplicar y levantar el stack [VPS]**
+- [x] **Step 2: Aplicar y levantar el stack [VPS]** — `install.sh docker` aplicado; sin `up -d` porque el stack aun no esta desplegado
 
 ```bash
 sudo deploy/host/install.sh docker
@@ -852,7 +852,7 @@ sudo docker compose \
 Si `compose.cloudflare.yaml` ya existe, agregarlo con `-f`. Esperado: el daemon
 reinicia (los contenedores se detienen) y el stack vuelve a `running`.
 
-- [ ] **Step 3: Verificar defaults del daemon [VPS]**
+- [x] **Step 3: Verificar defaults del daemon [VPS]** — `LiveRestoreEnabled true`, `LoggingDriver local`, `icc false`, `NoNewPrivs 1`
 
 ```bash
 docker info -f '{{.LiveRestoreEnabled}}'
@@ -862,7 +862,7 @@ docker run --rm --entrypoint cat postgres:18.6-alpine@sha256:6c538e7206ea40ff740
 
 Esperado: `true`, `false`, `NoNewPrivs: 1`.
 
-- [ ] **Step 4: Auditar el grupo docker y el socket [VPS]**
+- [x] **Step 4: Auditar el grupo docker y el socket [VPS]** — grupo `docker` sin miembros; socket `660 root docker`
 
 ```bash
 getent group docker
@@ -873,7 +873,7 @@ Esperado: solo el usuario administrador en el grupo (o ninguno si se usa
 `sudo docker`); socket `660 root docker`. Retirar del grupo a cualquier cuenta
 que no lo necesite: `sudo gpasswd -d <usuario> docker`.
 
-- [ ] **Step 5: Confirmar que el stack quedo sano [VPS]**
+- [ ] **Step 5: Confirmar que el stack quedo sano [VPS]** — pendiente del despliegue del stack
 
 ```bash
 sudo docker compose \
@@ -895,7 +895,7 @@ Esperado: servicios arriba y health `200`.
 - Modify: `compose.cloudflare.yaml` (si existe)
 - Modify: `.env.prod.example`
 
-- [ ] **Step 1: Probar las capabilities minimas de PostgreSQL [VPS]**
+- [x] **Step 1: Probar las capabilities minimas de PostgreSQL [VPS]** — `accepting connections` con `cap_drop ADD` + 5 capabilities contra la imagen fijada
 
 ```bash
 mkdir -p /tmp/pg-cap-test
@@ -916,7 +916,7 @@ rm -rf /tmp/pg-cap-test
 Esperado: `accepting connections`. Si falla, revisar
 `docker logs pg-cap-test` antes de tocar el compose.
 
-- [ ] **Step 2: Modificar `compose.prod.yaml` [repo]**
+- [x] **Step 2: Modificar `compose.prod.yaml` [repo]**
 
 En el servicio `api`, junto a `cap_drop`:
 
@@ -954,7 +954,7 @@ En `migrate` y en `seed`:
       - ALL
 ```
 
-- [ ] **Step 3: Modificar `compose.cloudflare.yaml` si existe [repo]**
+- [x] **Step 3: Modificar `compose.cloudflare.yaml` si existe [repo]**
 
 En el servicio `cloudflared`:
 
@@ -964,7 +964,7 @@ En el servicio `cloudflared`:
     pids_limit: 128
 ```
 
-- [ ] **Step 4: Documentar variables en `.env.prod.example` [repo]**
+- [x] **Step 4: Documentar variables en `.env.prod.example` [repo]**
 
 Agregar despues del bloque "Conexiones y ejecucion":
 
@@ -980,7 +980,7 @@ MIGRATE_MEM_LIMIT=512m
 CLOUDFLARED_MEM_LIMIT=128m
 ```
 
-- [ ] **Step 5: Validar la interpolacion [VPS]**
+- [x] **Step 5: Validar la interpolacion [VPS]** — `exit=0` con `config --quiet`
 
 ```bash
 POSTGRES_PASSWORD=validation-only \
@@ -994,7 +994,7 @@ echo "exit=$?"
 Esperado: `exit=0`. No imprimir la configuracion resuelta (contiene secretos
 ficticios, pero el habito importa).
 
-- [ ] **Step 6: Aplicar en produccion [VPS]**
+- [ ] **Step 6: Aplicar en produccion [VPS]** — pendiente del despliegue del stack (VPS nuevo); el `up -d` y el health se ejecutan entonces
 
 ```bash
 sudo docker compose \
@@ -1007,7 +1007,7 @@ curl -fsS http://127.0.0.1:3000/api/v1/health
 
 Esperado: health `200` con `authJwksReachable: true`.
 
-- [ ] **Step 7: Verificar limites y read-only efectivos [VPS]**
+- [ ] **Step 7: Verificar limites y read-only efectivos [VPS]** — pendiente del despliegue; requiere contenedores en ejecucion
 
 ```bash
 API_ID="$(docker ps -q --filter label=com.docker.compose.service=api)"
@@ -1019,7 +1019,7 @@ docker inspect -f 'mem={{.HostConfig.Memory}} caps={{json .HostConfig.CapDrop}}'
 Esperado: `readonly=true`, memoria y pids con los valores definidos; `db` con
 `["ALL"]` en `CapDrop`.
 
-- [ ] **Step 8: Registrar cambios [repo]**
+- [x] **Step 8: Registrar cambios [repo]**
 
 ```bash
 git diff --stat
@@ -1038,7 +1038,7 @@ git status --short
 - Create: `deploy/backup/sipeg-pg-backup.timer`
 - Create: `deploy/backup/install.sh`
 
-- [ ] **Step 1: Crear `deploy/backup/backup.env.example` [repo]**
+- [x] **Step 1: Crear `deploy/backup/backup.env.example` [repo]**
 
 ```env
 # Copiar a /etc/sipeg/backup.env (chmod 600) y completar.
@@ -1058,7 +1058,7 @@ RETENTION_DAYS=14
 OFFSITE_CMD=
 ```
 
-- [ ] **Step 2: Crear `deploy/backup/pg-backup.sh` [repo]**
+- [x] **Step 2: Crear `deploy/backup/pg-backup.sh` [repo]**
 
 ```bash
 #!/usr/bin/env bash
@@ -1113,7 +1113,7 @@ fi
 echo "backup_ok file=$OUT_FILE size=$(stat -c%s "$OUT_FILE")"
 ```
 
-- [ ] **Step 3: Crear `deploy/backup/pg-restore-verify.sh` [repo]**
+- [x] **Step 3: Crear `deploy/backup/pg-restore-verify.sh` [repo]** — desviacion del plan: la verificacion consulta `"users"` (tabla real del schema, `@@map("users")`), no `"user"`
 
 ```bash
 #!/usr/bin/env bash
@@ -1179,7 +1179,7 @@ fi
 echo "restore_verify_ok file=$LATEST migrations=$MIGRATIONS users=$USERS"
 ```
 
-- [ ] **Step 4: Crear `deploy/backup/sipeg-pg-backup.service` [repo]**
+- [x] **Step 4: Crear `deploy/backup/sipeg-pg-backup.service` [repo]**
 
 ```ini
 [Unit]
@@ -1197,7 +1197,7 @@ IOSchedulingClass=best-effort
 IOSchedulingPriority=7
 ```
 
-- [ ] **Step 5: Crear `deploy/backup/sipeg-pg-backup.timer` [repo]**
+- [x] **Step 5: Crear `deploy/backup/sipeg-pg-backup.timer` [repo]**
 
 ```ini
 [Unit]
@@ -1212,7 +1212,7 @@ RandomizedDelaySec=300
 WantedBy=timers.target
 ```
 
-- [ ] **Step 6: Crear `deploy/backup/install.sh` [repo]**
+- [x] **Step 6: Crear `deploy/backup/install.sh` [repo]**
 
 ```bash
 #!/usr/bin/env bash
@@ -1244,7 +1244,7 @@ systemctl enable sipeg-pg-backup.timer
 echo 'Backup instalado. Iniciar una vez a mano: systemctl start sipeg-pg-backup.service'
 ```
 
-- [ ] **Step 7: Dar permisos [repo]**
+- [x] **Step 7: Dar permisos [repo]**
 
 ```bash
 chmod +x deploy/backup/install.sh deploy/backup/pg-backup.sh deploy/backup/pg-restore-verify.sh
@@ -1253,7 +1253,7 @@ bash -n deploy/backup/pg-backup.sh
 bash -n deploy/backup/pg-restore-verify.sh
 ```
 
-- [ ] **Step 8: Generar la clave de cifrado [VPS]**
+- [x] **Step 8: Generar la clave de cifrado [VPS]** — clave generada, copiada al gestor de secretos fuera del VPS y temporales borrados en ambos lados; original intacto en `/etc/sipeg/backup.key` (600 root)
 
 ```bash
 sudo install -d -m 0700 /etc/sipeg
@@ -1264,7 +1264,7 @@ sudo chmod 600 /etc/sipeg/backup.key
 Copiar `/etc/sipeg/backup.key` a un gestor de secretos **fuera del VPS**. Sin
 esa copia, un fallo del VPS deja los backups irrecuperables.
 
-- [ ] **Step 9: Instalar y configurar [VPS]**
+- [ ] **Step 9: Instalar y configurar [VPS]** — diferido al dia del despliegue (el `install.sh` registra y habilita el timer con la config completa; con la demo pendiente el timer fallaria al no existir db)
 
 ```bash
 sudo deploy/backup/install.sh
@@ -1274,7 +1274,7 @@ sudo nano /etc/sipeg/backup.env
 Ajustar `COMPOSE_DIR`, `COMPOSE_FILES` (quitar `compose.cloudflare.yaml` si el
 overlay aun no existe) y `OFFSITE_CMD`.
 
-- [ ] **Step 10: Ejecutar el primer backup y verificar [VPS]**
+- [ ] **Step 10: Ejecutar el primer backup y verificar [VPS]** — diferido al despliegue (requiere contenedor db con pg_dump)
 
 ```bash
 sudo systemctl start sipeg-pg-backup.service
@@ -1286,7 +1286,7 @@ sudo /usr/local/sbin/sipeg-pg-restore-verify
 Esperado: `backup_ok file=...`, un archivo `.dump.enc` de tamano no trivial y
 `restore_verify_ok ... migrations=<n> users=<n>`.
 
-- [ ] **Step 11: Verificar el timer y programar la prueba mensual [VPS]**
+- [ ] **Step 11: Verificar el timer y programar la prueba mensual [VPS]** — diferido al despliegue
 
 ```bash
 systemctl list-timers sipeg-pg-backup.timer

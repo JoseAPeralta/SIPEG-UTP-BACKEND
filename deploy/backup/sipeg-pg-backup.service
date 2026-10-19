@@ -1,0 +1,13 @@
+[Unit]
+Description=Backup cifrado de PostgreSQL SIPEG UTP
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/sipeg/backup.env
+ExecStart=/usr/local/sbin/sipeg-pg-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
