@@ -20,12 +20,15 @@ Configura las variables de entorno usando `.env.example` como referencia.
 
 ## Entornos con Docker
 
-El proyecto usa dos archivos Compose independientes: uno de desarrollo y uno de produccion.
+El despliegue usa un archivo base por entorno y dos overlays. Produccion combina
+`compose.prod.yaml`, `compose.observability.yaml` y `compose.cloudflare.yaml`.
 
-| Entorno    | Archivo             | Uso                                                                         |
-| ---------- | ------------------- | --------------------------------------------------------------------------- |
-| Desarrollo | `compose.dev.yaml`  | Hot reload, migraciones, PostgreSQL y Mailpit publicados en loopback.       |
-| Produccion | `compose.prod.yaml` | Imagen runtime minima, sin puertos de base de datos, secretos obligatorios. |
+| Entorno                 | Archivo                      | Uso                                                                                     |
+| ----------------------- | ---------------------------- | --------------------------------------------------------------------------------------- |
+| Desarrollo              | `compose.dev.yaml`           | Hot reload, migraciones, PostgreSQL y Mailpit publicados en loopback.                   |
+| Produccion (base)       | `compose.prod.yaml`          | Imagen runtime minima, sin puertos de base de datos, secretos obligatorios.             |
+| Observabilidad          | `compose.observability.yaml` | Overlay con Loki, Alloy, Grafana y el proxy de socket; se combina con dev o produccion. |
+| Cloudflare (produccion) | `compose.cloudflare.yaml`    | Overlay con `cloudflared` y el dominio publico de Grafana.                              |
 
 ### Desarrollo
 
@@ -55,28 +58,64 @@ Evita `down -v` salvo que quieras destruir los datos locales: elimina el volumen
 
 ### Produccion
 
-1. Crea un archivo `.env.prod` (no se versiona) con secretos reales. Usa la seccion de produccion de `.env.example` como guia.
+1. Crea un archivo `.env.prod` (no se versiona) con secretos reales. Usa `.env.prod.example` como guia y deja el archivo con permisos `600`.
 2. En el primer despliegue sobre una base vacia define el ADMIN inicial en `.env.prod` (`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_IDENTIFICATION_NUMBER`); el seed base falla si no existe ningun ADMIN y no hay bootstrap configurado.
-3. Levanta el stack:
+3. Valida la configuracion sin imprimir secretos:
 
 ```bash
-docker compose -f compose.prod.yaml --env-file .env.prod up -d --build
+docker compose \
+  -f compose.prod.yaml \
+  -f compose.observability.yaml \
+  -f compose.cloudflare.yaml \
+  --env-file .env.prod \
+  config --quiet
 ```
 
+4. Levanta el stack:
+
+```bash
+docker compose \
+  -f compose.prod.yaml \
+  -f compose.observability.yaml \
+  -f compose.cloudflare.yaml \
+  --env-file .env.prod \
+  up -d --build
+```
+
+Dominios publicados:
+
+| Hostname                | Destino               | Proteccion                    |
+| ----------------------- | --------------------- | ----------------------------- |
+| `sipeg-utp.com`         | Worker Static Assets  | Publico                       |
+| `api.sipeg-utp.com`     | `http://api:3000`     | Publico; CORS y rate limiting |
+| `grafana.sipeg-utp.com` | `http://grafana:3000` | Cloudflare Access + login     |
+
 - El servicio `migrate` aplica las migraciones pendientes y termina; luego el servicio one-shot `seed` carga el catalogo base institucional y el ADMIN inicial; la API solo arranca si ambos finalizan correctamente.
-- El seed base es idempotente y no sobrescribe datos existentes: puedes re-ejecutarlo con `docker compose -f compose.prod.yaml --env-file .env.prod run --rm seed`.
+- El seed base es idempotente y no sobrescribe datos existentes: puedes re-ejecutarlo con `docker compose -f compose.prod.yaml -f compose.observability.yaml -f compose.cloudflare.yaml --env-file .env.prod run --rm seed`.
 - La base de datos no publica puertos al host; solo es accesible por la red interna de Compose.
+- `cloudflared` publica la API y Grafana por Cloudflare Tunnel. No se abren puertos HTTP/HTTPS entrantes en el VPS; la API y Grafana solo se atan a `127.0.0.1` para diagnostico desde el host.
+- `api.sipeg-utp.com` no usa Access porque sus clientes usan Bearer tokens. `grafana.sipeg-utp.com` exige Access (team `sipeg`) y despues el login de Grafana.
+- `AUTH_JWKS_URL` usa el loopback del contenedor (`http://127.0.0.1:3000/api/auth/jwks`) para evitar challenges de Bot Fight Mode. `AUTH_URL`, `AUTH_ISSUER` y `AUTH_AUDIENCE` siguen siendo `https://api.sipeg-utp.com`.
+- `AUTH_REFRESH_COOKIE_SAME_SITE=lax` porque API y frontend comparten el dominio registrable. La cookie `sipeg-refresh` es `HttpOnly`, `Secure`, host-only y `Path=/api/v1/auth`.
 - `DATABASE_URL` se construye automaticamente con host `db` a partir de `POSTGRES_DB`, `POSTGRES_USER` y `POSTGRES_PASSWORD`; no la definas en `.env.prod`.
-- Las variables obligatorias de Compose son: `CORS_ORIGIN`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`, `MAIL_HOST`, `MAIL_FROM` e `IMAGE_TAG`.
+- Las variables obligatorias de Compose son: `CORS_ORIGIN`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `AUTH_SECRET`, `AUTH_URL`, `AUTH_REFRESH_COOKIE_SAME_SITE`, `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`, `MAIL_HOST`, `MAIL_FROM`, `LOG_PSEUDONYMIZATION_KEY`, `GRAFANA_ADMIN_PASSWORD`, `GRAFANA_SECRET_KEY`, `CLOUDFLARE_TUNNEL_TOKEN` e `IMAGE_TAG`.
 - Si `POSTGRES_PASSWORD` contiene caracteres especiales (`@ : / ? # %`), codificalos en porcentaje o usa solo caracteres alfanumericos.
-- `IMAGE_TAG` es obligatoria: etiqueta la imagen de la API y no tiene default, para que un despliegue posterior no sobrescriba sin querer la imagen verificada. Usa una version explicita, por ejemplo una fecha (`2026-09-29`) o la de `package.json`. La imagen se construye localmente y no admite digest, porque un digest solo existe en un registro; el tag es el unico control de reproducibilidad. Ver `docs/adr/adr-0007-structured-logging-and-observability.md` (IMP-003).
+- `IMAGE_TAG` es obligatoria: etiqueta la imagen de la API y no tiene default, para que un despliegue posterior no sobrescriba sin querer la imagen verificada. Usa una version explicita, por ejemplo `2026-10-20-r1`. La imagen se construye localmente y no admite digest, porque un digest solo existe en un registro; el tag es el unico control de reproducibilidad. Ver `docs/adr/adr-0007-structured-logging-and-observability.md` (IMP-003).
+- El correo de produccion usa Brevo: `smtp-relay.brevo.com:587`, STARTTLS (`MAIL_SECURE=false`) y remitente `SIPEG UTP <no-reply@sipeg-utp.com>`.
+- Despues de confirmar el ADMIN, vaciar `SEED_ADMIN_PASSWORD`, `SEED_ADMIN_EMAIL` y `SEED_ADMIN_IDENTIFICATION_NUMBER` en `.env.prod`; el seed conserva el ADMIN existente.
 - La API se detiene con `stop_grace_period: 15s`, mayor que el timeout interno de apagado ordenado.
 - Rendimiento por defecto para un servidor de 4 vCPU: `DATABASE_POOL_MAX=9` (`2 x vCPU + 1`, por instancia; la suma de `pool x instancias` no debe superar `max_connections` de Postgres), `UV_THREADPOOL_SIZE=4` y Argon2id `m=12288 KiB, t=3, p=1` (configuracion minima OWASP de 12 MiB con pico de 48 MiB a 4 hilos). Todos son configurables por entorno.
+- La topologia completa, las decisiones y los pendientes operativos estan en `docs/despliegue.md` y `docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md`.
 
 Detener el entorno:
 
 ```bash
-docker compose -f compose.prod.yaml --env-file .env.prod down
+docker compose \
+  -f compose.prod.yaml \
+  -f compose.observability.yaml \
+  -f compose.cloudflare.yaml \
+  --env-file .env.prod \
+  down
 ```
 
 #### Nota sobre PostgreSQL 18 y datos existentes
@@ -479,29 +518,37 @@ LOKI_CONFIG=config.dev.yaml \
   docker compose -f compose.dev.yaml -f compose.observability.yaml up -d
 
 # Produccion (30 dias, 90 dias para log_type="security"):
-docker compose -f compose.prod.yaml -f compose.observability.yaml --env-file .env.prod up -d
+docker compose \
+  -f compose.prod.yaml \
+  -f compose.observability.yaml \
+  -f compose.cloudflare.yaml \
+  --env-file .env.prod \
+  up -d
 ```
 
 - `LOKI_CONFIG` elige `observability/loki/config.yaml` (por defecto) o
   `config.dev.yaml`.
 - El overlay fuerza `LOG_PRETTY=false` en el servicio `api`: `pino-pretty` no es
   JSON y sin JSON no hay etiquetas. En produccion no cambia nada.
-- Grafana queda en `http://127.0.0.1:3001` (o detras de un proxy con TLS); Loki y
-  Alloy no publican puertos. Se entra como el usuario admin con
-  `GRAFANA_ADMIN_PASSWORD`. El acceso anonimo y el registro de usuarios estan
-  deshabilitados: los logs incluyen eventos `log_type="security"`.
+- Grafana se sirve en `https://grafana.sipeg-utp.com` detras de Cloudflare Access
+  y de su propio login; para diagnostico desde el VPS queda
+  `http://127.0.0.1:3001`. Loki y Alloy no publican puertos. Se entra como el
+  usuario admin con `GRAFANA_ADMIN_PASSWORD`. El acceso anonimo y el registro de
+  usuarios estan deshabilitados: los logs incluyen eventos
+  `log_type="security"`.
 - La API tambien va atada a `127.0.0.1:3000` en dev y produccion. En desarrollo la
-  alcanza el navegador como `http://localhost:3000`; en produccion el unico
-  cliente previsto es un proxy TLS en el host que **aun no existe**: hoy la API se
-  serviria en HTTP plano. Ver la seccion "Puertos Publicados" de
-  `docs/adr/adr-0007-structured-logging-and-observability.md`, que incluye la
-  condicion `trust proxy: 1` que ese proxy debe respetar: Express confia en el
-  salto del socket y selecciona la IP mas a la derecha de `X-Forwarded-For`.
-  Lo que determina la agrupacion por IP es el valor controlado por la frontera
-  confiable, no el numero total de intermediarios de red. Con Cloudflare Tunnel,
-  `cloudflared` es el salto del socket y Cloudflare escribe o anade al final la
-  IP de quien se conecta a su frontera. La cadena real y el aislamiento de los
-  buckets se verifican contra la API publica (tarea 9 del plan de despliegue).
+  alcanza el navegador como `http://localhost:3000`; en produccion el cliente
+  publico es Cloudflare Tunnel. `cloudflared` es el salto del socket que Express
+  confia con `trust proxy: 1` y Cloudflare escribe la IP del cliente en
+  `X-Forwarded-For`. El bind a loopback queda solo para diagnosticos desde el
+  host; no se publica en `0.0.0.0`.
+- `AUTH_JWKS_URL` apunta al loopback del contenedor de la API para que el
+  verificador JWT no dependa del JWKS publico, donde Bot Fight Mode puede
+  responder con un challenge. El health mide ese endpoint interno; el JWKS
+  publico se comprueba por separado.
+- La cadena de proxy ya esta definida, pero la prueba de aislamiento de los
+  buckets de rate limiting desde dos redes quedo diferida por decision operativa.
+  Debe repetirse antes de ajustar umbrales con trafico real.
 - `GRAFANA_ADMIN_PASSWORD` solo se aplica al inicializar un volumen vacio: si el
   volumen `grafana_data` ya existe, cambiar la variable no cambia la contrasena.
   `GRAFANA_SECRET_KEY` debe permanecer igual entre reinicios, o se invalidan las
@@ -554,11 +601,11 @@ docker compose -f compose.prod.yaml -f compose.observability.yaml --env-file .en
   | `sipeg-auth-failures`     | `auth.login.failed` > 20 en 5 min            | `0s`  | intentos de login fallidos                                            |
   | `sipeg-rate-limits`       | `rate_limit.exceeded` > 30 en 5 min          | `2m`  | ver la nota de umbral                                                 |
   - Umbral de rate limits **30 y no 10**, con `for: 2m`: los limitadores por IP
-    (30/min en login y registro) se agrupan por IP, y detras de un proxy todos
-    los clientes comparten una mientras ese proxy no envie `X-Forwarded-For` de
-    forma fiable. Con 10, la alerta quedaria permanentemente disparada en ese
-    escenario. **Recalibrar en cuanto exista el proxy TLS** (seccion "Puertos
-    Publicados" del ADR-0007).
+    (30/min en login y registro) se agrupan por IP. Con Cloudflare Tunnel,
+    `cloudflared` es el salto del socket y Cloudflare escribe o anade al final la
+    IP de quien se conecta a su frontera. La prueba de aislamiento entre redes
+    quedo diferida; **recalibrar con trafico real** antes de cambiar el umbral.
+    Ver `docs/despliegue.md`.
   - `noDataState: OK` y `execErrState: Alerting`: un vector vacio se convierte en
     `0` con `or vector(0)` (cero eventos es correcto), pero **una consulta que
     falla no puede leerse como "todo bien"**: con Loki caido las cinco reglas
@@ -814,11 +861,16 @@ src/
 |   `-- validate.middleware.ts
 |-- modules/
 |   |-- activities/
+|   |-- alerts/
+|   |-- audit/
 |   |-- auth/
 |   |-- authorization/
+|   |-- careers/
 |   |-- certificates/
+|   |-- classrooms/
 |   |-- event-programs/
 |   |-- health/
+|   |-- organizational-units/
 |   `-- users/
 |-- types/
 `-- utils/
@@ -845,13 +897,15 @@ Ejemplos:
 
 ## Configuracion
 
-El unico archivo de ejemplo que se mantiene es `.env.example`.
+Los archivos de ejemplo son `.env.example` para desarrollo y
+`.env.prod.example` para produccion. Ninguno contiene secretos reales; `.env.prod`
+se crea en el VPS, se mantiene fuera de Git y usa permisos `600`.
 
 ## Prisma
 
-Prisma queda configurado para PostgreSQL, pero el backend no inicializa Prisma al arrancar. El cliente se crea solo cuando algun modulo llama `getPrismaClient()`.
+Prisma esta configurado para PostgreSQL. El cliente se crea de forma perezosa cuando algun modulo llama `getPrismaClient()`; si el modulo necesita persistencia y `DATABASE_URL` falta, la inicializacion falla.
 
-`DATABASE_URL` puede quedarse vacio mientras no haya modulos con persistencia. `prisma.config.ts` usa un placeholder local para permitir `prisma validate` y `prisma generate` sin conectarse a una base de datos real. Los comandos de migracion y las operaciones reales con Prisma si requeriran una URL de base de datos valida.
+`DATABASE_URL` es obligatoria para migraciones y operaciones reales de persistencia. `prisma.config.ts` usa un placeholder local solo para permitir `prisma validate` y `prisma generate` sin conectarse a una base de datos real.
 
 Prisma genera el cliente en `src/generated/prisma`. Ese directorio esta ignorado por Git y debe regenerarse cuando cambie el schema.
 
