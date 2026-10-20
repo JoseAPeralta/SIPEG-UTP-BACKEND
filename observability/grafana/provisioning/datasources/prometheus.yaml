@@ -13,3 +13,5 @@ datasources:
     editable: false
     jsonData:
       manageAlerts: true
+      timeInterval: 60s
+      prometheusType: Prometheus

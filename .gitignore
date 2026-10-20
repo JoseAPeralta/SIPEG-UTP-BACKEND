@@ -74,6 +74,9 @@ src/generated/
 !.env.example
 !.env.prod.example
 
+# Secretos locales y metricas de desarrollo (nunca versionar)
+.local/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache

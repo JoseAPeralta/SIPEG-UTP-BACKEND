@@ -19,9 +19,12 @@
 # seguridad en produccion). Ver observability/loki/.
 #
 # Ningun servicio de este archivo publica puertos al exterior salvo Grafana, que
-# se ata a 127.0.0.1 (T9.4/T9.7). Loki y Alloy quedan solo en la red
-# `observability` y nadie los consulta directamente: Grafana llega a Loki por esa
-# red y a los logs por el socket de Docker.
+# se ata a 127.0.0.1 (T9.4/T9.7). Loki queda solo en la red `observability` y
+# nadie lo consulta directamente: Grafana llega a Loki por esa red. Alloy usa
+# `observability` para enviar logs y `docker-api` para hablar con el proxy del
+# socket. Telegraf usa `docker-api` para el mismo proxy y `metrics` para que
+# Prometheus lo scrapee. Prometheus consulta sus fuentes por `metrics`;
+# PostgreSQL Exporter usa ademas `postgres-metrics` para llegar a `db`.
 
 # Spool local de logs (ADR-0007, seccion "Spool Local"). Se aplica tambien a este
 # stack: Loki y Alloy escriben en disco sin limite si nadie los lee, y son
@@ -133,6 +136,7 @@ services:
       - /run:mode=1777
     networks:
       - observability
+      - docker-api
 
   alloy:
     image: grafana/alloy:v1.20.0@sha256:f111cce835516c5f99166342be7038496b52ced16667be5a11e19258a3e4cd30
@@ -164,6 +168,59 @@ services:
     cpus: ${ALLOY_CPUS:-0.5}
     pids_limit: 256
     networks:
+      - observability
+      - docker-api
+
+  # Telegraf (Fase 5) recolecta CPU, memoria, red, blkio y estado de los
+  # contenedores SIPEG a traves del proxy de solo lectura. No monta el socket
+  # de Docker. Prometheus lo scrapea por `metrics`; el contenedor no publica
+  # puertos. La salida caduca las series a los 90 s para que una entrada Docker
+  # caida no siga presentando datos antiguos como actuales.
+  telegraf:
+    image: telegraf:1.40.2@sha256:aedc74ac64c623b6e6760545a8ff56a63b99a798bba3d361279a2887642798cf
+    command: ['--config', '/etc/telegraf/telegraf.conf']
+    volumes:
+      - ./observability/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    expose:
+      - '9273'
+    depends_on:
+      docker-socket-proxy:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: ${TELEGRAF_MEM_LIMIT:-128m}
+    pids_limit: 128
+    networks:
+      - metrics
+      - docker-api
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.29.0@sha256:9613f2884689b6fad9f1939f6a3b0388c93a022cfaededb19545b329b5c83dea
+    command: ['--config.file=/etc/blackbox_exporter/config.yml']
+    volumes:
+      - ./observability/blackbox/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    expose:
+      - '9115'
+    restart: unless-stopped
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: ${BLACKBOX_EXPORTER_MEM_LIMIT:-64m}
+    pids_limit: 128
+    networks:
+      - metrics
       - observability
 
   grafana:
@@ -264,14 +321,21 @@ services:
     pids_limit: 512
     networks:
       - observability
+      - metrics
 
   node-exporter:
     image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
     command:
       - '--path.rootfs=/host'
+      # Los contadores de red reales del host los escribe el timer
+      # sipeg-host-network-metrics.timer fuera del contenedor. Node Exporter
+      # solo los publica; no recibe host networking.
+      - '--collector.textfile.directory=/var/lib/sipeg-node-exporter/textfile'
     pid: host
     volumes:
       - '/:/host:ro,rslave'
+      # El directorio lo crea `deploy/host/install.sh metrics` en produccion.
+      - '${HOST_METRICS_DIR:-/var/lib/sipeg-node-exporter/textfile}:/var/lib/sipeg-node-exporter/textfile:ro'
     expose:
       - '9100'
     restart: unless-stopped
@@ -292,9 +356,68 @@ services:
   #
   # Sin `logging:` a proposito: el servicio hereda el `x-logging` del compose base,
   # y los bloques de un overlay se fusionan en vez de reemplazarse.
+  #
+  # `networks` se fusiona por nombre con el compose base (verificado con
+  # `docker compose config`): la API conserva `sipeg-utp-dev`/`sipeg-utp-prod` y
+  # solo se agrega `metrics`. El listener privado de metricas escucha en
+  # `0.0.0.0:9464` dentro del contenedor y solo es alcanzable por Prometheus a
+  # traves de `metrics`; no se publica al host ni por el tunel, y el puerto de
+  # negocio 3000 sigue en la red de aplicacion.
   api:
     environment:
       LOG_PRETTY: 'false'
+      METRICS_ENABLED: 'true'
+      METRICS_HOST: '0.0.0.0'
+      METRICS_PORT: '9464'
+    expose:
+      - '9464'
+    networks:
+      - metrics
+
+  # PostgreSQL conserva la red de aplicacion y se agrega a `postgres-metrics`
+  # para el exporter. Esa red solo conecta `db` con `postgres-exporter`; no tiene
+  # salida externa ni publica puertos.
+  db:
+    networks:
+      - postgres-metrics
+
+  # PostgreSQL Exporter (Fase 4). Se conecta a `db` por `postgres-metrics` con el
+  # rol de solo lectura `sipeg_monitor`; Prometheus lo scrapea por `metrics`.
+  # `pg_up` distingue la conexion del exporter con la base del `up` del scrape.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e
+    environment:
+      DATA_SOURCE_URI: db:5432/${POSTGRES_DB:?POSTGRES_DB is required}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_MONITOR_USER:-sipeg_monitor}
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_monitor_password
+      PG_EXPORTER_COLLECTION_TIMEOUT: 5s
+    secrets:
+      - postgres_monitor_password
+    expose:
+      - '9187'
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    mem_limit: ${POSTGRES_EXPORTER_MEM_LIMIT:-64m}
+    pids_limit: 128
+    networks:
+      - metrics
+      - postgres-metrics
+
+secrets:
+  # Archivo del HOST con la contrasena del rol de monitorizacion. Compose lo
+  # monta como secreto en /run/secrets/postgres_monitor_password (modo 0444) y
+  # el exporter lo lee con DATA_SOURCE_PASS_FILE. No se versiona: en desarrollo
+  # vive bajo .local/ y en produccion bajo /etc/sipeg/secrets con permisos 600.
+  postgres_monitor_password:
+    file: ${POSTGRES_MONITOR_PASSWORD_FILE:-./.local/secrets/postgres-monitor-password}
 
 volumes:
   loki_data:
@@ -314,3 +437,17 @@ networks:
   # de que los servicios de la aplicacion no estan conectados a esta red.
   observability:
     driver: bridge
+  # Redes privadas de recoleccion (Fase 1 del plan de dashboards). `internal:
+  # true` deja fuera la puerta de enlace y el enrutado externo: solo sirven para
+  # que Prometheus alcance a sus fuentes y para que el proxy Docker sea
+  # alcanzable por Alloy y, mas adelante, Telegraf.
+  metrics:
+    driver: bridge
+    internal: true
+  # Comunicacion exclusiva entre PostgreSQL y su exporter (Fase 4).
+  postgres-metrics:
+    driver: bridge
+    internal: true
+  docker-api:
+    driver: bridge
+    internal: true

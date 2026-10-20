@@ -1,0 +1,19 @@
+[Unit]
+Description=Recolector de contadores de red del host SIPEG UTP
+After=local-fs.target
+
+[Service]
+Type=oneshot
+User=sipeg-metrics
+Group=sipeg-metrics
+ExecStart=/usr/local/libexec/sipeg/collect-network.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+RestrictAddressFamilies=none
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+ReadWritePaths=/var/lib/sipeg-node-exporter/textfile

@@ -42,6 +42,16 @@ check 'unattended-upgrades activo' systemctl is-active --quiet unattended-upgrad
 check 'auditd activo' systemctl is-active --quiet auditd
 check 'reglas auditd cargadas' bash -c 'auditctl -l | grep -q sipeg_'
 check 'AIDE instalado' command -v aide
+check 'usuario sipeg-metrics existe' id -u sipeg-metrics
+check 'grupo sipeg-metrics existe' getent group sipeg-metrics
+check 'recolector de red instalado y ejecutable' test -x /usr/local/libexec/sipeg/collect-network.sh
+check_value 'propietario del directorio de metricas' 'sipeg-metrics:sipeg-metrics' "$(stat -c '%U:%G' /var/lib/sipeg-node-exporter/textfile 2>/dev/null)"
+check_value 'permisos del directorio de metricas' 755 "$(stat -c '%a' /var/lib/sipeg-node-exporter/textfile 2>/dev/null)"
+check 'timer de red del host habilitado' systemctl is-enabled --quiet sipeg-host-network-metrics.timer
+check 'timer de red del host activo' systemctl is-active --quiet sipeg-host-network-metrics.timer
+check 'archivo de red del host presente' test -s /var/lib/sipeg-node-exporter/textfile/sipeg-host-network.prom
+check_value 'permisos del archivo de red del host' 644 "$(stat -c '%a' /var/lib/sipeg-node-exporter/textfile/sipeg-host-network.prom 2>/dev/null)"
+check 'archivo de red del host actualizado en los ultimos 3 min' bash -c 'find /var/lib/sipeg-node-exporter/textfile -maxdepth 1 -name "sipeg-host-network.prom" -mmin -3 | grep -q .'
 check 'timer de backup habilitado' systemctl is-enabled --quiet sipeg-pg-backup.timer
 check 'ultimo backup menor a 26h' bash -c 'find /var/backups/sipeg -name "sipeg_utp_*.dump.enc" -mmin -1560 | grep -q .'
 check 'docker live-restore' bash -c 'test "$(docker info -f "{{.LiveRestoreEnabled}}")" = "true"'
