@@ -387,6 +387,11 @@ For errors:
 - Set `NODE_ENV=production` in runtime images.
 - Add a health check when the deployed API needs container health reporting.
 - Do not include build secrets, `.env`, development caches, or source maps in runtime images unless explicitly required.
+- El endurecimiento del host vive en `deploy/`: `deploy/host/install.sh` aplica
+  la configuracion por componente (con respaldo y validacion) y
+  `deploy/host/verify.sh` la comprueba. No editar archivos del host a mano sin
+  reflejar el cambio en `deploy/`. Ver
+  `docs/adr/adr-0013-vps-hardening-baseline.md`.
 
 ## Deployment And Network Rules
 

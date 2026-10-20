@@ -131,6 +131,23 @@ docker exec <contenedor-db-anterior> pg_dumpall -U sipeg > backup.sql
 
 Luego restaura `backup.sql` en el nuevo volumen antes de levantar la API. El nombre del proyecto y del volumen tambien cambian (`sipeg-utp-dev` / `sipeg-utp-prod`).
 
+## Endurecimiento Del VPS
+
+El host de produccion se configura desde `deploy/` con instaladores
+idempotentes y un verificador PASS/FAIL:
+
+```bash
+sudo deploy/host/install.sh all
+sudo deploy/backup/install.sh
+sudo deploy/host/verify.sh
+```
+
+Cubre SSH con claves y fail2ban, UFW, parches automaticos, sysctl, auditd,
+AIDE, limites por contenedor, backups cifrados con restore verificado y alertas
+de Grafana por correo. El runbook completo (rotacion de secretos, restore
+manual y reversion) esta en `deploy/README.md`. Ver
+`docs/adr/adr-0013-vps-hardening-baseline.md`.
+
 ## Scripts
 
 - `pnpm run dev`: inicia el servidor en modo desarrollo con `tsx watch`.

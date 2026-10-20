@@ -55,7 +55,7 @@ Worker ni su configuracion de build.
 | 7   | `VITE_API_BASE_URL`                           | `https://api.sipeg-utp.com`                                                    |
 | 8   | TLS                                           | Cloudflare; Always Use HTTPS; origen HTTP dentro del tunel                     |
 | 9   | Logs de acceso del proxy                      | Cloudflare Analytics; Alloy recoge logs de contenedores, no del edge           |
-| 10  | Backup y restore de PostgreSQL                | Manual; debe probarse antes de considerarlo operativo                          |
+| 10  | Backup y restore de PostgreSQL                | Resuelta: `deploy/backup/` con cifrado AES-256, retencion 14 dias, restore de prueba y timer diario; offsite pendiente (R2, fase 6) |
 | 11  | Migraciones por despliegue                    | `migrate` y `seed` one-shot antes de arrancar la API                           |
 | 12  | Acceso operativo a Grafana                    | Access (team `sipeg`) + login de Grafana; loopback para diagnostico local      |
 | 13  | `AUTH_JWKS_URL`                               | `http://127.0.0.1:3000/api/auth/jwks`                                          |
@@ -237,9 +237,12 @@ Comprobaciones funcionales realizadas:
   bloquear la IP del operador. Queda diferido; no bloquea el criterio de
   finalizacion del despliegue. Debe repetirse antes de ajustar umbrales con
   trafico real.
-- **Backup/restore:** definir y probar un restore de PostgreSQL.
-- **Alertas de Grafana:** configurar SMTP y contact point si se quiere entrega por
-  correo; hoy las alertas se evaluan pero no notifican.
+- **Backup/restore:** resuelto en `deploy/backup/`: backup diario cifrado,
+  retencion de 14 dias, restore de prueba automatizado y timer verificado. Es
+  solo local por decision operativa; el offsite queda pendiente (R2, fase 6).
+- **Alertas de Grafana:** resuelto: SMTP de Grafana, contact point
+  `sipeg-email`, politica por defecto, regla de disco y correo de prueba
+  recibido. Ver `docs/adr/adr-0013-vps-hardening-baseline.md`.
 - **Logs del proxy:** el edge no escribe en Loki; su analitica vive en Cloudflare.
 - **Rotacion de secretos:** documentar y probar la rotacion de `AUTH_SECRET`,
   `LOG_PSEUDONYMIZATION_KEY`, credenciales SMTP y token del tunel.

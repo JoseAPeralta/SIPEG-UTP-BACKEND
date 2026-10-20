@@ -288,6 +288,15 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - No exponer stack traces, errores crudos de Prisma, detalles de tokens ni secretos en respuestas.
 - Auditar acciones administrativas sensibles cuando el modulo lo requiera.
 
+### Endurecimiento Del Host
+
+El VPS de produccion se endurece con artefactos versionados en `deploy/`:
+SSH solo con claves y fail2ban, UFW, unattended-upgrades, sysctl, auditd,
+AIDE, Docker con `no-new-privileges`/limites/capabilities minimas, backups
+cifrados de PostgreSQL con restore de prueba y alertas de Grafana con contact
+point de correo. `deploy/host/verify.sh` comprueba el estado aplicado (21
+comprobaciones). Ver `docs/adr/adr-0013-vps-hardening-baseline.md`.
+
 ## Logging Y Observabilidad
 
 - Los logs operativos son estructurados (JSON de una linea) y se emiten a stdout/stderr con `pino` y middleware HTTP propio; `LOG_LEVEL` controla aplicacion/infraestructura, mientras `access` y `security` conservan nivel minimo `info`. Detalle en `docs/adr/adr-0007-structured-logging-and-observability.md`.
