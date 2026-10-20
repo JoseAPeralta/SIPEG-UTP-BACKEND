@@ -90,11 +90,13 @@ AUTH_JWKS_URL=http://127.0.0.1:3000/api/auth/jwks
 - [x] Validar Compose de desarrollo y los tres archivos de produccion con valores ficticios de proceso. Comprobar default y override de `AUTH_JWKS_URL`, conservando identidad publica.
 - [x] Revisar status, diff y log; crear el commit `fix(auth)` con codigo, pruebas, configuracion y documentacion operativa (`9acc05e`). Excluir `.env.prod` y datos generados. Los planes se versionan aparte como documentacion de despliegue.
 
-## Verificacion pendiente del operador
+## Verificacion en el VPS
 
-En el VPS, actualizar el codigo y usar una etiqueta nueva para la publicacion. Construir tambien la imagen de migracion/seed si cambia `IMAGE_TAG`, antes de levantar la API con sus dependencias. El default de Compose permite conservar el `.env.prod` privado existente.
+- [x] Actualizar el codigo y desplegarlo con `IMAGE_TAG=2026-10-10-r1`; el health y el login confirman que el codigo nuevo esta en ejecucion.
+- [x] Comprobar `authJwksReachable: true`, login y una peticion protegida desde el navegador.
+- [x] Publicar una etiqueta nueva: `2026-10-20-r1` esta aplicada en `api`, `migrate` y `seed`; `ps -a` la refleja.
 
-Comprobar `authJwksReachable: true`, login y `GET /api/v1/users/me` desde el navegador. Bot Fight Mode puede conservarse activo: el verificador descarga claves por loopback. El JWKS publico sigue sujeto a las reglas del edge y su accesibilidad se comprueba separadamente; no queda acreditada por el health interno.
+Bot Fight Mode puede conservarse activo: el verificador descarga claves por loopback. El JWKS publico sigue sujeto a las reglas del edge y su accesibilidad se comprueba separadamente; no queda acreditada por el health interno.
 
 ## Resultados locales
 
@@ -103,4 +105,11 @@ Comprobar `authJwksReachable: true`, login y `GET /api/v1/users/me` desde el nav
 - Suite completa: 74 archivos aprobados, 2 omitidos; 1639 pruebas aprobadas, 9 omitidas (integracion de auditoria/alertas sin base aislada configurada).
 - Typecheck, lint, build, OpenAPI y formato: aprobados. La respuesta HTTP del health conserva sus campos; solo cambia la descripcion del endpoint que mide.
 - Compose de desarrollo y produccion: validacion correcta, default interno, variable vacia y override personalizados comprobados; issuer, audience y `AUTH_URL` conservan sus valores publicos.
-- La verificacion real del VPS queda pendiente; las pruebas automatizadas no usan sus credenciales ni modifican su base de datos.
+
+## Resultados en el VPS (2026-10-20)
+
+- Health publico: `authJwksReachable: true`.
+- JWKS publico: `200`, clave `EdDSA` y `cf-cache-status: DYNAMIC`.
+- `api` healthy; `migrate` y `seed` con codigo `0`; `db`, proxy de socket, Loki y Grafana healthy; Alloy y `cloudflared` en ejecucion.
+- Login del ADMIN y peticion protegida desde el navegador: correctos.
+- La etiqueta `2026-10-20-r1` esta aplicada en `api`, `migrate` y `seed`; la verificacion de health y login sigue correcta.

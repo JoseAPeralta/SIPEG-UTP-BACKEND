@@ -12,15 +12,15 @@
 
 ## Configuración definitiva
 
-| Dirección o servicio      | Destino                                            |
-| ------------------------- | -------------------------------------------------- |
-| `https://sipeg-utp.com`   | Frontend en Workers Static Assets                  |
-| `https://api.sipeg-utp.com` | Tunnel → `http://api:3000`                        |
-| `https://grafana.sipeg-utp.com` | Access → Tunnel → `http://grafana:3000`      |
-| PostgreSQL                | Red Docker `sipeg-utp-prod`, sin puertos publicados |
-| Loki, Alloy y proxy del socket | Red Docker `observability`, sin puertos públicos |
-| Mailpit                   | Solo desarrollo                                    |
-| Correo de producción      | Brevo (plan gratuito) por SMTP con STARTTLS        |
+| Dirección o servicio            | Destino                                             |
+| ------------------------------- | --------------------------------------------------- |
+| `https://sipeg-utp.com`         | Frontend en Workers Static Assets                   |
+| `https://api.sipeg-utp.com`     | Tunnel → `http://api:3000`                          |
+| `https://grafana.sipeg-utp.com` | Access → Tunnel → `http://grafana:3000`             |
+| PostgreSQL                      | Red Docker `sipeg-utp-prod`, sin puertos publicados |
+| Loki, Alloy y proxy del socket  | Red Docker `observability`, sin puertos públicos    |
+| Mailpit                         | Solo desarrollo                                     |
+| Correo de producción            | Brevo (plan gratuito) por SMTP con STARTTLS         |
 
 API y frontend comparten el dominio registrable `sipeg-utp.com` aunque usen subdominios distintos, por lo que la cookie de refresco usa `SameSite=lax`.
 
@@ -47,27 +47,27 @@ Hoy solo existe Mailpit, que no entrega a destinatarios externos. La API **no ar
 
 ## Archivos que se crearán o modificarán
 
-| Archivo                                                         | Acción y responsabilidad                                                        |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `compose.cloudflare.yaml`                                       | Crear: conector `cloudflared` y ajustes públicos de Grafana                      |
-| `compose.prod.yaml`                                             | Modificar: completar variables de API y seed; versionar imágenes de migración    |
-| `compose.dev.yaml`                                              | Modificar: completar variables configurables conservando los valores locales     |
-| `compose.observability.yaml`                                    | Revisar: sin cambios funcionales; actualizar el comentario de acceso público     |
-| `docs/adr/adr-0007-structured-logging-and-observability.md`        | Modificar: registrar la imagen fijada de `cloudflared` en el catálogo             |
-| `.env.prod.example`                                             | Crear: plantilla de producción sin secretos                                      |
-| `.env.prod`                                                     | Crear en el VPS: variables y secretos privados (ignorado por Git)                |
-| `.env.example`                                                  | Modificar: documentar variables y corregir la explicación de SameSite            |
-| `.gitignore`                                                     | Modificar: permitir versionar `.env.prod.example`                                |
-| `src/config/env.ts`                                             | Modificar: normalizar variables opcionales vacías                                |
-| `src/config/env.test.ts`                                        | Modificar: pruebas de la normalización                                           |
-| `src/modules/health/health.controller.ts`                       | Modificar: limitar el tiempo de la consulta al JWKS                              |
-| `src/modules/health/health.routes.test.ts`                      | Modificar: pruebas de la consulta exitosa y fallida                              |
-| `src/app.test.ts`                                               | Modificar: prueba de caracterización de `trust proxy`                            |
-| `src/modules/auth/auth.cookie.ts`                               | Modificar: corregir comentarios sobre SameSite                                   |
-| `README.md`, `CONTEXT.md`, `AGENTS.md`                          | Modificar: documentar la topología implementada                                  |
-| `docs/despliegue.md`                                            | Modificar: sustituir la decisión pendiente por la topología elegida              |
-| `docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md`     | Crear: registrar la decisión arquitectónica                                      |
-| `docs/superpowers/plans/despliegue-aplicacion.md`               | Reemplazado por este plan                                                        |
+| Archivo                                                     | Acción y responsabilidad                                                      |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `compose.cloudflare.yaml`                                   | Crear: conector `cloudflared` y ajustes públicos de Grafana                   |
+| `compose.prod.yaml`                                         | Modificar: completar variables de API y seed; versionar imágenes de migración |
+| `compose.dev.yaml`                                          | Modificar: completar variables configurables conservando los valores locales  |
+| `compose.observability.yaml`                                | Revisar: sin cambios funcionales; actualizar el comentario de acceso público  |
+| `docs/adr/adr-0007-structured-logging-and-observability.md` | Modificar: registrar la imagen fijada de `cloudflared` en el catálogo         |
+| `.env.prod.example`                                         | Crear: plantilla de producción sin secretos                                   |
+| `.env.prod`                                                 | Crear en el VPS: variables y secretos privados (ignorado por Git)             |
+| `.env.example`                                              | Modificar: documentar variables y corregir la explicación de SameSite         |
+| `.gitignore`                                                | Modificar: permitir versionar `.env.prod.example`                             |
+| `src/config/env.ts`                                         | Modificar: normalizar variables opcionales vacías                             |
+| `src/config/env.test.ts`                                    | Modificar: pruebas de la normalización                                        |
+| `src/modules/health/health.controller.ts`                   | Modificar: limitar el tiempo de la consulta al JWKS                           |
+| `src/modules/health/health.routes.test.ts`                  | Modificar: pruebas de la consulta exitosa y fallida                           |
+| `src/app.test.ts`                                           | Modificar: prueba de caracterización de `trust proxy`                         |
+| `src/modules/auth/auth.cookie.ts`                           | Modificar: corregir comentarios sobre SameSite                                |
+| `README.md`, `CONTEXT.md`, `AGENTS.md`                      | Modificar: documentar la topología implementada                               |
+| `docs/despliegue.md`                                        | Modificar: sustituir la decisión pendiente por la topología elegida           |
+| `docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md` | Crear: registrar la decisión arquitectónica                                   |
+| `docs/superpowers/plans/despliegue-aplicacion.md`           | Reemplazado por este plan                                                     |
 
 Los cambios en `README.md` y `CONTEXT.md` deben integrarse con las modificaciones locales existentes; no revertirlas.
 
@@ -167,36 +167,36 @@ SEED_ADMIN_LAST_NAME=SIPEG
 
 El archivo debe llevar, junto a cada bloque, la instrucción de llenado. Reglas:
 
-| Variable | Instrucción |
-| --- | --- |
-| `NODE_ENV` | Mantener `production`. Compose también lo fija en los servicios. |
-| `PORT` | Mantener `3000`: controla el puerto de loopback del host; el puerto interno de la API sigue siendo `3000`. |
-| `IMAGE_TAG` | Identificador único de la versión desplegada. Actualizarlo en cada publicación; no reutilizar una etiqueta para código distinto. |
-| `APP_VERSION` | Identificador de la versión visible en logs. Puede coincidir con `IMAGE_TAG`. |
-| `DOCS_ENABLED` | Mantener `false`. Usar `true` solo para publicar OpenAPI/Scalar. |
-| `POSTGRES_DB`, `POSTGRES_USER` | Conservar una instalación nueva con `sipeg_utp`/`sipeg`. Si ya hay volumen, conservar los valores existentes. |
-| `POSTGRES_PASSWORD` | Generar con `openssl rand -hex 32`. El hexadecimal evita problemas de codificación en la URL de Compose. Si el volumen ya existe, conservar la contraseña vigente: cambiarla aquí no la cambia en PostgreSQL. |
-| `DATABASE_POOL_*`, `UV_THREADPOOL_SIZE`, `AUTH_ARGON2_*` | Valores actuales del proyecto (`9`, `5000`, `30000`, `4`, `12288`, `3`, `1`). Ajustar solo con criterio de recursos. |
-| `CORS_ORIGIN` | `https://sipeg-utp.com`, sin ruta ni barra final. |
-| `TRUSTED_ORIGINS` | Vacío en este despliegue. Si se autoriza otro origen, URL completa; varios separados por comas sin espacios. |
-| `AUTH_SECRET` | Secreto independiente con `openssl rand -hex 32`. Estable entre despliegues. |
-| `AUTH_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE` | `https://api.sipeg-utp.com`, sin sufijo `/api`. Los tres con el mismo valor. |
-| `AUTH_TOKEN_TTL`, `AUTH_REFRESH_TTL` | `15m` y `7d`. |
-| `AUTH_REFRESH_COOKIE_SAME_SITE` | `lax`: frontend y API comparten el sitio `sipeg-utp.com` por HTTPS. Workers no implica `none`. |
-| `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL` | Rutas del frontend; su origen debe coincidir con `CORS_ORIGIN`. |
-| `LOG_PSEUDONYMIZATION_KEY` | Secreto independiente con `openssl rand -hex 32`. Estable para conservar la correlación de pseudónimos. |
-| `CLOUDFLARE_TUNNEL_TOKEN` | Token completo del túnel `sipeg-produccion`. Solo en `.env.prod`. |
-| `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD` | Usuario administrativo y contraseña independiente. La contraseña solo se aplica al inicializar un volumen vacío de Grafana. |
-| `GRAFANA_SECRET_KEY` | `openssl rand -hex 32`. Estable entre reinicios. |
-| `LOKI_CONFIG` | `config.yaml` (retención de producción). |
-| `MAIL_HOST` | Host SMTP del proveedor, sin esquema ni puerto. |
-| `MAIL_PORT`, `MAIL_SECURE` | `587` + `false` para STARTTLS; `465` + `true` para TLS implícito. Confirmar con el proveedor. |
-| `MAIL_USER`, `MAIL_PASSWORD` | Credenciales SMTP; se configuran juntas. |
-| `MAIL_FROM` | Remitente autorizado. Usar el propuesto solo tras verificar el dominio y autorizar ese remitente. |
-| `SEED_ADMIN_EMAIL` | Correo real del administrador inicial. |
-| `SEED_ADMIN_PASSWORD` | **12–20 caracteres**. `openssl rand -hex 10` genera 20. |
-| `SEED_ADMIN_IDENTIFICATION_NUMBER` | Identificación real y única. |
-| `SEED_ADMIN_FIRST_NAME`, `SEED_ADMIN_LAST_NAME` | Nombre y apellido, o los valores propuestos. |
+| Variable                                                 | Instrucción                                                                                                                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                                               | Mantener `production`. Compose también lo fija en los servicios.                                                                                                                                              |
+| `PORT`                                                   | Mantener `3000`: controla el puerto de loopback del host; el puerto interno de la API sigue siendo `3000`.                                                                                                    |
+| `IMAGE_TAG`                                              | Identificador único de la versión desplegada. Actualizarlo en cada publicación; no reutilizar una etiqueta para código distinto.                                                                              |
+| `APP_VERSION`                                            | Identificador de la versión visible en logs. Puede coincidir con `IMAGE_TAG`.                                                                                                                                 |
+| `DOCS_ENABLED`                                           | Mantener `false`. Usar `true` solo para publicar OpenAPI/Scalar.                                                                                                                                              |
+| `POSTGRES_DB`, `POSTGRES_USER`                           | Conservar una instalación nueva con `sipeg_utp`/`sipeg`. Si ya hay volumen, conservar los valores existentes.                                                                                                 |
+| `POSTGRES_PASSWORD`                                      | Generar con `openssl rand -hex 32`. El hexadecimal evita problemas de codificación en la URL de Compose. Si el volumen ya existe, conservar la contraseña vigente: cambiarla aquí no la cambia en PostgreSQL. |
+| `DATABASE_POOL_*`, `UV_THREADPOOL_SIZE`, `AUTH_ARGON2_*` | Valores actuales del proyecto (`9`, `5000`, `30000`, `4`, `12288`, `3`, `1`). Ajustar solo con criterio de recursos.                                                                                          |
+| `CORS_ORIGIN`                                            | `https://sipeg-utp.com`, sin ruta ni barra final.                                                                                                                                                             |
+| `TRUSTED_ORIGINS`                                        | Vacío en este despliegue. Si se autoriza otro origen, URL completa; varios separados por comas sin espacios.                                                                                                  |
+| `AUTH_SECRET`                                            | Secreto independiente con `openssl rand -hex 32`. Estable entre despliegues.                                                                                                                                  |
+| `AUTH_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE`               | `https://api.sipeg-utp.com`, sin sufijo `/api`. Los tres con el mismo valor.                                                                                                                                  |
+| `AUTH_TOKEN_TTL`, `AUTH_REFRESH_TTL`                     | `15m` y `7d`.                                                                                                                                                                                                 |
+| `AUTH_REFRESH_COOKIE_SAME_SITE`                          | `lax`: frontend y API comparten el sitio `sipeg-utp.com` por HTTPS. Workers no implica `none`.                                                                                                                |
+| `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL` | Rutas del frontend; su origen debe coincidir con `CORS_ORIGIN`.                                                                                                                                               |
+| `LOG_PSEUDONYMIZATION_KEY`                               | Secreto independiente con `openssl rand -hex 32`. Estable para conservar la correlación de pseudónimos.                                                                                                       |
+| `CLOUDFLARE_TUNNEL_TOKEN`                                | Token completo del túnel `sipeg-produccion`. Solo en `.env.prod`.                                                                                                                                             |
+| `GRAFANA_ADMIN_USER`, `GRAFANA_ADMIN_PASSWORD`           | Usuario administrativo y contraseña independiente. La contraseña solo se aplica al inicializar un volumen vacío de Grafana.                                                                                   |
+| `GRAFANA_SECRET_KEY`                                     | `openssl rand -hex 32`. Estable entre reinicios.                                                                                                                                                              |
+| `LOKI_CONFIG`                                            | `config.yaml` (retención de producción).                                                                                                                                                                      |
+| `MAIL_HOST`                                              | Host SMTP del proveedor, sin esquema ni puerto.                                                                                                                                                               |
+| `MAIL_PORT`, `MAIL_SECURE`                               | `587` + `false` para STARTTLS; `465` + `true` para TLS implícito. Confirmar con el proveedor.                                                                                                                 |
+| `MAIL_USER`, `MAIL_PASSWORD`                             | Credenciales SMTP; se configuran juntas.                                                                                                                                                                      |
+| `MAIL_FROM`                                              | Remitente autorizado. Usar el propuesto solo tras verificar el dominio y autorizar ese remitente.                                                                                                             |
+| `SEED_ADMIN_EMAIL`                                       | Correo real del administrador inicial.                                                                                                                                                                        |
+| `SEED_ADMIN_PASSWORD`                                    | **12–20 caracteres**. `openssl rand -hex 10` genera 20.                                                                                                                                                       |
+| `SEED_ADMIN_IDENTIFICATION_NUMBER`                       | Identificación real y única.                                                                                                                                                                                  |
+| `SEED_ADMIN_FIRST_NAME`, `SEED_ADMIN_LAST_NAME`          | Nombre y apellido, o los valores propuestos.                                                                                                                                                                  |
 
 Después de confirmar que el ADMIN existe, retirar la contraseña de bootstrap y dejar vacías las tres variables iniciales; el seed conservará el ADMIN existente.
 
@@ -337,48 +337,48 @@ Contexto: la consulta a `/api/auth/jwks` no tenía timeout; durante el arranque 
 En `src/modules/health/health.routes.test.ts`, añadir al `afterEach` existente:
 
 ```ts
-    vi.unstubAllGlobals();
+vi.unstubAllGlobals();
 ```
 
 y agregar el caso:
 
 ```ts
-  it('reports authJwksReachable false and probes with a 3-second timeout when JWKS is unreachable', async () => {
-    process.env['NODE_ENV'] = 'test';
-    process.env['AUTH_SECRET'] = 'a'.repeat(32);
-    process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
-    process.env['AUTH_URL'] = 'http://localhost:3000';
-    vi.resetModules();
-    vi.doMock('../../lib/auth.js', () => ({
-      auth: {
-        options: { baseURL: 'http://localhost:3000' },
-        api: {
-          signInEmail: vi.fn(),
-          signUpEmail: vi.fn(),
-          getToken: vi.fn(),
-          getSession: vi.fn(),
-          signOut: vi.fn(),
-          verifyEmail: vi.fn(),
-          requestPasswordReset: vi.fn(),
-          resetPassword: vi.fn(),
-        },
+it('reports authJwksReachable false and probes with a 3-second timeout when JWKS is unreachable', async () => {
+  process.env['NODE_ENV'] = 'test';
+  process.env['AUTH_SECRET'] = 'a'.repeat(32);
+  process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
+  process.env['AUTH_URL'] = 'http://localhost:3000';
+  vi.resetModules();
+  vi.doMock('../../lib/auth.js', () => ({
+    auth: {
+      options: { baseURL: 'http://localhost:3000' },
+      api: {
+        signInEmail: vi.fn(),
+        signUpEmail: vi.fn(),
+        getToken: vi.fn(),
+        getSession: vi.fn(),
+        signOut: vi.fn(),
+        verifyEmail: vi.fn(),
+        requestPasswordReset: vi.fn(),
+        resetPassword: vi.fn(),
       },
-    }));
-    vi.doMock('../../config/prisma.js', () => ({ getPrismaClient: () => ({}) }));
-    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
-    const fetchMock = vi.fn().mockRejectedValue(new Error('aborted'));
-    vi.stubGlobal('fetch', fetchMock);
+    },
+  }));
+  vi.doMock('../../config/prisma.js', () => ({ getPrismaClient: () => ({}) }));
+  const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+  const fetchMock = vi.fn().mockRejectedValue(new Error('aborted'));
+  vi.stubGlobal('fetch', fetchMock);
 
-    const { app } = await import('../../app.js');
-    const response = await request(app).get('/api/v1/health').expect(200);
+  const { app } = await import('../../app.js');
+  const response = await request(app).get('/api/v1/health').expect(200);
 
-    expect(response.body.data.authJwksReachable).toBe(false);
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3000/api/auth/jwks',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(timeoutSpy).toHaveBeenCalledWith(3_000);
-  });
+  expect(response.body.data.authJwksReachable).toBe(false);
+  expect(fetchMock).toHaveBeenCalledWith(
+    'http://localhost:3000/api/auth/jwks',
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
+  );
+  expect(timeoutSpy).toHaveBeenCalledWith(3_000);
+});
 ```
 
 - [x] **Step 2: Verificar que falla**
@@ -418,11 +418,11 @@ Contexto: `trust proxy = 1` confía en el salto del socket (`cloudflared`) y tom
 En `src/app.test.ts`, dentro de `describe('security middleware', ...)`:
 
 ```ts
-  it('trusts exactly one proxy hop so req.ip uses X-Forwarded-For', async () => {
-    const { app } = await loadApp();
+it('trusts exactly one proxy hop so req.ip uses X-Forwarded-For', async () => {
+  const { app } = await loadApp();
 
-    expect(app.get('trust proxy')).toBe(1);
-  });
+  expect(app.get('trust proxy')).toBe(1);
+});
 ```
 
 - [x] **Step 2: Verificar**
@@ -445,42 +445,42 @@ En `docs/despliegue.md` y `README.md`, ajustar la afirmación de que cualquier s
 Reemplazar por la lista siguiente, conservando `DATABASE_URL`, puertos, `depends_on`, `restart`, `logging` y `security_opt` existentes:
 
 ```yaml
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
-      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-9}
-      DATABASE_POOL_CONNECTION_TIMEOUT_MS: ${DATABASE_POOL_CONNECTION_TIMEOUT_MS:-5000}
-      DATABASE_POOL_IDLE_TIMEOUT_MS: ${DATABASE_POOL_IDLE_TIMEOUT_MS:-30000}
-      UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-4}
-      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
-      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
-      AUTH_URL: ${AUTH_URL:?AUTH_URL is required}
-      AUTH_ISSUER: ${AUTH_ISSUER:-${AUTH_URL}}
-      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-${AUTH_URL}}
-      AUTH_TOKEN_TTL: ${AUTH_TOKEN_TTL:-15m}
-      AUTH_REFRESH_TTL: ${AUTH_REFRESH_TTL:-7d}
-      AUTH_REFRESH_COOKIE_SAME_SITE: "${AUTH_REFRESH_COOKIE_SAME_SITE:?Set it in production. Use lax or strict when the API and the frontend share a site, and none when they are on different sites.}"
-      AUTH_EMAIL_VERIFICATION_URL: ${AUTH_EMAIL_VERIFICATION_URL:?AUTH_EMAIL_VERIFICATION_URL is required}
-      AUTH_PASSWORD_RESET_URL: ${AUTH_PASSWORD_RESET_URL:?AUTH_PASSWORD_RESET_URL is required}
-      AUTH_EMAIL_VERIFICATION_TTL: ${AUTH_EMAIL_VERIFICATION_TTL:-24h}
-      AUTH_PASSWORD_RESET_TTL: ${AUTH_PASSWORD_RESET_TTL:-1h}
-      AUTH_ARGON2_MEMORY_COST: ${AUTH_ARGON2_MEMORY_COST:-12288}
-      AUTH_ARGON2_TIME_COST: ${AUTH_ARGON2_TIME_COST:-3}
-      AUTH_ARGON2_PARALLELISM: ${AUTH_ARGON2_PARALLELISM:-1}
-      MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required}
-      MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_SECURE: ${MAIL_SECURE:-false}
-      MAIL_USER: ${MAIL_USER:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required}
-      DOCS_ENABLED: '${DOCS_ENABLED:-false}'
-      LOG_LEVEL: ${LOG_LEVEL:-info}
-      LOG_PRETTY: 'false'
-      LOG_SERVICE_NAME: ${LOG_SERVICE_NAME:-sipeg-utp-backend}
-      APP_VERSION: ${APP_VERSION:-1.0.0}
-      LOG_PSEUDONYMIZATION_KEY: ${LOG_PSEUDONYMIZATION_KEY:?LOG_PSEUDONYMIZATION_KEY is required}
+environment:
+  NODE_ENV: production
+  PORT: 3000
+  DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-9}
+  DATABASE_POOL_CONNECTION_TIMEOUT_MS: ${DATABASE_POOL_CONNECTION_TIMEOUT_MS:-5000}
+  DATABASE_POOL_IDLE_TIMEOUT_MS: ${DATABASE_POOL_IDLE_TIMEOUT_MS:-30000}
+  UV_THREADPOOL_SIZE: ${UV_THREADPOOL_SIZE:-4}
+  CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
+  TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+  AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+  AUTH_URL: ${AUTH_URL:?AUTH_URL is required}
+  AUTH_ISSUER: ${AUTH_ISSUER:-${AUTH_URL}}
+  AUTH_AUDIENCE: ${AUTH_AUDIENCE:-${AUTH_URL}}
+  AUTH_TOKEN_TTL: ${AUTH_TOKEN_TTL:-15m}
+  AUTH_REFRESH_TTL: ${AUTH_REFRESH_TTL:-7d}
+  AUTH_REFRESH_COOKIE_SAME_SITE: '${AUTH_REFRESH_COOKIE_SAME_SITE:?Set it in production. Use lax or strict when the API and the frontend share a site, and none when they are on different sites.}'
+  AUTH_EMAIL_VERIFICATION_URL: ${AUTH_EMAIL_VERIFICATION_URL:?AUTH_EMAIL_VERIFICATION_URL is required}
+  AUTH_PASSWORD_RESET_URL: ${AUTH_PASSWORD_RESET_URL:?AUTH_PASSWORD_RESET_URL is required}
+  AUTH_EMAIL_VERIFICATION_TTL: ${AUTH_EMAIL_VERIFICATION_TTL:-24h}
+  AUTH_PASSWORD_RESET_TTL: ${AUTH_PASSWORD_RESET_TTL:-1h}
+  AUTH_ARGON2_MEMORY_COST: ${AUTH_ARGON2_MEMORY_COST:-12288}
+  AUTH_ARGON2_TIME_COST: ${AUTH_ARGON2_TIME_COST:-3}
+  AUTH_ARGON2_PARALLELISM: ${AUTH_ARGON2_PARALLELISM:-1}
+  MAIL_HOST: ${MAIL_HOST:?MAIL_HOST is required}
+  MAIL_PORT: ${MAIL_PORT:-587}
+  MAIL_SECURE: ${MAIL_SECURE:-false}
+  MAIL_USER: ${MAIL_USER:-}
+  MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+  MAIL_FROM: ${MAIL_FROM:?MAIL_FROM is required}
+  DOCS_ENABLED: '${DOCS_ENABLED:-false}'
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LOG_PRETTY: 'false'
+  LOG_SERVICE_NAME: ${LOG_SERVICE_NAME:-sipeg-utp-backend}
+  APP_VERSION: ${APP_VERSION:-1.0.0}
+  LOG_PSEUDONYMIZATION_KEY: ${LOG_PSEUDONYMIZATION_KEY:?LOG_PSEUDONYMIZATION_KEY is required}
 ```
 
 - [x] **Step 2: Pasar Argon2 al seed**
@@ -488,9 +488,9 @@ Reemplazar por la lista siguiente, conservando `DATABASE_URL`, puertos, `depends
 En el bloque `seed.environment`, tras `SEED_ADMIN_LAST_NAME`, agregar:
 
 ```yaml
-      AUTH_ARGON2_MEMORY_COST: ${AUTH_ARGON2_MEMORY_COST:-12288}
-      AUTH_ARGON2_TIME_COST: ${AUTH_ARGON2_TIME_COST:-3}
-      AUTH_ARGON2_PARALLELISM: ${AUTH_ARGON2_PARALLELISM:-1}
+AUTH_ARGON2_MEMORY_COST: ${AUTH_ARGON2_MEMORY_COST:-12288}
+AUTH_ARGON2_TIME_COST: ${AUTH_ARGON2_TIME_COST:-3}
+AUTH_ARGON2_PARALLELISM: ${AUTH_ARGON2_PARALLELISM:-1}
 ```
 
 - [x] **Step 3: Versionar la imagen compartida**
@@ -498,7 +498,7 @@ En el bloque `seed.environment`, tras `SEED_ADMIN_LAST_NAME`, agregar:
 Cambiar en `migrate` y en `seed`:
 
 ```yaml
-    image: sipeg-utp-backend:migrate-${IMAGE_TAG:?IMAGE_TAG is required}
+image: sipeg-utp-backend:migrate-${IMAGE_TAG:?IMAGE_TAG is required}
 ```
 
 - [x] **Step 4: Actualizar comentarios**
@@ -530,15 +530,15 @@ Expected: código `0`. Ajustar únicamente variables obligatorias ausentes; no i
 Agregar tras las variables de auth existentes:
 
 ```yaml
-      AUTH_ISSUER: ${AUTH_ISSUER:-${AUTH_URL:-http://localhost:3000}}
-      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-${AUTH_URL:-http://localhost:3000}}
-      AUTH_TOKEN_TTL: ${AUTH_TOKEN_TTL:-15m}
-      AUTH_REFRESH_COOKIE_SAME_SITE: ${AUTH_REFRESH_COOKIE_SAME_SITE:-lax}
-      TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
-      DOCS_ENABLED: '${DOCS_ENABLED:-true}'
-      AUTH_ARGON2_MEMORY_COST: ${AUTH_ARGON2_MEMORY_COST:-12288}
-      AUTH_ARGON2_TIME_COST: ${AUTH_ARGON2_TIME_COST:-3}
-      AUTH_ARGON2_PARALLELISM: ${AUTH_ARGON2_PARALLELISM:-1}
+AUTH_ISSUER: ${AUTH_ISSUER:-${AUTH_URL:-http://localhost:3000}}
+AUTH_AUDIENCE: ${AUTH_AUDIENCE:-${AUTH_URL:-http://localhost:3000}}
+AUTH_TOKEN_TTL: ${AUTH_TOKEN_TTL:-15m}
+AUTH_REFRESH_COOKIE_SAME_SITE: ${AUTH_REFRESH_COOKIE_SAME_SITE:-lax}
+TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
+DOCS_ENABLED: '${DOCS_ENABLED:-true}'
+AUTH_ARGON2_MEMORY_COST: ${AUTH_ARGON2_MEMORY_COST:-12288}
+AUTH_ARGON2_TIME_COST: ${AUTH_ARGON2_TIME_COST:-3}
+AUTH_ARGON2_PARALLELISM: ${AUTH_ARGON2_PARALLELISM:-1}
 ```
 
 - [x] **Step 2: Conservar los valores locales**
@@ -680,7 +680,7 @@ MAIL_PASSWORD=CONTRASENA_SMTP_REAL
 MAIL_FROM='SIPEG UTP <no-reply@sipeg-utp.com>'
 ```
 
-- [ ] **Step 4: Probar la entrega real**
+- [x] **Step 4: Probar la entrega real**
 
 Con la API en ejecución (tarea 8), registrar una cuenta de prueba con un buzón externo y confirmar la recepción del correo de verificación. Un mensaje visible solo en Mailpit no prueba la entrega.
 
@@ -695,11 +695,11 @@ Realizado hasta ahora:
 - **Step 1 completado.** El VPS está en la región **Beauharnois (BHS)**, no en una Local Zone. Desde ahí, `openssl s_client -starttls smtp` contra `smtp-relay.brevo.com:587` estableció TLS 1.3 y el certificado validó con `Verified peername: smtp-relay.brevo.com`. Las conexiones SMTP salientes funcionan.
 - **Step 2 completado.** Proveedor elegido: **Brevo (plan gratuito)**, host `smtp-relay.brevo.com`, puerto `587` con STARTTLS (`MAIL_SECURE=false`). Dominio `sipeg-utp.com` autenticado; publicados en Cloudflare los registros de validación de Brevo (código TXT, DKIM y DMARC `v=DMARC1; p=none; rua=mailto:rua@dmarc.brevo.com`), más los CNAME de marca de enlaces e imágenes. Remitente `SIPEG UTP <no-reply@sipeg-utp.com>` autorizado. Clave SMTP generada; la IP pública del VPS quedó autorizada en Brevo.
 - **Step 3 completado.** `.env.prod` contiene `MAIL_HOST`, `MAIL_PORT=587`, `MAIL_SECURE=false`, `MAIL_USER`, `MAIL_PASSWORD` y `MAIL_FROM` sin campos vacíos. Se verificó su presencia sin imprimir la clave.
+- **Step 4 completado.** Registro con un buzón externo, recepción real del correo de verificación por Brevo y verificación de email; confirmado en la tarea 9.
 
 Pendiente:
 
-- **Step 4:** probar la entrega real con un buzón externo. Se deja para la tarea 8, con la API en ejecución; el plan ya lo ubicaba en ese punto.
-- **Step 5:** SMTP de Grafana, opcional y atado al plan `2026-10-07-endurecimiento-vps.md`.
+- **Step 5:** SMTP de Grafana, opcional y atado al plan `2026-10-07-endurecimiento-vps.md`. No se ejecutó en este despliegue.
 
 ---
 
@@ -719,9 +719,9 @@ VITE_API_BASE_URL=https://api.sipeg-utp.com
 
 - [x] **Step 2: Confirmar build y deploy**
 
-| Ajuste | Valor |
-| --- | --- |
-| Build command | `pnpm run build` |
+| Ajuste         | Valor                       |
+| -------------- | --------------------------- |
+| Build command  | `pnpm run build`            |
 | Deploy command | `pnpm exec wrangler deploy` |
 
 - [x] **Step 3: Dominio y redeploy**
@@ -738,9 +738,9 @@ Crear una aplicación self-hosted para `grafana.sipeg-utp.com`, con política **
 
 En `Networking → Tunnels → sipeg-produccion → Routes`:
 
-| Hostname | Tipo | Service URL | Path |
-| --- | --- | --- | --- |
-| `api.sipeg-utp.com` | HTTP | `http://api:3000` | Vacío |
+| Hostname                | Tipo | Service URL           | Path  |
+| ----------------------- | ---- | --------------------- | ----- |
+| `api.sipeg-utp.com`     | HTTP | `http://api:3000`     | Vacío |
 | `grafana.sipeg-utp.com` | HTTP | `http://grafana:3000` | Vacío |
 
 Path vacío incluye `/api/v1/*` y `/api/auth/jwks`. Activar **Protect with Access** solo en Grafana.
@@ -783,7 +783,7 @@ Pendiente para la tarea 8:
 
 **Ubicación:** directorio del backend en el VPS.
 
-- [ ] **Step 1: Preparar el directorio**
+- [x] **Step 1: Preparar el directorio**
 
 Confirmar la revisión a desplegar, respaldar PostgreSQL si ya hay datos y verificar que Docker arranca al boot:
 
@@ -797,7 +797,7 @@ Si no está habilitado:
 sudo systemctl enable --now docker
 ```
 
-- [ ] **Step 2: Diagnosticar el contenedor que reaparece**
+- [x] **Step 2: Diagnosticar el contenedor que reaparece**
 
 ```bash
 sudo docker ps -a --format 'table {{.ID}}\t{{.Image}}\t{{.Status}}\t{{.Names}}'
@@ -813,7 +813,7 @@ sudo docker inspect ID_DEL_CONTENEDOR \
 
 Aclaración: una política de reinicio reinicia el **mismo** contenedor y no crea uno nuevo al eliminarlo. Si aparece otro ID, es otra ejecución (por ejemplo, varios `docker run` acumulados) o un supervisor que lo recrea; si los labels muestran `com.docker.compose.project`, se recrea desde Compose y debe bajarse con `docker compose ... down`.
 
-- [ ] **Step 3: Retirar los conectores manuales**
+- [x] **Step 3: Retirar los conectores manuales**
 
 ```bash
 sudo docker rm -f $(sudo docker ps -aq --filter ancestor=cloudflare/cloudflared:latest)
@@ -825,7 +825,7 @@ Si existe un servicio de host, desactivarlo para no duplicar conectores:
 sudo systemctl disable --now cloudflared
 ```
 
-- [ ] **Step 4: Validar la configuración**
+- [x] **Step 4: Validar la configuración**
 
 ```bash
 sudo docker compose \
@@ -838,7 +838,7 @@ sudo docker compose \
 
 Expected: código `0`, sin imprimir secretos.
 
-- [ ] **Step 5: Construir y levantar**
+- [x] **Step 5: Construir y levantar**
 
 ```bash
 sudo docker compose \
@@ -849,7 +849,7 @@ sudo docker compose \
   up -d --build
 ```
 
-- [ ] **Step 6: Revisar servicios**
+- [x] **Step 6: Revisar servicios**
 
 ```bash
 sudo docker compose \
@@ -862,13 +862,31 @@ sudo docker compose \
 
 Expected: `db` saludable; `migrate` y `seed` terminados con código `0`; `api`, observabilidad y `cloudflared` en ejecución; túnel **Healthy** en Cloudflare. Cerrar y reabrir SSH no debe interrumpir nada.
 
+### Resultado de la tarea 8 (2026-10-20)
+
+**Completada.**
+
+- Docker ya estaba habilitado al arranque. No había contenedores, volúmenes ni servicio `cloudflared` previos; los Steps 2 y 3 no requirieron eliminaciones.
+- La primera publicación detectó el fallo del proxy de socket: `v0.5.0` no podía escribir `/run/haproxy.pid` con `read_only: true` y además arrastraba una regresión de `/version` con HAProxy 3.4.2. Se fijó `v0.4.2` y se añadió `/run` al `tmpfs` (commit `e21c4c4`).
+- El seed falló primero porque `SEED_ADMIN_IDENTIFICATION_NUMBER` estaba vacía. Se completó con la identificación real del ADMIN y el seed terminó con código `0`.
+- La API, PostgreSQL, Loki, Grafana y el proxy de socket quedaron saludables; Alloy y `cloudflared` en ejecución. `migrate` y `seed` terminaron con código `0`.
+- El health público devuelve `authJwksReachable: true`; el JWKS público responde `200` con una clave EdDSA y `cf-cache-status: DYNAMIC`.
+- Se confirmó que Bot Fight Mode desafiaba la consulta de Node al JWKS público. La corrección con `AUTH_JWKS_URL` interno quedó desplegada y verificada; ver la sección posterior.
+- El login y una petición protegida desde el navegador funcionan tras la corrección.
+
+La etiqueta `2026-10-20-r1` está aplicada y `api`, `migrate` y `seed` la reflejan en `ps -a`.
+
+Pendiente:
+
+- La tarea 9 conserva una verificación diferida de rate limiting; el resto del recorrido funcional está completo.
+
 ---
 
 ## Tarea 9: verificar el despliegue completo
 
 **Ubicación:** equipo del operador y paneles de los proveedores.
 
-- [ ] **Step 1: Pruebas, tipos, lint y build**
+- [x] **Step 1: Pruebas, tipos, lint y build**
 
 ```bash
 pnpm test
@@ -880,7 +898,7 @@ pnpm run docs:check
 
 Expected: todo en verde.
 
-- [ ] **Step 2: Endpoints públicos**
+- [x] **Step 2: Endpoints públicos**
 
 ```bash
 curl -i https://api.sipeg-utp.com/api/v1/health
@@ -891,7 +909,7 @@ Expected: health `200` con `data.authJwksReachable: true`; JWKS `200` con claves
 
 Con `AUTH_JWKS_URL` interno, el campo del health acredita solo la accesibilidad del JWKS configurado desde la API. La segunda petición comprueba por separado la ruta pública y las reglas de Cloudflare para ese cliente; un challenge del edge no queda descartado por el health interno.
 
-- [ ] **Step 3: CORS**
+- [x] **Step 3: CORS**
 
 ```bash
 curl -i -X OPTIONS \
@@ -910,28 +928,50 @@ Access-Control-Allow-Credentials: true
 
 - [ ] **Step 4: Recorrido funcional**
 
-- [ ] Registro y recepción real del correo.
-- [ ] Verificación de email.
-- [ ] Login, refresh, recarga y segunda pestaña.
-- [ ] Recuperación y cambio de contraseña.
-- [ ] Cookie `HttpOnly`, `Secure`, `SameSite=Lax`, host `api.sipeg-utp.com`, `Path=/api/v1/auth`.
-- [ ] Grafana exige Access y después su login.
-- [ ] Grafana consulta Loki y muestra logs de la API.
-- [ ] Dos clientes de redes distintas no comparten indebidamente los buckets por IP.
-- [ ] Reinicio controlado del VPS recupera automáticamente los servicios.
-- [ ] Desarrollo sigue funcionando con Mailpit.
+- [x] Registro y recepción real del correo.
+- [x] Verificación de email.
+- [x] Login, refresh, recarga y segunda pestaña.
+- [x] Recuperación y cambio de contraseña.
+- [x] Cookie `HttpOnly`, `Secure`, `SameSite=Lax`, host `api.sipeg-utp.com`, `Path=/api/v1/auth`.
+- [x] Grafana exige Access y después su login.
+- [x] Grafana consulta Loki y muestra logs de la API.
+- [ ] Dos clientes de redes distintas no comparten indebidamente los buckets por IP. **Diferida por decisión operativa**; no se probó para no bloquear la IP del operador.
+- [x] Reinicio controlado del VPS recupera automáticamente los servicios.
+- [x] Desarrollo sigue funcionando con Mailpit.
 
 ### Diagnóstico inicial
 
-| Síntoma | Primera revisión |
-| --- | --- |
-| Error `1033` | Conector del túnel desconectado |
-| Error `502` | Nombre de servicio, puerto interno y redes Docker |
-| Error CORS | `CORS_ORIGIN` frente al origen real del frontend |
-| Health `200`, pero JWKS `false` | `AUTH_JWKS_URL`, puerto interno y acceso al endpoint configurado; verificar el JWKS público por separado |
-| Correo visible en Mailpit, pero no recibido | SMTP de entrega real |
-| Error TLS del SMTP | STARTTLS, cadena del certificado y `MAIL_HOST` |
-| Alertas visibles en Grafana, pero sin email | SMTP, contact point y política de notificación |
+| Síntoma                                     | Primera revisión                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Error `1033`                                | Conector del túnel desconectado                                                                          |
+| Error `502`                                 | Nombre de servicio, puerto interno y redes Docker                                                        |
+| Error CORS                                  | `CORS_ORIGIN` frente al origen real del frontend                                                         |
+| Health `200`, pero JWKS `false`             | `AUTH_JWKS_URL`, puerto interno y acceso al endpoint configurado; verificar el JWKS público por separado |
+| Correo visible en Mailpit, pero no recibido | SMTP de entrega real                                                                                     |
+| Error TLS del SMTP                          | STARTTLS, cadena del certificado y `MAIL_HOST`                                                           |
+| Alertas visibles en Grafana, pero sin email | SMTP, contact point y política de notificación                                                           |
+
+### Progreso de la tarea 9 (2026-10-20)
+
+Completado:
+
+- **Step 1.** `pnpm test`, typecheck, lint, build y `docs:check` en verde en el equipo del operador.
+- **Step 2.** Health público `200` con `authJwksReachable: true`; JWKS público `200` con clave `EdDSA`; `cf-cache-status: DYNAMIC`. El health mide el JWKS interno; la ruta pública se verificó por separado.
+- **Step 3.** Preflight CORS `204` con `Access-Control-Allow-Origin: https://sipeg-utp.com` y `Access-Control-Allow-Credentials: true`.
+- Registro con buzón externo, recepción real por Brevo y verificación de email.
+- Login, refresh, recarga y segunda pestaña.
+- Recuperación y cambio de contraseña.
+- Cookie `sipeg-refresh` con `HttpOnly`, `Secure`, `SameSite=Lax`, host-only y `Path=/api/v1/auth`.
+- Grafana exige Access, permite el login y consulta Loki con logs de la API.
+- Reinicio del VPS: los servicios volvieron automáticamente y el health siguió en `200` con `authJwksReachable: true`.
+- Desarrollo con Mailpit.
+
+Cierre operativo:
+
+- El recorrido funcional está completo salvo la prueba de aislamiento de buckets de rate limiting.
+- **Diferida por decisión operativa:** no se probó desde dos redes para no bloquear la IP del operador. No bloquea el criterio de finalización del despliegue.
+- La etiqueta `2026-10-20-r1` está aplicada en `api`, `migrate` y `seed`; el pendiente anterior de imagen quedó resuelto.
+- El riesgo residual y la recomendación de repetir la prueba antes de ajustar umbrales están documentados en `docs/despliegue.md` y ADR-0012.
 
 ---
 
@@ -939,29 +979,40 @@ Access-Control-Allow-Credentials: true
 
 **Files:** Modify `README.md`, `CONTEXT.md`, `AGENTS.md`, `docs/despliegue.md`; Create `docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md`.
 
-- [ ] **Step 1: Registrar el ADR**
+- [x] **Step 1: Registrar el ADR**
 
 Crear `docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md` siguiendo la plantilla de `docs/adr/`. Debe documentar: Workers para el frontend, Cloudflare Tunnel como frontera pública sin puertos entrantes, `SameSite=lax` por compartir dominio registrable, `trust proxy=1` con `X-Forwarded-For` de Cloudflare, y la separación de redes.
 
-- [ ] **Step 2: Actualizar `docs/despliegue.md`**
+- [x] **Step 2: Actualizar `docs/despliegue.md`**
 
 Sustituir el estado "Abierta" por la topología elegida y marcar las decisiones derivadas resueltas (dominio, `AUTH_REFRESH_COOKIE_SAME_SITE`, saltos de proxy, CORS, `AUTH_URL`, `VITE_API_BASE_URL`, acceso a Grafana).
 
-- [ ] **Step 3: Actualizar `README.md` y `CONTEXT.md`**
+- [x] **Step 3: Actualizar `README.md` y `CONTEXT.md`**
 
 Documentar el comando de despliegue con los tres archivos Compose, los dominios públicos, la variable de build del frontend y el SMTP finalmente elegido. Integrar sin revertir cambios locales.
 
-- [ ] **Step 4: Actualizar `AGENTS.md`**
+- [x] **Step 4: Actualizar `AGENTS.md`**
 
 Ajustar la sección de despliegue/red para reflejar Cloudflare Tunnel y el conector Compose.
 
-- [ ] **Step 5: Comprobar formato**
+- [x] **Step 5: Comprobar formato**
 
 ```bash
 pnpm exec prettier README.md CONTEXT.md AGENTS.md docs/despliegue.md docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md --check
 ```
 
 Expected: sin diferencias.
+
+### Resultado de la tarea 10 (2026-10-20)
+
+**Completada.**
+
+- Creado `docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md` con topología, decisiones, consecuencias, alternativas, implementación y referencias.
+- Reescrito `docs/despliegue.md` con el estado final, dominios, decisiones resueltas, Compose, redes, cookies, JWKS, operación, verificación y pendientes.
+- Actualizados `README.md`, `CONTEXT.md` y `AGENTS.md` con los dominios, el comando de tres Compose, Cloudflare Tunnel, Access, JWKS interno, Brevo y reglas de red.
+- Añadidas notas de vigencia en ADR-0007 (terminación TLS y frontera pública) y ADR-0009 (topología y `SameSite=lax`).
+- Actualizados los planes de despliegue y de JWKS interno con la etiqueta `2026-10-20-r1`, el rate limiting diferido y el cierre de la tarea 10.
+- `pnpm exec prettier ... --check`, `pnpm run docs:check` y `git diff --check`: correctos. Sin cambios de código.
 
 ---
 
@@ -975,6 +1026,10 @@ El despliegue está completo cuando:
 - Grafana está protegido por Access y consulta Loki.
 - Desarrollo conserva Mailpit.
 - Los correos de identidad llegan a destinatarios reales.
+
+La prueba de aislamiento de buckets de rate limiting entre dos redes quedó
+diferida por decisión operativa y documentada como riesgo residual; no forma
+parte de este criterio de finalización.
 
 ## Fuentes oficiales
 
@@ -994,14 +1049,14 @@ Estado de `.env.prod`: creado en la máquina local (no en el VPS), con `chmod 60
 
 Secretos generados y reglas de estabilidad:
 
-| Variable | Estado | Regla |
-| --- | --- | --- |
-| `POSTGRES_PASSWORD` | Generado (`openssl rand -hex 32`) | Solo aplica a un volumen nuevo. Si el VPS ya tiene volumen de PostgreSQL, reemplazarlo por la contraseña vigente. |
-| `AUTH_SECRET` | Generado | Mantener estable entre despliegues. |
-| `LOG_PSEUDONYMIZATION_KEY` | Generado | Mantener estable para conservar la correlación de pseudónimos. |
-| `GRAFANA_SECRET_KEY` | Generado | Mantener estable entre reinicios. |
-| `GRAFANA_ADMIN_PASSWORD` | Generado | Solo se aplica al inicializar un volumen vacío de Grafana. |
-| `SEED_ADMIN_PASSWORD` | Generado (`openssl rand -hex 10`, 20 chars) | Retirar después de confirmar que el ADMIN existe. |
+| Variable                   | Estado                                      | Regla                                                                                                             |
+| -------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD`        | Generado (`openssl rand -hex 32`)           | Solo aplica a un volumen nuevo. Si el VPS ya tiene volumen de PostgreSQL, reemplazarlo por la contraseña vigente. |
+| `AUTH_SECRET`              | Generado                                    | Mantener estable entre despliegues.                                                                               |
+| `LOG_PSEUDONYMIZATION_KEY` | Generado                                    | Mantener estable para conservar la correlación de pseudónimos.                                                    |
+| `GRAFANA_SECRET_KEY`       | Generado                                    | Mantener estable entre reinicios.                                                                                 |
+| `GRAFANA_ADMIN_PASSWORD`   | Generado                                    | Solo se aplica al inicializar un volumen vacío de Grafana.                                                        |
+| `SEED_ADMIN_PASSWORD`      | Generado (`openssl rand -hex 10`, 20 chars) | Retirar después de confirmar que el ADMIN existe.                                                                 |
 
 Campos aún vacíos en `.env.prod`, con su tarea de resolución:
 
@@ -1127,7 +1182,15 @@ Implementación y verificación local: [plan de JWKS interno](2026-10-19-interna
 - [x] Conservar issuer y audience públicos, algoritmo EdDSA, caché y timeout de health de 3 segundos.
 - [x] Reproducir el challenge y verificar la corrección con un servidor HTTP de pruebas aislado. Cubrir fallback, `refresh()` y rechazo de issuer/audience internos.
 - [x] Verificar localmente: 39 pruebas focalizadas y 1639 de la suite completa aprobadas (9 de integración omitidas); tipos, lint, build, OpenAPI y Compose correctos. Implementación en el commit `9acc05e`.
-- [ ] Actualizar el código en el VPS, usar una etiqueta de imagen nueva y reconstruir las imágenes de API y migración/seed de esa publicación antes de levantar sus dependencias.
-- [ ] Confirmar en el VPS `authJwksReachable: true` y login seguido de una petición protegida desde el navegador.
+- [x] Actualizar el código en el VPS y reconstruir las imágenes de API y migración/seed. Se usó `2026-10-10-r1`; el código nuevo está en ejecución.
+- [x] Confirmar en el VPS `authJwksReachable: true` y login seguido de una petición protegida desde el navegador.
+- [x] Publicar una etiqueta nueva: `2026-10-20-r1` está aplicada en `api`, `migrate` y `seed`; `ps -a` la refleja.
 
 El health mide el endpoint configurado (loopback en Docker), no el borde público. La ruta pública conserva las reglas de Cloudflare y debe comprobarse externamente. No cambiar `AUTH_URL`, `AUTH_ISSUER` ni `AUTH_AUDIENCE` a loopback. El `.env.prod` existente puede conservarse: Compose aporta el default; si define explícitamente `AUTH_JWKS_URL`, ese valor tiene prioridad y debe revisarse.
+
+Verificación en el VPS:
+
+- Health público: `authJwksReachable: true`.
+- JWKS público: `200` con clave `EdDSA` y `cf-cache-status: DYNAMIC`.
+- `api` healthy, `migrate` y `seed` con código `0`, observabilidad y `cloudflared` en ejecución.
+- Login del ADMIN y petición protegida desde el navegador: correctos.

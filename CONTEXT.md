@@ -9,7 +9,7 @@ El backend debe soportar usuarios, autenticacion, permisos, programas de eventos
 ## Alcance Del Backend
 
 - Exponer endpoints REST versionados, preferiblemente bajo `/api/v1`.
-- Reimplementar autenticacion y autorizacion desde 0 (estado actual: sin auth).
+- Mantener autenticacion y autorizacion con Better Auth, JWT EdDSA y permisos por colaboracion.
 - Persistir datos con Prisma.
 - Validar entradas del cliente antes de llegar a reglas de negocio.
 - Centralizar errores y respuestas JSON.
@@ -20,19 +20,36 @@ El backend debe soportar usuarios, autenticacion, permisos, programas de eventos
 
 ## Estado Actual Del Repositorio
 
-- El repositorio puede estar en estado inicial de scaffold.
-- Si faltan `src/`, `prisma/`, `tsconfig.json`, scripts de pnpm o `.env.example`, deben crearse solo cuando la tarea lo requiera.
-- Las convenciones en `AGENTS.md` describen la arquitectura objetivo y deben aplicarse incrementalmente.
-- No se deben agregar dependencias, modulos vacios o placeholders solo para aparentar estructura.
+- El backend ya esta implementado y desplegado. No es un scaffold: incluye API REST, autenticacion, autorizacion, persistencia, observabilidad y correo transaccional.
+- Modulos actuales en `src/modules/`: `activities`, `alerts`, `audit`, `auth`, `authorization`, `careers`, `certificates`, `classrooms`, `event-programs`, `health`, `organizational-units` y `users`.
+- El contrato OpenAPI se genera desde los schemas Zod y se publica en `openapi.json`; la coleccion Bruno vive en `bruno/`.
+- La topologia de despliegue esta decidida e implementada: Cloudflare Workers para el frontend y Cloudflare Tunnel para la API y Grafana sobre un VPS OVH. Ver `docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md`.
+- Los cambios de comportamiento siguen TDD y las convenciones de `AGENTS.md`.
 
-## Stack Objetivo
+## Stack
 
 - Node.js 24.x LTS o la ultima version LTS activa disponible.
 - TypeScript.
-- Express.
-- Prisma ORM.
-- Autenticacion y autorizacion: pendiente de reimplementar desde 0 (sin modulo `auth` ni middlewares de auth/authorize en el estado actual).
+- Express 5.
+- Prisma ORM 7 sobre PostgreSQL 18.
+- Better Auth 1.7.x con plugin JWT, Argon2id y permisos por colaboracion.
 - pnpm como package manager.
+- Docker Engine y Compose para desarrollo y produccion.
+
+## Despliegue
+
+- **Frontend:** React con Vite compilado a estaticos, publicado en Cloudflare Workers Static Assets en `https://sipeg-utp.com`; usa `VITE_API_BASE_URL=https://api.sipeg-utp.com`.
+- **API:** `https://api.sipeg-utp.com` a traves de Cloudflare Tunnel; sin Access, con CORS explicito y rate limiting.
+- **Grafana:** `https://grafana.sipeg-utp.com` con Cloudflare Access (team `sipeg`) y login propio; Loki y Alloy no publican puertos.
+- **Origen:** VPS OVH en Beauharnois con Docker Compose. El comando de produccion combina `compose.prod.yaml`, `compose.observability.yaml` y `compose.cloudflare.yaml` con `--env-file .env.prod`.
+- **Redes:** `sipeg-utp-prod` para API, PostgreSQL y `cloudflared`; `observability` para Loki, Alloy, proxy de socket, Grafana y `cloudflared`. Alloy usa un proxy de socket de solo lectura.
+- **Puertos:** la base de datos no publica puertos; API y Grafana se atan a `127.0.0.1` solo para diagnostico. El acceso publico entra por el tunel.
+- **Sesion:** API y frontend comparten `sipeg-utp.com`, por lo que `AUTH_REFRESH_COOKIE_SAME_SITE=lax`. La cookie `sipeg-refresh` es `HttpOnly`, `Secure`, host-only y `Path=/api/v1/auth`.
+- **Proxy:** `trust proxy=1`; `cloudflared` es el unico salto y Cloudflare escribe la IP del cliente en `X-Forwarded-For`. Añadir otro proxy exige revisar la cadena.
+- **JWKS:** `AUTH_JWKS_URL=http://127.0.0.1:3000/api/auth/jwks` para evitar Bot Fight Mode. `AUTH_URL`, `AUTH_ISSUER` y `AUTH_AUDIENCE` siguen siendo publicos.
+- **Correo:** Brevo por SMTP `587`/STARTTLS, remitente `SIPEG UTP <no-reply@sipeg-utp.com>`.
+- **Secretos:** `.env.prod` es privado, se mantiene fuera de Git y usa permisos `600`.
+- **Pendientes operativos:** rate limiting entre dos redes (diferido), backup/restore de PostgreSQL y contact point de alertas. Detalle en `docs/despliegue.md`.
 
 ## Lenguaje De Dominio
 
@@ -281,7 +298,7 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - Un error con `status` 4xx entero (contrato de `http-errors`, que es lo que lanza `body-parser`) se responde con ese status y un mensaje de tabla cerrada, **sin** log `error`: un cuerpo malformado o demasiado grande es 400, no un fallo de la aplicacion. El mensaje nunca se copia del error para no filtrar el cuerpo recibido.
 - Visualizacion autogestionada: Docker emite con driver `local`, `Grafana Alloy` recolecta (via `docker-socket-proxy` de solo lectura) y envia a `Loki`, y `Grafana` consulta y alerta. Todo en `compose.observability.yaml` + `observability/` (Loki 3.7.8, Alloy 1.20.0, Grafana 13.2.2). Etiquetas Loki permitidas: `service`, `environment`, `log_type`, `level` y `container` (servicio Compose); `requestId`/`event`/`route`/`statusCode` van a structured metadata y el resto vive en el JSON, nunca como labels.
 - Imagenes de terceros: nunca `latest`. Las de observabilidad van con `tag@sha256:digest` en el compose; la tabla completa esta en ADR-0007 (seccion "Imagenes Fijadas"). La imagen de la API se construye localmente, no admite digest, y por eso `IMAGE_TAG` es obligatoria y sin default.
-- Grafana es el unico servicio del overlay con puerto publicado, y solo en `127.0.0.1:3001` (`GRAFANA_PORT`, porque la API ya usa 3000). `GRAFANA_ADMIN_PASSWORD` y `GRAFANA_SECRET_KEY` son obligatorias sin default; la primera solo se aplica al inicializar un volumen vacio. El datasource Loki se provisiona por archivo con UID estable `loki`, en modo `proxy` y `editable: false`.
+- Grafana es el unico servicio del overlay con puerto publicado, y solo en `127.0.0.1:3001` (`GRAFANA_PORT`, porque la API ya usa 3000). El acceso publico es `https://grafana.sipeg-utp.com` a traves de Cloudflare Tunnel y Access; el loopback queda para diagnostico. `GRAFANA_ADMIN_PASSWORD` y `GRAFANA_SECRET_KEY` son obligatorias sin default; la primera solo se aplica al inicializar un volumen vacio. El datasource Loki se provisiona por archivo con UID estable `loki`, en modo `proxy` y `editable: false`.
 - Los paneles se provisionan por archivo desde `observability/grafana/provisioning/dashboards/dashboards.yaml` hacia `observability/grafana/dashboards/`, en la carpeta fija `SIPEG UTP` (por **titulo**, sin `folderUid`) y con `allowUiUpdates: false`: se editan en el repositorio. `API Overview` (`sipeg-api-overview`) trae volumen, distribucion por clase, p50/p95, frecuencia completa por metodo+ruta, preflight/no enrutadas, abortos y solicitudes recientes, con filtros de metodo/ruta. El path de montaje es `/etc/grafana/dashboards` y no `/var/lib/grafana/dashboards`, que esta dentro del volumen `grafana_data`. `updateIntervalSeconds: 30` para que Grafana sondee en vez de depender de inotify a traves de un bind mount.
 - Las alertas se provisionan por archivo desde `observability/grafana/provisioning/alerting/rules.yaml`: un grupo `sipeg-api` en la carpeta `SIPEG UTP`, `interval: 1m`, 5 reglas (fatal, errores inesperados, 5xx, fallos de login, rate limits) sobre el datasource `loki`, cada una enlazada al panel que la explica. `noDataState: OK` con `or vector(0)` y `execErrState: Alerting` para que una consulta rota no se lea como "todo bien". **Sin contact point**: no notifican, solo se ven en la UI. A diferencia de los paneles no hay sondeo, asi que un cambio exige recrear el contenedor de Grafana.
 - `pnpm run observability:check` verifica el stack de observabilidad contra la UI de Grafana (14 comprobaciones: datasource, las 5 reglas con su umbral/`for`/panel, su salud, ingesta JSON, carpeta y contrato aplicado de trafico de `API Overview`). Sale con codigo 1 si algo falla y **no modifica nada**. Detecta `LOG_PRETTY=true` leyendo las lineas no estructuradas y tolera solo el banner exacto de `tsx watch`. Lee el estado **aplicado**, asi que hay que recrear Grafana despues de editar reglas y esperar el sondeo de dashboards.
@@ -291,7 +308,7 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - `requestId` llega a todos los eventos, incluidos los de seguridad, via `createRequestLogger()`, que fusiona el contexto de `AsyncLocalStorage`.
 - Retencion prevista: 30 dias access/aplicacion/infraestructura y 90 dias `log_type="security"` en produccion; 7 dias en desarrollo. Loki requiere `compactor.retention_enabled: true` porque por defecto no borra.
 - La API no depende de Loki: escribe a stdout y el driver `local` actua como spool si el colector cae. Los tres compose declaran `x-logging` (`local`, `max-size: 20m`, `max-file: 5`) y lo aplican con `logging: *logging` a cada servicio: el default `json-file` no rota nunca y, como Alloy reintenta para siempre, llenaria el disco.
-- Ningun puerto se publica en `0.0.0.0`: la API (3000), Grafana (3001), Mailpit (8025) y la base de desarrollo (5432) van atados a `127.0.0.1`; en produccion la base no publica nada; Loki, Alloy y el socket de proxy usan `expose`, que es interno de la red. La tabla completa y la brecha de proxy TLS estan en la seccion "Puertos Publicados" de ADR-0007.
+- Ningun puerto se publica en `0.0.0.0`: la API (3000), Grafana (3001), Mailpit (8025) y la base de desarrollo (5432) van atados a `127.0.0.1`; en produccion la base no publica nada; Loki, Alloy y el socket de proxy usan `expose`, que es interno de la red. La tabla completa esta en ADR-0007; la frontera publica con Cloudflare Tunnel, Access y binds de loopback se documenta en ADR-0012 y `docs/despliegue.md`.
 - Plan de ejecucion: `docs/superpowers/plans/logging-y-auditoria.md`.
 
 ## Auditoria Durable

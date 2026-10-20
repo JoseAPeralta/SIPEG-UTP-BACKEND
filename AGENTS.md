@@ -10,7 +10,7 @@
 
 - **Type**: Backend REST API.
 - **Scope of this repository**: Node.js backend only.
-- **Frontend**: A separate React frontend will consume this API over HTTP.
+- **Frontend**: A separate React frontend consumes this API over HTTP from Cloudflare Workers.
 - **Product goal**: Event management platform for users, event programs, activities, attendance, certificates, classrooms, speaker registration, reports, and statistics.
 - **Runtime target**: Node.js 24.x LTS, or the latest active LTS available in the project environment.
 - **Backend framework**: Express.
@@ -21,9 +21,11 @@
 
 ## Current Repository State
 
-- This repository may be in an early scaffold state. If `src/`, `prisma/`, `tsconfig.json`, or expected scripts are missing, treat the sections below as target conventions rather than proof that the implementation already exists.
-- Create missing project structure only when it is required by the task being implemented.
-- Do not add placeholder code, empty abstractions, or dependencies just to match the target structure.
+- The backend is implemented and deployed: API, authentication, authorization, persistence, OpenAPI, observability and transactional email are in place.
+- Modules under `src/modules/`: `activities`, `alerts`, `audit`, `auth`, `authorization`, `careers`, `certificates`, `classrooms`, `event-programs`, `health`, `organizational-units` and `users`.
+- Production runs on an OVH VPS with Docker Compose behind Cloudflare Tunnel. The frontend is a separate repository deployed to Cloudflare Workers.
+- Follow existing patterns before adding structure. Create missing folders only when the task requires them.
+- Do not add placeholder code, empty abstractions, or dependencies just to match a target structure.
 - If current files contradict this document, preserve user work and ask only when the contradiction blocks the requested task.
 
 ## Installed Project Skills
@@ -138,7 +140,7 @@ prisma/
 `-- seed.base.ts     # seed base de produccion
 ```
 
-> Estado actual: modulos `auth`, `authorization`, `users`, `event-programs`, `activities`, `certificates` y `health` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
+> Estado actual: modulos `activities`, `alerts`, `audit`, `auth`, `authorization`, `careers`, `certificates`, `classrooms`, `event-programs`, `health`, `organizational-units` y `users` implementados, ademas de la infraestructura OpenAPI/Scalar. La estructura objetivo queda como referencia para los siguientes modulos; las carpetas se crean unicamente cuando la tarea lo requiere, siguiendo la regla "Do not add placeholder code...".
 
 Rules:
 
@@ -163,10 +165,13 @@ CORS_ORIGIN="http://localhost:5173"
 DOCS_ENABLED=true
 ```
 
+Production uses `.env.prod.example` as the versioned template; the real `.env.prod`
+stays on the VPS, outside Git, with permissions `600`.
+
 Rules:
 
 - Never commit `.env` files.
-- Always keep `.env.example` updated when adding, removing, or renaming environment variables.
+- Always keep `.env.example` and `.env.prod.example` updated when adding, removing, or renaming environment variables.
 - Do not hardcode secrets, database URLs, tokens, email credentials, or private service keys.
 - Validate required environment variables when the application starts.
 - Do not log environment values that may contain secrets.
@@ -383,9 +388,25 @@ For errors:
 - Add a health check when the deployed API needs container health reporting.
 - Do not include build secrets, `.env`, development caches, or source maps in runtime images unless explicitly required.
 
+## Deployment And Network Rules
+
+- Production topology is Cloudflare Workers Static Assets for the frontend, Cloudflare Tunnel for `api.sipeg-utp.com` and `grafana.sipeg-utp.com`, and Docker Compose on an OVH VPS for the origin. See `docs/adr/adr-0012-cloudflare-workers-tunnel-deployment.md`.
+- Cloudflare Access protects only Grafana. The API uses Bearer tokens, CORS and rate limiting; do not put interactive Access in front of it.
+- Do not open inbound HTTP/HTTPS ports on the VPS. `cloudflared` is the only public ingress. API and Grafana binds to `127.0.0.1` are for host diagnostics only.
+- Deploy with `compose.prod.yaml`, `compose.observability.yaml` and `compose.cloudflare.yaml`, using `--env-file .env.prod`.
+- `IMAGE_TAG` is mandatory and must change for new code. Do not reuse a tag for a different image.
+- `migrate` and `seed` are one-shot services. The API starts only after both complete successfully; the seed is idempotent.
+- API and frontend share the registrable domain `sipeg-utp.com`, so `AUTH_REFRESH_COOKIE_SAME_SITE=lax`. Keep the refresh cookie `HttpOnly`, `Secure`, host-only and scoped to `/api/v1/auth`.
+- `trust proxy=1` is tied to `cloudflared` being the only hop. Cloudflare writes the client IP in `X-Forwarded-For`. Adding another proxy requires revisiting rate-limit buckets and this rule.
+- `AUTH_JWKS_URL` must stay on the container loopback (`http://127.0.0.1:3000/api/auth/jwks`). Do not point JWT verification or health at the public JWKS hostname; Bot Fight Mode can challenge Node.
+- Keep networks separated: `sipeg-utp-prod` for API, PostgreSQL and `cloudflared`; `observability` for Loki, Alloy, the read-only socket proxy, Grafana and `cloudflared`. PostgreSQL must not publish ports.
+- Cloudflare DNS records are proxied, **Always Use HTTPS** stays enabled, and API/Grafana use a cache bypass rule. Verify the tunnel is Healthy after deployment and after a VPS reboot.
+- `.env.prod`, the tunnel token, SMTP credentials and Grafana secrets are never committed or logged. Confirm `600` permissions and clear the bootstrap ADMIN variables after the ADMIN exists.
+- Update ADR-0012, `docs/despliegue.md` and this section when the topology, domains, proxy chain or Grafana protection changes.
+
 ## Documentation Rules
 
-- Keep `AGENTS.md`, `CONTEXT.md`, `.env.example`, API contracts, and README docs aligned when behavior or setup changes.
+- Keep `AGENTS.md`, `CONTEXT.md`, `.env.example`, `.env.prod.example`, API contracts, and README docs aligned when behavior or setup changes.
 - If API response contracts change, document the effect for the frontend integration.
 - Create ADRs for significant architectural decisions using `docs/adr/adr-NNNN-<title-slug>.md`.
 - Generate architecture blueprints only from actual code and configuration.

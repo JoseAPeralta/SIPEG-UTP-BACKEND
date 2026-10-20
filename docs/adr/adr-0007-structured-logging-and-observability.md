@@ -12,7 +12,12 @@ superseded_by: ''
 
 ## Status
 
-**Accepted**
+**Accepted** — parcialmente actualizado por ADR-0012 en lo relativo a terminacion
+TLS y frontera publica. El resto de este ADR sigue vigente.
+
+> **Vigencia (2026-10-20):** ADR-0012 resolvio la terminacion TLS y la frontera
+> publica descritas en "Puertos Publicados" y "Brecha: no hay terminacion TLS".
+> El texto original se conserva como contexto historico.
 
 ## Context
 
@@ -449,6 +454,11 @@ directorio. Editar `rules.yaml` exige recrear el contenedor de Grafana y revisar
 
 ## Puertos Publicados
 
+> **Actualizacion 2026-10-20:** la API y Grafana ya no dependen de un proxy TLS
+> en el host. Cloudflare Tunnel publica `api.sipeg-utp.com` y
+> `grafana.sipeg-utp.com`; Access protege solo Grafana y los binds de loopback
+> quedan para diagnostico. Ver ADR-0012.
+
 Regla: **nada se publica en `0.0.0.0`.** Todo puerto que un servicio necesita
 exponer a sus pares usa `expose`, que es solo una declaracion interna de la red de
 Compose y no abre nada en el host. Todo lo que de verdad necesita llegar al host
@@ -471,6 +481,9 @@ conecta desde el host (`psql`, DBeaver, `pnpm prisma` contra el puerto del host)
 y por eso tambien va atado a loopback.
 
 ### Brecha: no hay terminacion TLS
+
+> **Resuelta el 2026-10-20 por ADR-0012.** El texto siguiente se conserva como
+> contexto historico de la decision original.
 
 El despliegue de produccion **sirve hoy la API en HTTP plano**, porque el proxy
 que deberia terminar HTTPS no existe en el repositorio. Con `api` atada a

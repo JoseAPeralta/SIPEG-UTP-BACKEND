@@ -1212,7 +1212,7 @@ RandomizedDelaySec=300
 WantedBy=timers.target
 ```
 
-- [x] **Step 6: Crear `deploy/backup/install.sh` [repo]**
+- [x] **Step 6: Crear `deploy/backup/install.sh` [repo]** — correccion post-instalacion: `systemctl enable --now`, porque `enable` solo crea el symlink y el timer queda inactivo hasta el proximo reinicio (detectado en el VPS: `is-enabled=enabled` pero `list-timers` en 0)
 
 ```bash
 #!/usr/bin/env bash
@@ -1274,7 +1274,7 @@ sudo nano /etc/sipeg/backup.env
 Ajustar `COMPOSE_DIR`, `COMPOSE_FILES` (quitar `compose.cloudflare.yaml` si el
 overlay aun no existe) y `OFFSITE_CMD`.
 
-- [ ] **Step 10: Ejecutar el primer backup y verificar [VPS]** — diferido al despliegue (requiere contenedor db con pg_dump)
+- [x] **Step 10: Ejecutar el primer backup y verificar [VPS]** — `backup_ok` (94.9 kB cifrado, permisos 600) y `restore_verify_ok … migrations=18 users=2`
 
 ```bash
 sudo systemctl start sipeg-pg-backup.service
@@ -1286,7 +1286,7 @@ sudo /usr/local/sbin/sipeg-pg-restore-verify
 Esperado: `backup_ok file=...`, un archivo `.dump.enc` de tamano no trivial y
 `restore_verify_ok ... migrations=<n> users=<n>`.
 
-- [ ] **Step 11: Verificar el timer y programar la prueba mensual [VPS]** — diferido al despliegue
+- [x] **Step 11: Verificar el timer y programar la prueba mensual [VPS]** — timer activo y `enabled`, proxima ejecucion 02:32 EST; la prueba trimestral de restore queda como recordatorio operativo del equipo
 
 ```bash
 systemctl list-timers sipeg-pg-backup.timer
@@ -1306,7 +1306,7 @@ una prueba de restore trimestral con `sipeg-pg-restore-verify`.
 - Modify: `compose.observability.yaml`
 - Modify: `.env.prod.example`
 
-- [ ] **Step 1: Crear `contact-points.yaml` [repo]**
+- [x] **Step 1: Crear `contact-points.yaml` [repo]** — commiteado en `cbb1812`
 
 El provisioning de alertas interpola variables de entorno con sintaxis
 `$VARIABLE`.
@@ -1330,7 +1330,7 @@ contactPoints:
         disableResolveMessage: false
 ```
 
-- [ ] **Step 2: Crear `notification-policies.yaml` [repo]**
+- [x] **Step 2: Crear `notification-policies.yaml` [repo]** — commiteado en `cbb1812`
 
 ```yaml
 # Politica de notificacion por defecto: todo va al contact point sipeg-email.
@@ -1349,7 +1349,7 @@ policies:
     repeat_interval: 4h
 ```
 
-- [ ] **Step 3: Modificar `compose.observability.yaml` [repo]**
+- [x] **Step 3: Modificar `compose.observability.yaml` [repo]** — commiteado en `cbb1812`: SMTP de Grafana y limites de grafana/loki/alloy/socket-proxy
 
 En el servicio `grafana`, dentro de `environment`, agregar:
 
@@ -1401,7 +1401,7 @@ En `docker-socket-proxy`:
       - /tmp
 ```
 
-- [ ] **Step 4: Documentar en `.env.prod.example` [repo]**
+- [x] **Step 4: Documentar en `.env.prod.example` [repo]** — commiteado en `cbb1812`
 
 Agregar una seccion antes del bloque de SMTP:
 
@@ -1428,7 +1428,7 @@ ALLOY_CPUS=0.5
 SOCKET_PROXY_MEM_LIMIT=64m
 ```
 
-- [ ] **Step 5: Completar `.env.prod` en el VPS [VPS]**
+- [x] **Step 5: Completar `.env.prod` en el VPS [VPS]** — `GF_SMTP_ENABLED`, `GF_SMTP_HOST`, `ALERT_EMAIL_TO/FROM` definidos; `GF_SMTP_HOST` debe incluir el puerto (`smtp-relay.brevo.com:587`), sin el da "missing port in address"
 
 ```bash
 sudo nano /opt/sipeg-utp-backend/.env.prod
@@ -1437,7 +1437,7 @@ sudo nano /opt/sipeg-utp-backend/.env.prod
 Definir `GF_SMTP_ENABLED=true`, `GF_SMTP_HOST`, `ALERT_EMAIL_TO`,
 `ALERT_EMAIL_FROM` y `ALERT_EMAIL_FROM_NAME`. No imprimir el archivo.
 
-- [ ] **Step 6: Recrear Grafana y verificar el provisioning [VPS]**
+- [x] **Step 6: Recrear Grafana y verificar el provisioning [VPS]** — recreado y `healthy`; logs `starting/finished to provision alerting` sin errores
 
 ```bash
 sudo docker compose \
@@ -1454,7 +1454,7 @@ sudo docker compose \
 
 Esperado: logs de provisioning sin errores.
 
-- [ ] **Step 7: Verificar contact point y politica aplicados [VPS]**
+- [x] **Step 7: Verificar contact point y politica aplicados [VPS]** — API de Grafana devuelve `sipeg-email` en contact points y policies
 
 ```bash
 sudo docker compose \
@@ -1473,12 +1473,12 @@ sudo docker compose \
 
 Esperado: `sipeg-email` en ambas salidas.
 
-- [ ] **Step 8: Enviar una notificacion de prueba [operador]**
+- [x] **Step 8: Enviar una notificacion de prueba [operador]** — correo de prueba recibido correctamente en `ALERT_EMAIL_TO`
 
 En `http://127.0.0.1:3001` (o por el tunel con Access): **Alerting → Contact
 points → sipeg-email → Test**. Esperado: correo recibido en `ALERT_EMAIL_TO`.
 
-- [ ] **Step 9: Confirmar que el verificador de observabilidad sigue verde [repo]**
+- [x] **Step 9: Confirmar que el verificador de observabilidad sigue verde [repo]** — `pnpm run observability:check` en verde
 
 ```bash
 pnpm run observability:check
@@ -1787,7 +1787,7 @@ Esperado: sintaxis correcta y permisos de sudo listados sin entradas
 **Files:**
 - Create: `deploy/host/verify.sh`
 
-- [x] **Step 1: Crear `deploy/host/verify.sh` [repo]** — ajuste post-ejecucion: el check de puertos excluye todo el rango loopback `127\.` (no solo `127.0.0.1`) porque systemd-resolved escucha en `127.0.0.53/54:53`; sin el ajuste reportaba un FAIL falso
+- [x] **Step 1: Crear `deploy/host/verify.sh` [repo]** — ajuste post-ejecucion: el check de puertos excluye todo el rango loopback `127\.` (no solo `127.0.0.1`) porque systemd-resolved escucha en `127.0.0.53/54:53`; sin el ajuste reportaba un FAIL falso. Segundo ajuste al desplegar: el check de puertos Docker solo evalua bindings publicados (`IP:puerto->…`) y no los `expose` sin binding (`5432/tcp`), que tambien daban FAIL falso
 
 ```bash
 #!/usr/bin/env bash
