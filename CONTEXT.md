@@ -42,14 +42,16 @@ El backend debe soportar usuarios, autenticacion, permisos, programas de eventos
 - **API:** `https://api.sipeg-utp.com` a traves de Cloudflare Tunnel; sin Access, con CORS explicito y rate limiting.
 - **Grafana:** `https://grafana.sipeg-utp.com` con Cloudflare Access (team `sipeg`) y login propio; Loki y Alloy no publican puertos.
 - **Origen:** VPS OVH en Beauharnois con Docker Compose. El comando de produccion combina `compose.prod.yaml`, `compose.observability.yaml` y `compose.cloudflare.yaml` con `--env-file .env.prod`.
-- **Redes:** `sipeg-utp-prod` para API, PostgreSQL y `cloudflared`; `observability` para Loki, Alloy, proxy de socket, Grafana y `cloudflared`. Alloy usa un proxy de socket de solo lectura.
-- **Puertos:** la base de datos no publica puertos; API y Grafana se atan a `127.0.0.1` solo para diagnostico. El acceso publico entra por el tunel.
+- **Redes:** `sipeg-utp-prod` para API, PostgreSQL y `cloudflared`; `observability` para Loki, Alloy, proxy de socket, Grafana, Prometheus, Node Exporter, Blackbox y `cloudflared`; `metrics` (interna) para Prometheus, API, PostgreSQL Exporter, Telegraf y Blackbox; `postgres-metrics` (interna) solo para PostgreSQL y su exporter; `docker-api` (interna) para el proxy de socket, Alloy y Telegraf. Alloy y Telegraf usan el proxy de solo lectura y nunca montan el socket.
+- **Metricas:** Prometheus recolecta 8 jobs (`node`, `sipeg-api`, `postgres`, `docker`, `blackbox`, `blackbox-internal`, `blackbox-public` y `prometheus`). La API expone `/metrics` solo en el listener privado `9464` dentro de `metrics`; el listener de negocio `3000` y Cloudflare Tunnel no sirven esa ruta. PostgreSQL Exporter usa el rol de solo lectura `sipeg_monitor`, Telegraf obtiene el estado de Docker por el proxy y Blackbox ejecuta probes internos y publicos. Los exportadores usan `expose`, no publican puertos y no llevan etiquetas con IDs, emails, tokens ni secretos. Retencion de Prometheus: 90 dias o 2 GB.
+- **Puertos:** la base de datos no publica puertos; API y Grafana se atan a `127.0.0.1` solo para diagnostico. El acceso publico entra por el tunel. Grafana es el unico servicio del overlay con puerto publicado (`127.0.0.1:3001`).
+- **Verificacion:** `pnpm run observability:check -- --metrics` comprueba el estado aplicado en Grafana; `promtool check config` valida la configuracion de Prometheus y `promtool test rules` los fixtures de PromQL. `deploy/host/install.sh metrics` instala el recolector de red del host y su timer, y `deploy/host/verify.sh` lo comprueba. Detalle en `observability/README.md` y `docs/adr/adr-0014-prometheus-metrics-and-dashboards.md`.
 - **Sesion:** API y frontend comparten `sipeg-utp.com`, por lo que `AUTH_REFRESH_COOKIE_SAME_SITE=lax`. La cookie `sipeg-refresh` es `HttpOnly`, `Secure`, host-only y `Path=/api/v1/auth`.
 - **Proxy:** `trust proxy=1`; `cloudflared` es el unico salto y Cloudflare escribe la IP del cliente en `X-Forwarded-For`. Añadir otro proxy exige revisar la cadena.
 - **JWKS:** `AUTH_JWKS_URL=http://127.0.0.1:3000/api/auth/jwks` para evitar Bot Fight Mode. `AUTH_URL`, `AUTH_ISSUER` y `AUTH_AUDIENCE` siguen siendo publicos.
 - **Correo:** Brevo por SMTP `587`/STARTTLS, remitente `SIPEG UTP <no-reply@sipeg-utp.com>`.
 - **Secretos:** `.env.prod` es privado, se mantiene fuera de Git y usa permisos `600`.
-- **Pendientes operativos:** rate limiting entre dos redes (diferido), backup/restore de PostgreSQL y contact point de alertas. Detalle en `docs/despliegue.md`.
+- **Pendientes operativos:** rate limiting entre dos redes (diferido), backup offsite (R2), calibracion de umbrales de metricas y decision sobre monitor externo. Detalle en `docs/despliegue.md`.
 
 ## Lenguaje De Dominio
 
@@ -288,9 +290,19 @@ Indicador resumido para seguimiento operativo: asistencia total, ocupacion de au
 - No exponer stack traces, errores crudos de Prisma, detalles de tokens ni secretos en respuestas.
 - Auditar acciones administrativas sensibles cuando el modulo lo requiera.
 
+### Endurecimiento Del Host
+
+El VPS de produccion se endurece con artefactos versionados en `deploy/`:
+SSH solo con claves y fail2ban, UFW, unattended-upgrades, sysctl, auditd,
+AIDE, Docker con `no-new-privileges`/limites/capabilities minimas, backups
+cifrados de PostgreSQL con restore de prueba y alertas de Grafana con contact
+point de correo. `deploy/host/verify.sh` comprueba el estado aplicado (21
+comprobaciones). Ver `docs/adr/adr-0013-vps-hardening-baseline.md`.
+
 ## Logging Y Observabilidad
 
 - Los logs operativos son estructurados (JSON de una linea) y se emiten a stdout/stderr con `pino` y middleware HTTP propio; `LOG_LEVEL` controla aplicacion/infraestructura, mientras `access` y `security` conservan nivel minimo `info`. Detalle en `docs/adr/adr-0007-structured-logging-and-observability.md`.
+- Las metricas viven en Prometheus y los dashboards de Grafana: API HTTP y runtime Node.js por el listener `9464`, host por Node Exporter y el timer de red, PostgreSQL por su exporter, contenedores por Telegraf y disponibilidad por Blackbox. `metrics.yaml` provisiona 15 alertas; `observability:check --metrics` verifica el estado aplicado. Ver `docs/adr/adr-0014-prometheus-metrics-and-dashboards.md` y `observability/README.md`.
 - Cada request corre con un `requestId` (UUID) aceptado o generado en `X-Request-ID` y replicado en la respuesta; los servicios lo heredan por `AsyncLocalStorage` (`src/lib/log-context.ts`).
 - Tipos de log: `access`, `application`, `security` e `infrastructure`. Los eventos de negocio no se infieren de logs.
 - Niveles HTTP: 2xx/3xx/4xx esperado = `info`, 429 = `warn`, 5xx = `error`; health checks exitosos se excluyen. Los eventos `security` no se apagan con `LOG_LEVEL`.

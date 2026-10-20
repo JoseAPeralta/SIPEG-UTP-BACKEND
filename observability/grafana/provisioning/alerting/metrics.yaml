@@ -1,0 +1,921 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: sipeg-metrics-collectors
+    folder: SIPEG UTP
+    interval: 1m
+    rules:
+      - uid: sipeg-target-down
+        title: Target de recolección caído o ausente
+        condition: B
+        for: 2m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-operations-overview
+        panelId: 1
+        labels:
+          severity: critical
+          component: monitoring
+        annotations:
+          summary: Un target esperado de Prometheus está caído o desapareció
+          description: La consulta devuelve 1 cuando up=0 para node, sipeg-api, postgres, docker, blackbox, blackbox-internal, blackbox-public o prometheus, o cuando el job esperado ya no existe en la configuración. Se usa `== bool 0` para que un target caído produzca 1 y la condición clásica > 0 pueda dispararse. Revisar los targets y el último error de scrape en Prometheus; un job ausente suele indicar una configuración eliminada o un Prometheus reiniciado con un archivo incompleto.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: (up{job=~"node|sipeg-api|postgres|docker|blackbox|blackbox-internal|blackbox-public|prometheus"} == bool 0) or label_replace(absent(up{job="node"}), "job", "node", "", "") or label_replace(absent(up{job="sipeg-api"}), "job", "sipeg-api", "", "") or label_replace(absent(up{job="postgres"}), "job", "postgres", "", "") or label_replace(absent(up{job="docker"}), "job", "docker", "", "") or label_replace(absent(up{job="blackbox"}), "job", "blackbox", "", "") or label_replace(absent(up{job="blackbox-internal"}), "job", "blackbox-internal", "", "") or label_replace(absent(up{job="blackbox-public"}), "job", "blackbox-public", "", "") or label_replace(absent(up{job="prometheus"}), "job", "prometheus", "", "")
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 0
+      - uid: sipeg-host-network-stale
+        title: Red del host sin actualizar
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        dashboardUid: sipeg-vps-overview
+        panelId: 2
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: El recolector de red del host lleva más de 3 minutos sin escribir
+          description: '`time() - sipeg_host_network_collection_timestamp_seconds` supera 180 segundos. El timestamp solo avanza tras una recolección correcta, así que un target node en 1 puede convivir con tráfico antiguo. Revisar `systemctl status sipeg-host-network-metrics.timer`, el journal del servicio y los permisos del directorio textfile. No crear el archivo .prom a mano.'
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: time() - sipeg_host_network_collection_timestamp_seconds
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 180
+      - uid: sipeg-postgres-exporter-errors
+        title: Errores del PostgreSQL Exporter
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-postgres-overview
+        panelId: 3
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: El PostgreSQL Exporter reporta errores de scrape o colectores fallidos
+          description: '`pg_exporter_last_scrape_error` es mayor que 0 o algún colector reporta `pg_scrape_collector_success=0` durante 5 minutos. Un fallo del colector no siempre tumba `pg_up`, pero deja métricas incompletas. Revisar los logs de `postgres-exporter`, el rol `sipeg_monitor`, la conectividad con `db:5432` y el colector que falla en el panel de PostgreSQL.'
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: (pg_exporter_last_scrape_error{job="postgres"} > 0) or (pg_scrape_collector_success{job="postgres"} == bool 0)
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 0
+  - orgId: 1
+    name: sipeg-metrics-host
+    folder: SIPEG UTP
+    interval: 1m
+    rules:
+      - uid: sipeg-host-cpu-high
+        title: CPU del VPS alta
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-vps-overview
+        panelId: 4
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: La CPU del VPS supera el 90% durante 15 minutos
+          description: Uso medio de CPU del host por encima del 90% calculado desde `node_cpu_seconds_total` en una ventana de 5 minutos y sostenido 15 minutos. Identificar el contenedor o proceso responsable en el panel de CPU y revisar si coincide con despliegues, backups o crecimiento anómalo. El umbral es inicial y se calibra con producción.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 100 * (1 - avg(rate(node_cpu_seconds_total{job="node",mode="idle"}[5m])))
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 90
+      - uid: sipeg-host-memory-low
+        title: Memoria disponible baja
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-vps-overview
+        panelId: 8
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: La memoria disponible del VPS cae por debajo del 10%
+          description: '`node_memory_MemAvailable_bytes` dividido por la memoria total del host es inferior al 10% durante 10 minutos. Revisar consumo por contenedor, presión de memoria y swap. Un valor bajo sostenido puede provocar OOM kills y afectar a PostgreSQL o a la API.'
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 100 * node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"}
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: lt
+                    params:
+                      - 10
+      - uid: sipeg-host-inodes-low
+        title: Inodos del disco raíz bajos
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-vps-overview
+        panelId: 11
+        labels:
+          severity: warning
+          component: host
+        annotations:
+          summary: Quedan menos del 10% de inodos libres en el disco raíz
+          description: El porcentaje de inodos libres en `/` es inferior al 10% durante 15 minutos. A diferencia del espacio en bytes, el agotamiento de inodos impide crear archivos aunque quede espacio libre. Buscar directorios con muchas entradas pequeñas, especialmente volúmenes Docker, logs y cachés de construcción.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 100 * node_filesystem_files_free{job="node",mountpoint="/"} / node_filesystem_files{job="node",mountpoint="/"}
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: lt
+                    params:
+                      - 10
+      - uid: sipeg-disk-critical
+        title: Disco raíz crítico
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-vps-overview
+        panelId: 9
+        labels:
+          severity: critical
+          component: host
+        annotations:
+          summary: El disco raíz del VPS supera el 90% de uso
+          description: Uso del filesystem raíz por encima del 90% durante 10 minutos. Es complementaria a `sipeg-disk-full`, que avisa al 80% con severidad warning y conserva su UID. Revisar volúmenes Docker, retención de Loki y Prometheus, backups locales y espacio recuperable antes de que se agote el disco.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 100 * (1 - node_filesystem_avail_bytes{job="node",mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{job="node",mountpoint="/",fstype!="tmpfs"})
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 90
+  - orgId: 1
+    name: sipeg-metrics-dependencies
+    folder: SIPEG UTP
+    interval: 1m
+    rules:
+      - uid: sipeg-postgres-down
+        title: PostgreSQL caído
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        dashboardUid: sipeg-postgres-overview
+        panelId: 1
+        labels:
+          severity: critical
+          component: postgres
+        annotations:
+          summary: PostgreSQL no responde o pg_up no está disponible
+          description: '`1 - pg_up` es mayor que 0 durante 2 minutos, o la métrica desapareció. `up{job="postgres"}=1` con `pg_up=0` apunta a credenciales, red o disponibilidad de la base; si el exporter cae, ambos valores pueden cambiar. Revisar el estado de `db`, los logs de `postgres-exporter` y el rol `sipeg_monitor` sin imprimir secretos.'
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 1 - pg_up{job="postgres"}
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 0
+      - uid: sipeg-postgres-connections-high
+        title: Conexiones de PostgreSQL altas
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-postgres-overview
+        panelId: 5
+        labels:
+          severity: warning
+          component: postgres
+        annotations:
+          summary: Se usa más del 85% de max_connections
+          description: La suma de `pg_stat_database_numbackends` supera el 85% de `pg_settings_max_connections` durante 5 minutos. Si se acerca al límite, las nuevas conexiones fallarán. Revisar sesiones por estado, conexiones inactivas y el pool de la API; no aumentar max_connections sin comprobar memoria y límites del contenedor.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: 100 * sum(pg_stat_database_numbackends{job="postgres"}) / clamp_min(max(pg_settings_max_connections{job="postgres"}), 1)
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 85
+      - uid: sipeg-docker-service-not-running
+        title: Servicio Docker no operativo
+        condition: B
+        for: 2m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-docker-overview
+        panelId: 1
+        labels:
+          severity: warning
+          component: docker
+        annotations:
+          summary: Hay contenedores de servicios cuyo estado no es running
+          description: Al menos un contenedor con `state_code` distinto de 1 se mantiene fuera de ejecución durante 2 minutos. Se excluyen `migrate` y `seed` porque son trabajos one-shot que terminan correctamente. Revisar el estado, los reinicios y los logs del servicio afectado; un estado `restarting` puede indicar un fallo de arranque.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: count by (project, service) (docker_container_status_state_code{job="docker",service!~"migrate|seed"} != 1) > 0
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 0
+      - uid: sipeg-docker-critical-service-missing
+        title: Servicio Docker crítico ausente
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        dashboardUid: sipeg-docker-overview
+        panelId: 1
+        labels:
+          severity: critical
+          component: docker
+        annotations:
+          summary: Falta la serie de estado de api, db o cloudflared
+          description: >-
+            La consulta usa `absent` para detectar que desaparecieron las series
+            de `api`, `db` o `cloudflared`, no solo que estén detenidas. Ocurre
+            si Telegraf dejó de recolectar, si el contenedor fue eliminado o si
+            cambió el filtro de nombres. `vector(0)` mantiene un cero cuando las
+            tres series existen para que `noDataState: Alerting` no dispare con
+            el sistema sano. Revisar `up{job="docker"}` y la salida de Telegraf
+            antes de reiniciar servicios.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: label_replace(absent(docker_container_status_state_code{service="api"}), "service", "api", "", "") or label_replace(absent(docker_container_status_state_code{service="db"}), "service", "db", "", "") or label_replace(absent(docker_container_status_state_code{service="cloudflared"}), "service", "cloudflared", "", "") or vector(0)
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 0
+  - orgId: 1
+    name: sipeg-metrics-availability
+    folder: SIPEG UTP
+    interval: 1m
+    rules:
+      - uid: sipeg-probe-failing
+        title: Probe de disponibilidad fallido
+        condition: B
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        dashboardUid: sipeg-availability
+        panelId: 1
+        labels:
+          severity: warning
+          component: availability
+        annotations:
+          summary: Un probe interno o público lleva 2 minutos fallando
+          description: >-
+            `probe_success=0` en `blackbox-internal` o `blackbox-public` durante
+            2 minutos. Se usa `== bool 0` para que el fallo produzca 1 y la
+            condición clásica > 0 pueda dispararse; `absent` cubre la
+            desaparición de todas las series y `vector(0)` mantiene un cero
+            cuando todos los probes pasan. Un interno en 0 apunta al origen; un
+            público en 0 con el interno en 1 apunta a Cloudflare, al túnel o al
+            recorrido público.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: (probe_success{job=~"blackbox-internal|blackbox-public"} == bool 0) or absent(probe_success{job=~"blackbox-internal|blackbox-public"}) or vector(0)
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 0
+      - uid: sipeg-tls-expiring
+        title: Certificado TLS público por vencer
+        condition: B
+        for: 1h
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-availability
+        panelId: 8
+        labels:
+          severity: warning
+          component: availability
+        annotations:
+          summary: El certificado TLS público vence en menos de 7 días
+          description: '`probe_ssl_earliest_cert_expiry` del job `blackbox-public` menos `time()` es menor que 7 días durante 1 hora. Comprobar la fecha de expiración y la renovación automática en Cloudflare. Si el valor es negativo, el certificado ya venció y los probes públicos deberían estar fallando.'
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: (probe_ssl_earliest_cert_expiry{job="blackbox-public"} - time()) / 86400
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: lt
+                    params:
+                      - 7
+      - uid: sipeg-api-latency-high
+        title: Latencia p95 de la API alta
+        condition: B
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-api-http
+        panelId: 7
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: El p95 de latencia supera 1 segundo con tráfico suficiente
+          description: El p95 de `sipeg_http_request_duration_seconds` para rutas de negocio supera 1 segundo durante 10 minutos, pero solo si hubo más de 20 solicitudes completadas en 5 minutos. La condición de tráfico forma parte de la misma consulta para no alertar por falta de datos. Revisar latencia por ruta, saturación de PostgreSQL, event loop lag y CPU del proceso.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: histogram_quantile(0.95, sum by (le) (rate(sipeg_http_request_duration_seconds_bucket{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m]))) and on() (sum(increase(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])) > 20)
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 1
+      - uid: sipeg-http-5xx-ratio
+        title: Ratio de errores 5xx de la API alto
+        condition: B
+        for: 5m
+        noDataState: OK
+        execErrState: Alerting
+        dashboardUid: sipeg-api-http
+        panelId: 2
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: Más del 5% de respuestas 5xx con tráfico suficiente
+          description: El porcentaje de respuestas 5xx sobre solicitudes completadas de rutas de negocio supera el 5% durante 5 minutos, con al menos 20 solicitudes en la ventana. La condición de tráfico forma parte de la misma consulta. Esta regla es independiente de `sipeg-5xx` de Loki, que conserva su UID y su umbral de conteo.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              queryType: instant
+              editorMode: code
+              expr: (100 * sum(rate(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health",status_code=~"5.."}[5m])) / clamp_min(sum(rate(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])), 0.000000001)) and on() (sum(increase(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])) > 20)
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 5

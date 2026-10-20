@@ -19,7 +19,7 @@ vi.mock('./config/logger.js', () => ({
   createRequestLogger: createRequestLoggerSpy,
 }));
 
-const loadApp = async (docsEnabled?: string) => {
+const loadApp = async (docsEnabled?: string, metricsEnabled?: string) => {
   process.env['NODE_ENV'] = 'test';
   process.env['AUTH_SECRET'] = 'a'.repeat(32);
   process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
@@ -29,6 +29,12 @@ const loadApp = async (docsEnabled?: string) => {
     delete process.env['DOCS_ENABLED'];
   } else {
     process.env['DOCS_ENABLED'] = docsEnabled;
+  }
+
+  if (metricsEnabled === undefined) {
+    delete process.env['METRICS_ENABLED'];
+  } else {
+    process.env['METRICS_ENABLED'] = metricsEnabled;
   }
 
   vi.resetModules();
@@ -88,6 +94,37 @@ describe('API documentation routes', () => {
 
     await request(app).get('/api/openapi.json').expect(404);
     await request(app).get('/api/docs').expect(404);
+  });
+});
+
+describe('metrics public surface', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.doUnmock('./lib/auth.js');
+    vi.doUnmock('./config/prisma.js');
+    delete process.env['DOCS_ENABLED'];
+    delete process.env['METRICS_ENABLED'];
+  });
+
+  it.each(['/metrics', '/api/metrics', '/api/v1/metrics'])(
+    'does not expose %s even when metrics are enabled',
+    async (path) => {
+      const { app } = await loadApp(undefined, 'true');
+
+      await request(app).get(path).expect(404);
+    },
+  );
+
+  it('keeps the public OpenAPI operations unchanged when metrics are enabled', async () => {
+    const disabled = await loadApp(undefined, 'false');
+    const disabledResponse = await request(disabled.app).get('/api/openapi.json').expect(200);
+    const enabled = await loadApp(undefined, 'true');
+    const enabledResponse = await request(enabled.app).get('/api/openapi.json').expect(200);
+
+    expect(enabledResponse.body.paths).toEqual(disabledResponse.body.paths);
+    expect(enabledResponse.body.paths).not.toHaveProperty('/metrics');
+    expect(enabledResponse.body.paths).not.toHaveProperty('/api/metrics');
+    expect(enabledResponse.body.paths).not.toHaveProperty('/api/v1/metrics');
   });
 });
 

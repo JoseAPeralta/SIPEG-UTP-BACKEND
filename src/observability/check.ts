@@ -1,5 +1,7 @@
 import 'dotenv/config';
 
+import { collectMetricsObservation, verifyMetrics } from './metrics.check.js';
+
 export interface DatasourceHealth {
   status?: string;
   message?: string;
@@ -528,6 +530,7 @@ export interface QueryRangeResponse {
 export interface Options {
   url: string;
   windowMinutes: number;
+  metricsRequested: boolean;
 }
 
 const DEFAULT_WINDOW_MINUTES = 15;
@@ -537,7 +540,7 @@ const DEFAULT_WINDOW_MINUTES = 15;
  * modulo valida el entorno completo de la aplicacion (AUTH_SECRET, DATABASE_URL,
  * ...) y este verificador solo necesita las credenciales de la UI.
  */
-const readOptions = (argv: string[]): Options => {
+export const readOptions = (argv: string[]): Options => {
   const readFlag = (name: string): string | undefined => {
     const index = argv.indexOf(name);
     const value = index === -1 ? undefined : argv[index + 1];
@@ -553,6 +556,7 @@ const readOptions = (argv: string[]): Options => {
   return {
     url: readFlag('--url') ?? `http://127.0.0.1:${process.env['GRAFANA_PORT'] ?? '3001'}`,
     windowMinutes,
+    metricsRequested: argv.includes('--metrics'),
   };
 };
 
@@ -567,7 +571,10 @@ const requireEnv = (name: string): string => {
 };
 
 const getJson = async <T>(url: string, authorization: string): Promise<T> => {
-  const response = await fetch(url, { headers: { authorization } });
+  const response = await fetch(url, {
+    headers: { authorization },
+    signal: AbortSignal.timeout(5_000),
+  });
   if (!response.ok) {
     throw new Error(`Grafana respondio ${response.status} ${response.statusText} en ${url}`);
   }
@@ -576,9 +583,13 @@ const getJson = async <T>(url: string, authorization: string): Promise<T> => {
   return (await response.json()) as T;
 };
 
-const collectObservation = async (options: Options): Promise<Observation> => {
+const buildAuthorization = (): string => {
   const user = process.env['GRAFANA_ADMIN_USER'] ?? 'admin';
-  const authorization = `Basic ${Buffer.from(`${user}:${requireEnv('GRAFANA_ADMIN_PASSWORD')}`).toString('base64')}`;
+  return `Basic ${Buffer.from(`${user}:${requireEnv('GRAFANA_ADMIN_PASSWORD')}`).toString('base64')}`;
+};
+
+const collectObservation = async (options: Options): Promise<Observation> => {
+  const authorization = buildAuthorization();
   const { url, windowMinutes } = options;
 
   const endSeconds = Math.floor(Date.now() / 1000);
@@ -633,10 +644,29 @@ const main = async (): Promise<void> => {
   );
 
   const findings = verifyObservability(await collectObservation(options));
+  let metricsFailed = false;
+
+  if (options.metricsRequested) {
+    console.log(`Verificando metricas y dashboards de Prometheus en ${options.url}.`);
+    try {
+      const metricsObservation = await collectMetricsObservation({
+        url: options.url,
+        authorization: buildAuthorization(),
+        windowMinutes: options.windowMinutes,
+      });
+      findings.push(...verifyMetrics(metricsObservation));
+    } catch (error) {
+      metricsFailed = true;
+      console.error(
+        'No se pudieron recolectar las metricas de Prometheus.',
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
 
   console.log(renderReport(findings));
 
-  if (findings.some((finding) => finding.level === 'fail')) {
+  if (metricsFailed || findings.some((finding) => finding.level === 'fail')) {
     process.exitCode = 1;
   }
 };

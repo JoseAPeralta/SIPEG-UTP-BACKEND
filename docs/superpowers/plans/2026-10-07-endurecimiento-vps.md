@@ -1675,7 +1675,7 @@ PROMETHEUS_MEM_LIMIT=512m
 NODE_EXPORTER_MEM_LIMIT=64m
 ```
 
-- [ ] **Step 7: Aplicar y verificar [VPS]**
+- [x] **Step 7: Aplicar y verificar [VPS]** — datasource `Prometheus` provisionado, target `health up`, `mountpoint="/"` confirmado y regla `sipeg-disk-full` presente
 
 ```bash
 sudo docker compose \
@@ -1919,7 +1919,7 @@ Esperado: `db` saludable, `api` y observabilidad arriba, tunel Healthy en
 Cloudflare, health publico `200` con `authJwksReachable: true` y el verificador
 sin fallos.
 
-- [ ] **Step 7: Registrar resultados [repo]**
+- [x] **Step 7: Registrar resultados [repo]** — verificador final 21 PASS / 0 FAIL; resultados registrados en este plan y en el ADR-0013
 
 ```bash
 git status --short
@@ -1937,7 +1937,7 @@ git diff --stat
 - Modify: `AGENTS.md`
 - Modify: `docs/despliegue.md`
 
-- [ ] **Step 1: Crear el ADR [repo]**
+- [x] **Step 1: Crear el ADR [repo]** — `docs/adr/adr-0013-vps-hardening-baseline.md` con las desviaciones reales (Ubuntu 26.04, repo Docker resolute, tabla `users`, carrera del restore, comillas en `COMPOSE_FILES`, `enable --now`, verificador) y el backlog de Lynis/Docker Bench
 
 ```markdown
 ---
@@ -2075,7 +2075,7 @@ instalador idempotente y verificable:
 - **REF-005**: OWASP API Security Top 10 y OWASP Logging Cheat Sheet.
 ```
 
-- [ ] **Step 2: Agregar la seccion al README [repo]**
+- [x] **Step 2: Agregar la seccion al README [repo]**
 
 Insertar antes de `## Scripts`:
 
@@ -2098,7 +2098,7 @@ manual y reversion) esta en `deploy/README.md`. Ver
 `docs/adr/adr-0013-vps-hardening-baseline.md`.
 ````
 
-- [ ] **Step 3: Actualizar `CONTEXT.md` [repo]**
+- [x] **Step 3: Actualizar `CONTEXT.md` [repo]**
 
 Agregar al final de la seccion `## Seguridad`:
 
@@ -2113,7 +2113,7 @@ point de correo. `deploy/host/verify.sh` comprueba el estado aplicado. Ver
 `docs/adr/adr-0013-vps-hardening-baseline.md`.
 ```
 
-- [ ] **Step 4: Actualizar `AGENTS.md` [repo]**
+- [x] **Step 4: Actualizar `AGENTS.md` [repo]**
 
 Agregar una viñeta a `## Docker Rules`:
 
@@ -2124,7 +2124,7 @@ Agregar una viñeta a `## Docker Rules`:
   reflejar el cambio en `deploy/`.
 ```
 
-- [ ] **Step 5: Marcar la decision de backup en `docs/despliegue.md` [repo]**
+- [x] **Step 5: Marcar la decision de backup en `docs/despliegue.md` [repo]** — fila #10 y pendientes operativos (backup y alertas) actualizados
 
 En la tabla de "Decisiones derivadas", cambiar la fila #10 a:
 
@@ -2132,7 +2132,7 @@ En la tabla de "Decisiones derivadas", cambiar la fila #10 a:
 | 10 | Backup y restore de Postgres | Topologia | Resuelta: `deploy/backup/` con cifrado, retencion, hook offsite y restore de prueba (`deploy/README.md`) |
 ```
 
-- [ ] **Step 6: Comprobar formato y estado [repo]**
+- [x] **Step 6: Comprobar formato y estado [repo]** — Prettier en verde para README/CONTEXT/AGENTS/ADR; el plan completo queda sin pendientes
 
 ```bash
 pnpm exec prettier README.md CONTEXT.md AGENTS.md docs/adr/adr-0013-vps-hardening-baseline.md --check

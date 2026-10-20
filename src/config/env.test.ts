@@ -110,6 +110,80 @@ describe('env LOG_LEVEL', () => {
   });
 });
 
+describe('env METRICS_*', () => {
+  beforeEach(() => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('AUTH_SECRET', 'a'.repeat(32));
+    vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173');
+    vi.stubEnv('AUTH_PASSWORD_RESET_URL', 'http://localhost:5173/reset-password');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('defaults to a disabled loopback listener on port 9464', async () => {
+    vi.stubEnv('METRICS_ENABLED', undefined);
+    vi.stubEnv('METRICS_HOST', undefined);
+    vi.stubEnv('METRICS_PORT', undefined);
+
+    const { env } = await importEnv();
+
+    expect(env.METRICS_ENABLED).toBe(false);
+    expect(env.METRICS_HOST).toBe('127.0.0.1');
+    expect(env.METRICS_PORT).toBe(9464);
+  });
+
+  it('enables the listener and accepts a custom host and port', async () => {
+    vi.stubEnv('METRICS_ENABLED', 'true');
+    vi.stubEnv('METRICS_HOST', '0.0.0.0');
+    vi.stubEnv('METRICS_PORT', '9101');
+
+    const { env } = await importEnv();
+
+    expect(env.METRICS_ENABLED).toBe(true);
+    expect(env.METRICS_HOST).toBe('0.0.0.0');
+    expect(env.METRICS_PORT).toBe(9101);
+  });
+
+  it.each(['0', '65536', '9464.5'])('rejects the out-of-range port %s', async (port) => {
+    vi.stubEnv('METRICS_PORT', port);
+
+    await expect(importEnv()).rejects.toThrow(/METRICS_PORT/);
+  });
+
+  it('rejects an empty host', async () => {
+    vi.stubEnv('METRICS_HOST', '');
+
+    await expect(importEnv()).rejects.toThrow(/METRICS_HOST/);
+  });
+
+  it('rejects an enabled value outside the catalog', async () => {
+    vi.stubEnv('METRICS_ENABLED', 'yes');
+
+    await expect(importEnv()).rejects.toThrow(/METRICS_ENABLED/);
+  });
+
+  it('rejects a metrics port equal to the business port when enabled', async () => {
+    vi.stubEnv('PORT', '3000');
+    vi.stubEnv('METRICS_ENABLED', 'true');
+    vi.stubEnv('METRICS_PORT', '3000');
+
+    await expect(importEnv()).rejects.toThrow(/METRICS_PORT/);
+  });
+
+  it('allows the collision when the listener is disabled', async () => {
+    vi.stubEnv('PORT', '3000');
+    vi.stubEnv('METRICS_ENABLED', 'false');
+    vi.stubEnv('METRICS_PORT', '3000');
+
+    const { env } = await importEnv();
+
+    expect(env.METRICS_PORT).toBe(3000);
+  });
+});
+
 describe('env AUTH_PASSWORD_RESET_URL', () => {
   afterEach(() => {
     vi.unstubAllEnvs();

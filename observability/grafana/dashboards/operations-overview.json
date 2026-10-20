@@ -1,0 +1,1176 @@
+{
+  "uid": "sipeg-operations-overview",
+  "title": "SIPEG · Operations",
+  "description": "Resumen operativo de SIPEG: estado de jobs esperados, recursos del VPS, tráfico y errores de la API, PostgreSQL, Docker y disponibilidad. Está pensado como punto de entrada; cada panel enlaza al dashboard de detalle correspondiente.",
+  "tags": ["sipeg", "prometheus", "operations", "summary"],
+  "editable": false,
+  "graphTooltip": 1,
+  "timezone": "utc",
+  "schemaVersion": 42,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["10s", "30s", "1m", "5m", "15m"]
+  },
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "VPS Overview",
+      "tooltip": "CPU, memoria, disco, red y recolección del host",
+      "type": "link",
+      "url": "/d/sipeg-vps-overview"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "API HTTP",
+      "tooltip": "Tráfico, errores y latencia de las operaciones de negocio",
+      "type": "link",
+      "url": "/d/sipeg-api-http"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Node.js Runtime",
+      "tooltip": "CPU, memoria, heap, GC y event loop del proceso API",
+      "type": "link",
+      "url": "/d/sipeg-nodejs-runtime"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "PostgreSQL",
+      "tooltip": "Disponibilidad, conexiones, transacciones y locks",
+      "type": "link",
+      "url": "/d/sipeg-postgres-overview"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Docker",
+      "tooltip": "Estado, consumo y reinicios de los contenedores",
+      "type": "link",
+      "url": "/d/sipeg-docker-overview"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Availability",
+      "tooltip": "Probes internos y públicos, TLS y cobertura de muestras",
+      "type": "link",
+      "url": "/d/sipeg-availability"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "API Overview (Loki)",
+      "tooltip": "Volumen, latencia y errores desde los logs de la API",
+      "type": "link",
+      "url": "/d/sipeg-api-overview"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Errors (Loki)",
+      "tooltip": "Errores agrupados de la API",
+      "type": "link",
+      "url": "/d/sipeg-errors"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Security (Loki)",
+      "tooltip": "Eventos de autenticación y seguridad",
+      "type": "link",
+      "url": "/d/sipeg-security"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Entorno",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(sipeg_http_requests_total{job=\"sipeg-api\"}, environment)",
+        "query": {
+          "query": "label_values(sipeg_http_requests_total{job=\"sipeg-api\"}, environment)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "options": [],
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "project",
+        "label": "Proyecto Docker",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(docker_container_status_state_code, project)",
+        "query": {
+          "query": "label_values(docker_container_status_state_code, project)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "options": [],
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "table",
+      "title": "Estado de jobs esperados",
+      "description": "`up` mínimo por job esperado. Un 0 indica que Prometheus no pudo recolectar el target; una fila ausente significa que el job no está configurado o fue eliminado, no que esté saludable. Los jobs de probes se detallan en Availability.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byType", "options": "number" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": { "text": "Caído", "color": "red", "index": 0 },
+                      "1": { "text": "Activo", "color": "green", "index": 1 }
+                    }
+                  }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              { "id": "custom.align", "value": "center" }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": { "show": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "min by (job) (up{job=~\"node|sipeg-api|postgres|docker|blackbox|prometheus\"})",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{job}}"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true
+            },
+            "renameByName": {
+              "job": "Job",
+              "Value": "Estado"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Disponibilidad de probes",
+      "description": "Mínimo de `probe_success` entre todos los probes internos y públicos en la última muestra. 0 significa al menos un probe fallando; sin datos significa que no hay probes o que Blackbox no está siendo recolectado.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 4, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "Fallo", "color": "red", "index": 0 },
+                "1": { "text": "Correcto", "color": "green", "index": 1 }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "min(probe_success{job=~\"blackbox-internal|blackbox-public\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "probes"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "table",
+      "title": "Probes fallidos",
+      "description": "Probes con `probe_success=0` en la última muestra. Si no hay filas puede significar que ninguno falló o que no hay muestras; contrastar con Disponibilidad de probes y Estado de jobs esperados.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "red", "value": null }]
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byType", "options": "number" },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "0": { "text": "Fallo", "color": "red", "index": 0 }
+                    }
+                  }
+                ]
+              },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              { "id": "custom.align", "value": "center" }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": { "show": false }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "probe_success{job=~\"blackbox-internal|blackbox-public\"} == 0",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{route}} · {{check}}"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "module": true
+            },
+            "renameByName": {
+              "route": "Ruta",
+              "check": "Comprobación",
+              "Value": "Estado"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "CPU del VPS",
+      "description": "Porcentaje de CPU del host calculado como 1 menos el tiempo idle. Un 0 es un valor real; sin datos indica que el target `node` está caído o no se está recolectando.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{job=\"node\", mode=\"idle\"}[$__rate_interval])))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Memoria disponible",
+      "description": "Porcentaje de memoria disponible del host según MemAvailable. Menos de 10 % es crítico y menos de 20 % requiere atención. Un 0 real no es lo mismo que la ausencia de datos del target.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "green", "value": 20 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "100 * (node_memory_MemAvailable_bytes{job=\"node\"} / node_memory_MemTotal_bytes{job=\"node\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "disponible"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Disco raíz usado",
+      "description": "Porcentaje usado del filesystem montado en /, con la misma fórmula del dashboard VPS. Sin datos significa que el mountpoint no está presente o que el target `node` no responde.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 80 },
+              { "color": "red", "value": 90 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "100 * (1 - node_filesystem_avail_bytes{job=\"node\", mountpoint=\"/\", fstype!=\"tmpfs\"} / node_filesystem_size_bytes{job=\"node\", mountpoint=\"/\", fstype!=\"tmpfs\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "raíz"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Swap usado",
+      "description": "Bytes de swap en uso. Un 0 es real cuando el host no tiene swap o no lo está usando; sin datos indica que el target `node` no responde. La swap no sustituye la memoria disponible como señal principal.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 268435456 },
+              { "color": "red", "value": 1073741824 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "node_memory_SwapTotal_bytes{job=\"node\"} - node_memory_SwapFree_bytes{job=\"node\"}",
+          "instant": true,
+          "range": false,
+          "legendFormat": "swap"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "RPS de negocio",
+      "description": "Solicitudes por segundo completadas y enrutadas, excluyendo health. Usa solo `request_kind=\"matched\"`, rutas `/api/v1/*` y `outcome=\"completed\"`. Sin datos no es cero: revisar Estado de jobs esperados.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 3,
+          "min": 0,
+          "color": { "mode": "fixed", "fixedColor": "text" },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/.*\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "req/s"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Ratio 5xx",
+      "description": "Porcentaje de respuestas 5xx sobre el total de negocio en la ventana de rate. Si no hay tráfico no se muestra 0 %: el panel queda sin datos. El 0 real se muestra cuando hay tráfico y ningún 5xx.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "100 * ((sum(rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/.*\", route!=\"/api/v1/health\", outcome=\"completed\", status_code=~\"5..\"}[$__rate_interval])) or 0 * sum(rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/.*\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval]))) / (sum(rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/.*\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])) > 0))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "5xx"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "p95 de latencia",
+      "description": "Percentil 95 agregado de las operaciones de negocio, calculado sobre los buckets del histograma. Es una aproximación: los valores por encima del último bucket quedan acotados. Sin tráfico puede no haber datos.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.25 },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sipeg_http_request_duration_seconds_bucket{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/.*\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Solicitudes de negocio en 5 min",
+      "description": "Conteo de solicitudes completadas en los últimos 5 minutos. Un 0 con series presentes indica ausencia de tráfico; sin datos indica que el target o la métrica no están disponibles. Sirve para interpretar el ratio 5xx y el p95.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 13 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "fixed", "fixedColor": "text" },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum(increase(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/.*\", route!=\"/api/v1/health\", outcome=\"completed\"}[5m]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "solicitudes"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "RPS de negocio por operación",
+      "description": "Tasa de solicitudes completadas agrupada por método y plantilla de ruta. Un 0 sostenido con series presentes es ausencia de tráfico; un hueco es falta de datos. Health y tráfico técnico no se incluyen.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 3,
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "req/s",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (method, route) (rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/.*\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{method}} {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "p95 por operación",
+      "description": "Percentil 95 por método y plantilla de ruta. Los huecos y los valores no finitos aparecen cuando no hay observaciones suficientes en la ventana; no se sustituyen por cero.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "segundos",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, method, route) (rate(sipeg_http_request_duration_seconds_bucket{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/.*\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{method}} {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "type": "stat",
+      "title": "PostgreSQL disponible",
+      "description": "`pg_up=1` indica que el exporter puede consultar PostgreSQL. `pg_up=0` es un fallo de conexión o credenciales; sin datos puede significar que el exporter o el job `postgres` están caídos. No confundir con `up{job=\"postgres\"}`.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "Caído", "color": "red", "index": 0 },
+                "1": { "text": "Correcto", "color": "green", "index": 1 }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "pg_up{job=\"postgres\"}",
+          "instant": true,
+          "range": false,
+          "legendFormat": "pg_up"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Conexiones sobre el límite",
+      "description": "Conexiones actuales como porcentaje de `pg_settings_max_connections`. El umbral de 85 % coincide con la alerta operativa. Sin datos indica que el exporter no responde, no que no haya conexiones.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "min": 0,
+          "max": 100,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "100 * (sum(pg_stat_activity_count{job=\"postgres\"}) / clamp_min(max(pg_settings_max_connections{job=\"postgres\"}), 1))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "conexiones"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "type": "stat",
+      "title": "Deadlocks por segundo",
+      "description": "Tasa de deadlocks de PostgreSQL en la ventana de rate. Un 0 real indica que hay actividad y ningún deadlock; sin datos indica que el exporter no responde o que la métrica no está disponible.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 26 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 4,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.001 },
+              { "color": "red", "value": 0.01 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(pg_stat_database_deadlocks{job=\"postgres\"}[$__rate_interval]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "deadlocks/s"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "type": "stat",
+      "title": "Contenedores en ejecución",
+      "description": "Contenedores SIPEG con `state_code=1` para el proyecto seleccionado. Migrate y seed quedan excluidos por Telegraf. Sin datos significa que el job `docker` no está recolectando.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 31 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "fixed", "fixedColor": "text" },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "(count(docker_container_status_state_code{job=\"docker\", project=~\"$project\"} == 1)) or (0 * count(docker_container_status_state_code{job=\"docker\", project=~\"$project\"}))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "running"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "type": "stat",
+      "title": "Servicios no running",
+      "description": "Contenedores del proyecto con `state_code != 1` (created, paused, restarting, exited o dead). Un 0 real indica que todos los contenedores presentes están running; sin datos indica que no hay series de Docker.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 31 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "(count(docker_container_status_state_code{job=\"docker\", project=~\"$project\"} != 1)) or (0 * count(docker_container_status_state_code{job=\"docker\", project=~\"$project\"}))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "no running"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "type": "stat",
+      "title": "Contenedores con OOM",
+      "description": "Suma de `docker_container_status_oomkilled` para el proyecto seleccionado. Un 0 real indica contenedores presentes sin OOM; sin datos indica que el job `docker` no responde.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 31 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum(docker_container_status_oomkilled{job=\"docker\", project=~\"$project\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "OOM"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "Reinicios del contenedor actual",
+      "description": "Suma de `restart_count` de los contenedores actuales. Vuelve a cero cuando el contenedor se recrea, así que no es un histórico acumulado. Un 0 real indica contenedores presentes sin reinicios; sin datos indica que no hay series.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 31 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum(docker_container_status_restart_count{job=\"docker\", project=~\"$project\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "reinicios"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "type": "text",
+      "title": "Enlaces a dashboards de detalle",
+      "description": "Punto de entrada a las vistas específicas de cada fuente.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 36 },
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "### Dashboards de detalle\n\n- [SIPEG · VPS Overview](/d/sipeg-vps-overview)\n- [SIPEG · API HTTP](/d/sipeg-api-http)\n- [SIPEG · Node.js Runtime](/d/sipeg-nodejs-runtime)\n- [SIPEG · PostgreSQL](/d/sipeg-postgres-overview)\n- [SIPEG · Docker](/d/sipeg-docker-overview)\n- [SIPEG · Availability](/d/sipeg-availability)\n- [API Overview (Loki)](/d/sipeg-api-overview)\n- [Errors (Loki)](/d/sipeg-errors)\n- [Security (Loki)](/d/sipeg-security)",
+        "mode": "markdown"
+      },
+      "targets": []
+    },
+    {
+      "id": 22,
+      "type": "text",
+      "title": "Cómo interpretar este resumen",
+      "description": "Límites de las consultas de estado y diferencia entre cero, sin tráfico y sin datos.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 36 },
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "- Un `min(up)` no detecta un job eliminado: solo responde por las series que existen. Por eso la tabla de jobs esperados y las alertas de ausencia son necesarias. Una fila ausente no es un target saludable.\n- Sin datos no es 0. Un panel vacío puede significar target caído, job no configurado, métrica ausente o ventana sin muestras.\n- Un 0 real es distinto de sin tráfico. En las tasas HTTP, un 0 con series presentes indica ausencia de solicitudes; el panel de solicitudes en 5 min ayuda a distinguirlo.\n- El ratio 5xx solo se muestra con tráfico positivo en la ventana. Si no hay tráfico, queda sin datos en lugar de inventar un 0 %.\n- Los paneles de API usan solo `request_kind=\"matched\"`, rutas `/api/v1/*`, `outcome=\"completed\"` y excluyen `/api/v1/health`. El tráfico técnico se revisa en API HTTP.\n- Los recursos del VPS no sustituyen datos ausentes por cero. La swap en 0 puede ser un valor real; la falta de series no lo es.\n- Este dashboard es un resumen. Para diagnosticar, seguir los enlaces a la vista específica antes de concluir que una fuente está sana.",
+        "mode": "markdown"
+      },
+      "targets": []
+    }
+  ]
+}

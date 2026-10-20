@@ -63,6 +63,12 @@ const envSchema = z
       .optional(),
     LOG_SERVICE_NAME: z.string().min(1).default('sipeg-utp-backend'),
     APP_VERSION: z.string().min(1).default('1.0.0'),
+    METRICS_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    METRICS_HOST: z.string().min(1).default('127.0.0.1'),
+    METRICS_PORT: z.coerce.number().int().min(1).max(65_535).default(9464),
   })
   .superRefine((value, context) => {
     const corsOrigins = value.CORS_ORIGIN.split(',').map((origin) => origin.trim());
@@ -128,6 +134,14 @@ const envSchema = z
         code: 'custom',
         path: ['LOG_PSEUDONYMIZATION_KEY'],
         message: 'LOG_PSEUDONYMIZATION_KEY is required in production.',
+      });
+    }
+
+    if (value.METRICS_ENABLED && value.METRICS_PORT === value.PORT) {
+      context.addIssue({
+        code: 'custom',
+        path: ['METRICS_PORT'],
+        message: 'METRICS_PORT must differ from PORT when metrics are enabled.',
       });
     }
   });

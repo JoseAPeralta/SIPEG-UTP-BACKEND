@@ -131,6 +131,23 @@ docker exec <contenedor-db-anterior> pg_dumpall -U sipeg > backup.sql
 
 Luego restaura `backup.sql` en el nuevo volumen antes de levantar la API. El nombre del proyecto y del volumen tambien cambian (`sipeg-utp-dev` / `sipeg-utp-prod`).
 
+## Endurecimiento Del VPS
+
+El host de produccion se configura desde `deploy/` con instaladores
+idempotentes y un verificador PASS/FAIL:
+
+```bash
+sudo deploy/host/install.sh all
+sudo deploy/backup/install.sh
+sudo deploy/host/verify.sh
+```
+
+Cubre SSH con claves y fail2ban, UFW, parches automaticos, sysctl, auditd,
+AIDE, limites por contenedor, backups cifrados con restore verificado y alertas
+de Grafana por correo. El runbook completo (rotacion de secretos, restore
+manual y reversion) esta en `deploy/README.md`. Ver
+`docs/adr/adr-0013-vps-hardening-baseline.md`.
+
 ## Scripts
 
 - `pnpm run dev`: inicia el servidor en modo desarrollo con `tsx watch`.
@@ -610,9 +627,10 @@ docker compose \
     `0` con `or vector(0)` (cero eventos es correcto), pero **una consulta que
     falla no puede leerse como "todo bien"**: con Loki caido las cinco reglas
     pasan a Alerting.
-  - **No hay contact point.** Las alertas se evalúan y se ven en
-    `http://127.0.0.1:GRAFANA_PORT/alerting/list`, pero no notifican a nadie.
-    Anadir entrega (SMTP) es una fase aparte.
+  - El contact point `sipeg-email` y la politica por defecto se provisionan por
+    archivo; las alertas se evaluan, se ven en
+    `http://127.0.0.1:GRAFANA_PORT/alerting/list` y notifican por SMTP cuando
+    `GF_SMTP_ENABLED=true` y `ALERT_EMAIL_TO` tiene destinatarios.
   - **A diferencia de los paneles, las alertas no se releen por sondeo.** Editar
     `rules.yaml` exige recrear el contenedor
     (`docker compose -f compose.dev.yaml -f compose.observability.yaml up -d
@@ -622,6 +640,40 @@ docker compose \
   - `GET /api/v1/provisioning/alert-rules` **no devuelve** `dashboardUid` ni
     `panelId` aunque esten aplicados; para verlos hay que usar
     `GET /api/v1/provisioning/alert-rules/export`.
+
+#### Metricas, Prometheus y dashboards
+
+Prometheus recolecta **8 jobs** (`node`, `sipeg-api`, `postgres`, `docker`,
+`blackbox`, `blackbox-internal`, `blackbox-public` y `prometheus`) por redes
+internas; ningun exportador publica puertos. La API expone `/metrics` solo en el
+listener privado `9464`, nunca por `3000` ni por Cloudflare Tunnel. Grafana
+provisiona **7 dashboards** de Prometheus en la carpeta `SIPEG UTP` y **15
+alertas** de metricas en `observability/grafana/provisioning/alerting/metrics.yaml`.
+
+| Dashboard               | UID                         |
+| ----------------------- | --------------------------- |
+| SIPEG · VPS Overview    | `sipeg-vps-overview`        |
+| SIPEG · API HTTP        | `sipeg-api-http`            |
+| SIPEG · Node.js Runtime | `sipeg-nodejs-runtime`      |
+| SIPEG · PostgreSQL      | `sipeg-postgres-overview`   |
+| SIPEG · Docker          | `sipeg-docker-overview`     |
+| SIPEG · Availability    | `sipeg-availability`        |
+| SIPEG · Operations      | `sipeg-operations-overview` |
+
+```bash
+pnpm run observability:check -- --metrics --window 10
+docker compose -f compose.dev.yaml -f compose.observability.yaml \
+  run --rm --no-deps --entrypoint /bin/promtool prometheus \
+  check config /etc/prometheus/prometheus.yml
+docker run --rm \
+  -v "$PWD/observability/prometheus:/etc/prometheus:ro" \
+  --entrypoint /bin/promtool prom/prometheus:v3.15.0 \
+  test rules /etc/prometheus/tests/queries.test.yml
+```
+
+El catalogo completo de jobs, redes, alertas, interpretacion de `up`, `pg_up` y
+`probe_success`, diagnostico y reversion esta en `observability/README.md`. Los
+probes se ejecutan desde el propio VPS: una caida total del host no genera aviso.
 
 #### Verificar el stack de observabilidad
 

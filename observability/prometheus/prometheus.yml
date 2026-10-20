@@ -1,7 +1,94 @@
 global:
   scrape_interval: 60s
+  scrape_timeout: 10s
 
 scrape_configs:
   - job_name: node
     static_configs:
       - targets: ['node-exporter:9100']
+
+  - job_name: sipeg-api
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['api:9464']
+
+  - job_name: postgres
+    scrape_interval: 60s
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  - job_name: docker
+    scrape_interval: 30s
+    static_configs:
+      - targets: ['telegraf:9273']
+
+  - job_name: blackbox
+    static_configs:
+      - targets: ['blackbox-exporter:9115']
+
+  - job_name: blackbox-internal
+    scrape_interval: 30s
+    metrics_path: /probe
+    static_configs:
+      - targets: ['http://api:3000/api/v1/health']
+        labels:
+          module: http_health_internal
+          check: api-health
+          route: internal
+      - targets: ['http://api:3000/api/v1/health']
+        labels:
+          module: http_health_internal_jwks
+          check: api-jwks
+          route: internal
+      - targets: ['http://api:3000/api/auth/jwks']
+        labels:
+          module: http_jwks_internal
+          check: jwks
+          route: internal
+      - targets: ['http://grafana:3000/api/health']
+        labels:
+          module: http_grafana
+          check: grafana
+          route: internal
+    relabel_configs:
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: blackbox-public
+    scrape_interval: 30s
+    metrics_path: /probe
+    static_configs:
+      - targets: ['https://api.sipeg-utp.com/api/v1/health']
+        labels:
+          module: https_health_public
+          check: api-health
+          route: public
+      - targets: ['https://api.sipeg-utp.com/api/v1/health']
+        labels:
+          module: https_health_public_jwks
+          check: api-jwks
+          route: public
+      - targets: ['https://api.sipeg-utp.com/api/auth/jwks']
+        labels:
+          module: https_jwks_public
+          check: jwks
+          route: public
+    relabel_configs:
+      - source_labels: [module]
+        target_label: __param_module
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ['prometheus:9090']

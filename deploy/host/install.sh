@@ -5,7 +5,7 @@
 #   sudo deploy/host/install.sh <componente|all>
 #   DRY_RUN=1 sudo deploy/host/install.sh all
 #
-# Componentes: ssh firewall patches kernel docker sudo audit
+# Componentes: ssh firewall patches kernel docker sudo audit metrics
 #
 # Cada archivo instalado se respalda en /var/backups/sipeg-hardening/<UTC>/
 # antes de sobrescribirse. Los servicios se validan (sshd -t, visudo -cf,
@@ -107,13 +107,36 @@ component_audit() {
   run systemctl enable --now auditd
 }
 
+component_metrics() {
+  if ! getent group sipeg-metrics >/dev/null; then
+    run groupadd --system sipeg-metrics
+  fi
+  if ! id -u sipeg-metrics >/dev/null 2>&1; then
+    run useradd --system --gid sipeg-metrics --home-dir /nonexistent \
+      --no-create-home --shell /usr/sbin/nologin sipeg-metrics
+  fi
+  run install -d -m 0755 -o root -g root /usr/local/libexec/sipeg
+  run install -d -m 0755 -o root -g root /var/lib/sipeg-node-exporter
+  # 0755: Node Exporter lee el bind mount como usuario sin privilegios.
+  run install -d -m 0755 -o sipeg-metrics -g sipeg-metrics \
+    /var/lib/sipeg-node-exporter/textfile
+  install_file "$HOST_DIR/metrics/collect-network.sh" \
+    /usr/local/libexec/sipeg/collect-network.sh 0755
+  install_file "$HOST_DIR/metrics/sipeg-host-network-metrics.service" \
+    /etc/systemd/system/sipeg-host-network-metrics.service 0644
+  install_file "$HOST_DIR/metrics/sipeg-host-network-metrics.timer" \
+    /etc/systemd/system/sipeg-host-network-metrics.timer 0644
+  run systemctl daemon-reload
+  run systemctl enable --now sipeg-host-network-metrics.timer
+}
+
 main() {
   require_root
   local component="${1:-all}"
   case "$component" in
-    ssh|firewall|patches|kernel|docker|sudo|audit) "component_$component" ;;
+    ssh|firewall|patches|kernel|docker|sudo|audit|metrics) "component_$component" ;;
     all)
-      for c in ssh firewall patches kernel docker sudo audit; do
+      for c in ssh firewall patches kernel docker sudo audit metrics; do
         "component_$c"
       done
       ;;

@@ -387,6 +387,11 @@ For errors:
 - Set `NODE_ENV=production` in runtime images.
 - Add a health check when the deployed API needs container health reporting.
 - Do not include build secrets, `.env`, development caches, or source maps in runtime images unless explicitly required.
+- El endurecimiento del host vive en `deploy/`: `deploy/host/install.sh` aplica
+  la configuracion por componente (con respaldo y validacion) y
+  `deploy/host/verify.sh` la comprueba. No editar archivos del host a mano sin
+  reflejar el cambio en `deploy/`. Ver
+  `docs/adr/adr-0013-vps-hardening-baseline.md`.
 
 ## Deployment And Network Rules
 
@@ -399,10 +404,19 @@ For errors:
 - API and frontend share the registrable domain `sipeg-utp.com`, so `AUTH_REFRESH_COOKIE_SAME_SITE=lax`. Keep the refresh cookie `HttpOnly`, `Secure`, host-only and scoped to `/api/v1/auth`.
 - `trust proxy=1` is tied to `cloudflared` being the only hop. Cloudflare writes the client IP in `X-Forwarded-For`. Adding another proxy requires revisiting rate-limit buckets and this rule.
 - `AUTH_JWKS_URL` must stay on the container loopback (`http://127.0.0.1:3000/api/auth/jwks`). Do not point JWT verification or health at the public JWKS hostname; Bot Fight Mode can challenge Node.
-- Keep networks separated: `sipeg-utp-prod` for API, PostgreSQL and `cloudflared`; `observability` for Loki, Alloy, the read-only socket proxy, Grafana and `cloudflared`. PostgreSQL must not publish ports.
+- Keep networks separated: `sipeg-utp-prod` for API, PostgreSQL and `cloudflared`; `observability` for Loki, Alloy, the read-only socket proxy, Grafana, Prometheus, Node Exporter, Blackbox and `cloudflared`; `metrics` for Prometheus and its private targets; `postgres-metrics` only for PostgreSQL and its exporter; `docker-api` for the socket proxy, Alloy and Telegraf. PostgreSQL must not publish ports.
 - Cloudflare DNS records are proxied, **Always Use HTTPS** stays enabled, and API/Grafana use a cache bypass rule. Verify the tunnel is Healthy after deployment and after a VPS reboot.
 - `.env.prod`, the tunnel token, SMTP credentials and Grafana secrets are never committed or logged. Confirm `600` permissions and clear the bootstrap ADMIN variables after the ADMIN exists.
 - Update ADR-0012, `docs/despliegue.md` and this section when the topology, domains, proxy chain or Grafana protection changes.
+
+### Metrics And Observability Rules
+
+- Serve `/metrics` only on the private API listener (`METRICS_HOST`/`METRICS_PORT`, container port `9464`). Never expose it on the business listener `3000`, Cloudflare Tunnel or any public route.
+- Do not publish exporter ports. Prometheus, PostgreSQL Exporter, Telegraf, Blackbox Exporter and Node Exporter use `expose` on internal networks only; Grafana remains the only loopback-published service.
+- Keep metric labels on the closed catalog. Never use user or resource IDs, emails, IPs, tokens, query strings, request bodies or secrets as labels; route templates only.
+- Run `sudo deploy/host/install.sh metrics` before recreating `node-exporter`, so the `sipeg-metrics` user, textfile directory and timer exist. Do not create or edit the `.prom` file by hand.
+- Validate metric changes with `pnpm run observability:check -- --metrics` and `promtool check config` / `promtool test rules`. Recreate `prometheus` after editing scrapes and `grafana` after editing alert provisioning.
+- Do not remove or redefine `sipeg-disk-full` or `sipeg-5xx` without preserving their UID; dashboards and notification links depend on it. Metric alert changes belong in `metrics.yaml`, not in the Loki `rules.yaml`.
 
 ## Documentation Rules
 

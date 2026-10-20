@@ -107,6 +107,17 @@ Navegador
 - La separacion evita que los servicios de observabilidad compartan red con la
   base de datos y los servicios de la aplicacion.
 
+### Métricas y exportadores (2026-10-20)
+
+Prometheus, PostgreSQL Exporter, Telegraf, Blackbox Exporter y el listener
+privado de la API se comunican por redes internas (`metrics`, `postgres-metrics`
+y `docker-api`; Prometheus y Blackbox tambien comparten `observability` para que
+Grafana consulte y para los probes, sin publicar puertos). Grafana sigue siendo
+el unico servicio del overlay con puerto publicado y solo en `127.0.0.1:3001`
+para diagnostico. No se añadió ningun puerto publico ni ruta nueva al tunel:
+`/metrics` no es alcanzable por `api:3000` ni por Cloudflare. Ver ADR-0014 y
+`observability/README.md`.
+
 ### Cookies, CORS y confianza en el proxy
 
 - `sipeg-utp.com`, `api.sipeg-utp.com` y `grafana.sipeg-utp.com` comparten el

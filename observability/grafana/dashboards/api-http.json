@@ -1,0 +1,861 @@
+{
+  "uid": "sipeg-api-http",
+  "title": "SIPEG · API HTTP",
+  "description": "Tráfico, errores y latencia de las operaciones de negocio de la API medidas con las métricas Prometheus de la aplicación. Excluye health, JWKS, OpenAPI, docs, unmatched y preflight, que se muestran en un panel técnico separado.",
+  "tags": ["sipeg", "prometheus", "api", "http"],
+  "editable": false,
+  "graphTooltip": 1,
+  "timezone": "utc",
+  "schemaVersion": 42,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": ["10s", "30s", "1m", "5m", "15m"]
+  },
+  "links": [
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "API Overview (Loki)",
+      "tooltip": "Volumen, latencia y errores desde los logs de la API",
+      "type": "link",
+      "url": "/d/sipeg-api-overview/api-overview"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Errors (Loki)",
+      "tooltip": "Errores agrupados de la API",
+      "type": "link",
+      "url": "/d/sipeg-errors/errors"
+    },
+    {
+      "asDropdown": false,
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "tags": [],
+      "targetBlank": false,
+      "title": "Security (Loki)",
+      "tooltip": "Eventos de autenticación y seguridad",
+      "type": "link",
+      "url": "/d/sipeg-security/security"
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "environment",
+        "label": "Entorno",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "definition": "label_values(sipeg_http_requests_total{job=\"sipeg-api\"}, environment)",
+        "query": {
+          "query": "label_values(sipeg_http_requests_total{job=\"sipeg-api\"}, environment)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "options": [],
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "method",
+        "label": "Método",
+        "type": "custom",
+        "query": "GET,POST,PATCH,PUT,DELETE,OPTIONS,HEAD",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "options": [],
+        "hide": 0,
+        "skipUrlSync": false
+      },
+      {
+        "name": "route",
+        "label": "Ruta (regex)",
+        "type": "textbox",
+        "query": ".*",
+        "current": { "selected": true, "text": ".*", "value": ".*" },
+        "options": [{ "selected": true, "text": ".*", "value": ".*" }],
+        "hide": 0,
+        "skipUrlSync": false,
+        "description": "Plantilla de ruta, por ejemplo /api/v1/activities/:id. Se interpreta como expresión regular."
+      }
+    ]
+  },
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Solicitudes en el rango",
+      "description": "Solicitudes de negocio completadas en el rango seleccionado: matched, ruta /api/v1/ excepto health, outcome completed. Sin datos significa que no hay series para los filtros aplicados.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "Sin datos",
+          "color": { "mode": "fixed", "fixedColor": "text" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum(increase(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "solicitudes"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Ratio 5xx",
+      "description": "Porcentaje de respuestas 5xx sobre las respuestas de negocio. Si hay tráfico y ningún 5xx el valor es 0; si no hay tráfico, no hay datos. El denominador se limita a un mínimo de una solicitud por segundo para evitar picos por muestras escasas.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "min": 0,
+          "max": 100,
+          "noValue": "Sin datos",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "100 * ((sum(rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\", status_code=~\"5..\"}[$__rate_interval])) or (0 * sum(rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))) / clamp_min(sum(rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])), 0.000000001))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "5xx"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "p95 en el rango",
+      "description": "Percentil 95 de duración de las respuestas completadas en el rango. Se calcula con histogram_quantile sobre los buckets agregados, por lo que es una aproximación.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "min": 0,
+          "noValue": "Sin datos",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.25 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (increase(sipeg_http_request_duration_seconds_bucket{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__range])))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Solicitudes en vuelo",
+      "description": "Gauge sin etiquetas del número de solicitudes atendidas en este instante. Sin datos significa que el proceso no expone la métrica o el target está caído.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "min": 0,
+          "noValue": "Sin datos",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sipeg_http_requests_in_flight{job=\"sipeg-api\", environment=~\"$environment\"}",
+          "instant": true,
+          "range": false,
+          "legendFormat": "en vuelo"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Solicitudes por segundo",
+      "description": "Tasa total y por método de las solicitudes de negocio completadas. Usa $__rate_interval para adaptar la ventana al paso de la consulta.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "req/s",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum(rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "total"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (method) (rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{method}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Distribución por código de estado",
+      "description": "Tasa de respuestas de negocio agrupadas por status_code exacto. Los abortos no tienen código de respuesta y no aparecen aquí.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "req/s",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 0,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["sum"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (status_code) (rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{status_code}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Latencia p50, p95 y p99",
+      "description": "Percentiles de duración de respuestas completadas calculados con histogram_quantile sobre los buckets agregados. Excluye abortos, que no tienen respuesta completa.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "s",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "p50" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p95" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p99" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(sipeg_http_request_duration_seconds_bucket{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "p50"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(sipeg_http_request_duration_seconds_bucket{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(sipeg_http_request_duration_seconds_bucket{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "p99"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Top rutas por solicitudes por segundo",
+      "description": "Diez rutas con mayor tasa instantánea de solicitudes de negocio completadas, agrupadas por método y plantilla de ruta.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "noValue": "Sin datos",
+          "color": { "mode": "continuous-GrYlRd" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "maxVizHeight": 300,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "sizing": "auto",
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "topk(10, sum by (method, route) (rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{method}} {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "p95 por método y ruta",
+      "description": "Percentil 95 de latencia por operación en el intervalo de tasa actual, calculado con histogram_quantile sobre los buckets agregados.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 3,
+          "color": { "mode": "continuous-GrYlRd" },
+          "custom": {
+            "align": "auto",
+            "cellOptions": { "type": "auto" },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "renameByName": {
+              "method": "Método",
+              "route": "Ruta",
+              "Value": "p95 (s)",
+              "Value #A": "p95 (s)"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, method, route) (rate(sipeg_http_request_duration_seconds_bucket{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "{{method}} {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Solicitudes abortadas",
+      "description": "Tasa de solicitudes abortadas por ruta: el cliente cerró la conexión antes de completar la respuesta. Si hay tráfico completado y ningún aborto el valor es 0; sin tráfico no hay datos. No se mezclan con la latencia de respuestas completadas.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "req/s",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (route) (rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"aborted\"}[$__rate_interval])) or (0 * sum by (route) (rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__rate_interval])))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{route}}"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "Tráfico técnico",
+      "description": "Health, JWKS, OpenAPI, docs, preflight y solicitudes no enrutadas. Se mantiene fuera de los paneles de negocio para no alterar el volumen ni la latencia de las operaciones de la API.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "req/s",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "hideZeros": false, "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (route) (rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", request_kind=\"matched\", route=~\"/api/v1/health|/api/auth/jwks|/api/openapi.json|/api/docs.*\", outcome=\"completed\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{route}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (request_kind, route) (rate(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", request_kind=~\"preflight|unmatched\", outcome=\"completed\"}[$__rate_interval]))",
+          "instant": false,
+          "range": true,
+          "legendFormat": "{{request_kind}} {{route}}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Resumen por ruta",
+      "description": "Solicitudes completadas en el rango, p95 de latencia y porcentaje de 5xx por método y ruta. Un 5xx de 0 % solo aparece cuando hay tráfico; sin tráfico no hay fila.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 36 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": { "type": "auto" },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Solicitudes" },
+            "properties": [
+              { "id": "unit", "value": "short" },
+              { "id": "decimals", "value": 0 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "p95 (s)" },
+            "properties": [
+              { "id": "unit", "value": "s" },
+              { "id": "decimals", "value": 3 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "5xx (%)" },
+            "properties": [
+              { "id": "unit", "value": "percent" },
+              { "id": "decimals", "value": 2 },
+              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "green", "value": null },
+                    { "color": "yellow", "value": 1 },
+                    { "color": "red", "value": 5 }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "footer": { "countRows": false, "fields": "", "reducer": ["sum"], "show": false },
+        "showHeader": true
+      },
+      "transformations": [
+        { "id": "merge", "options": {} },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true },
+            "renameByName": {
+              "method": "Método",
+              "route": "Ruta",
+              "Value #A": "Solicitudes",
+              "Value #B": "p95 (s)",
+              "Value #C": "5xx (%)"
+            }
+          }
+        }
+      ],
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (method, route) (increase(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "solicitudes"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, method, route) (increase(sipeg_http_request_duration_seconds_bucket{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__range])))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "p95"
+        },
+        {
+          "refId": "C",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "100 * ((sum by (method, route) (increase(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\", status_code=~\"5..\"}[$__range])) or (0 * sum by (method, route) (increase(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__range])))) / clamp_min(sum by (method, route) (increase(sipeg_http_requests_total{job=\"sipeg-api\", environment=~\"$environment\", method=~\"$method\", request_kind=\"matched\", route=~\"/api/v1/.*\", route=~\"$route\", route!=\"/api/v1/health\", outcome=\"completed\"}[$__range])), 1))",
+          "instant": true,
+          "range": false,
+          "format": "table",
+          "legendFormat": "5xx"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "type": "text",
+      "title": "Interpretación de las etiquetas",
+      "description": "Reglas para leer rutas, códigos de estado y abortos sin confundirlos con URLs reales.",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 46 },
+      "options": {
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "- La etiqueta `route` contiene la plantilla de ruta, por ejemplo `/api/v1/activities/:id`; nunca incluye la URL real, identificadores ni query string.\n- Un `status_code=\"none\"` significa que la solicitud se abortó antes de enviar cabeceras de respuesta. Esos eventos tienen `outcome=\"aborted\"` y no participan en los percentiles de latencia de respuestas completadas.\n- La ruta `unmatched` agrupa solicitudes que no coincidieron con ninguna ruta. No revela la URL solicitada, por diseño.\n- Los paneles de negocio exigen `request_kind=\"matched\"`, `route=~\"/api/v1/.*\"`, `route!=\"/api/v1/health\"` y `outcome=\"completed\"`. Health, JWKS, OpenAPI, docs, preflight y unmatched se ven solo en el panel técnico.\n- Los percentiles se calculan a partir de buckets agregados, así que son aproximaciones; los valores extremos por encima del último bucket quedan acotados por ese límite.",
+        "mode": "markdown"
+      },
+      "targets": []
+    }
+  ]
+}

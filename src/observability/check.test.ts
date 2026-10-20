@@ -6,6 +6,7 @@ import {
   type DatasourceHealth,
   type Observation,
   type PromResponse,
+  readOptions,
   renderReport,
   verifyObservability,
 } from './check.js';
@@ -460,6 +461,28 @@ describe('verifyObservability', () => {
     });
 
     expect(checkIds(broken)).toContain('dashboards.api-traffic');
+  });
+});
+
+describe('readOptions', () => {
+  it('keeps the existing URL and window behavior without the metrics flag', () => {
+    expect(readOptions(['--url', 'http://127.0.0.1:3001', '--window', '5'])).toEqual({
+      url: 'http://127.0.0.1:3001',
+      windowMinutes: 5,
+      metricsRequested: false,
+    });
+  });
+
+  it('marks metricsRequested when --metrics is present', () => {
+    expect(readOptions(['--metrics', '--window', '10', '--url', 'http://grafana:3000'])).toEqual({
+      url: 'http://grafana:3000',
+      windowMinutes: 10,
+      metricsRequested: true,
+    });
+  });
+
+  it('rejects an invalid window even when --metrics is present', () => {
+    expect(() => readOptions(['--metrics', '--window', '0'])).toThrow('--window');
   });
 });
 

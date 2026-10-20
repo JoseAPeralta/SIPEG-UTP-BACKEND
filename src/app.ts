@@ -8,8 +8,10 @@ import { toNodeHandler } from 'better-auth/node';
 import { auth } from './lib/auth.js';
 import { env } from './config/env.js';
 import { createRequestLogger } from './config/logger.js';
+import { metrics } from './config/metrics.js';
 import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middlewares/error.middleware.js';
+import { createHttpMetricsMiddleware } from './middlewares/httpMetrics.middleware.js';
 import { notFoundHandler } from './middlewares/notFound.middleware.js';
 import { apiRoutes } from './routes.js';
 import { requestLogger } from './middlewares/requestLogger.middleware.js';
@@ -29,6 +31,10 @@ export const app = express();
 app.set('trust proxy', 1);
 
 app.use(requestLogger);
+
+if (metrics) {
+  app.use(createHttpMetricsMiddleware(metrics));
+}
 
 app.use(
   helmet({

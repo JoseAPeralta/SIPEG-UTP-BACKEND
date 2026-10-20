@@ -1,0 +1,172 @@
+rule_files:
+  - queries.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",status_code="200"}'
+        values: '0+60x9'
+      - series: 'sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",status_code="500"}'
+        values: '0+60x9'
+    promql_expr_test:
+      - expr: test_http_5xx_ratio
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="test_http_5xx_ratio"}'
+            value: 50
+
+  - interval: 1m
+    input_series:
+      - series: 'sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",status_code="200"}'
+        values: '0+1x9'
+      - series: 'sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",status_code="500"}'
+        values: '0+1x9'
+    promql_expr_test:
+      - expr: test_http_5xx_ratio
+        eval_time: 5m
+        exp_samples: []
+
+  - interval: 1m
+    input_series:
+      - series: 'sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",status_code="200"}'
+        values: '0+0x9'
+      - series: 'sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",status_code="500"}'
+        values: '0+0x9'
+    promql_expr_test:
+      - expr: test_http_5xx_ratio
+        eval_time: 5m
+        exp_samples: []
+
+  - interval: 1m
+    input_series:
+      - series: 'sipeg_http_request_duration_seconds_bucket{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",le="0.05"}'
+        values: '0+18x9'
+      - series: 'sipeg_http_request_duration_seconds_bucket{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",le="0.1"}'
+        values: '0+19x9'
+      - series: 'sipeg_http_request_duration_seconds_bucket{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",le="1"}'
+        values: '0+20x9'
+      - series: 'sipeg_http_request_duration_seconds_bucket{job="sipeg-api",outcome="completed",request_kind="matched",route="/api/v1/users",le="+Inf"}'
+        values: '0+20x9'
+    promql_expr_test:
+      - expr: test_http_p95
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="test_http_p95"}'
+            value: 0.1
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node"}'
+        values: '0+0x9'
+      - series: 'up{job="sipeg-api"}'
+        values: '1+0x9'
+    promql_expr_test:
+      - expr: test_target_down
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="test_target_down", job="node"}'
+            value: 1
+          - labels: '{__name__="test_target_down", job="sipeg-api"}'
+            value: 0
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node"}'
+        values: '1+0x9'
+      - series: 'up{job="sipeg-api"}'
+        values: '1+0x9'
+      - series: 'up{job="postgres"}'
+        values: '1+0x9'
+      - series: 'up{job="docker"}'
+        values: '1+0x9'
+      - series: 'up{job="blackbox"}'
+        values: '1+0x9'
+      - series: 'up{job="blackbox-internal"}'
+        values: '1+0x9'
+      - series: 'up{job="blackbox-public"}'
+        values: '1+0x9'
+      - series: 'up{job="prometheus"}'
+        values: '1+0x9'
+    promql_expr_test:
+      - expr: test_target_absent
+        eval_time: 5m
+        exp_samples: []
+
+  - interval: 1m
+    input_series:
+      - series: 'up{job="node"}'
+        values: '1+0x9'
+      - series: 'up{job="postgres"}'
+        values: '1+0x9'
+      - series: 'up{job="docker"}'
+        values: '1+0x9'
+      - series: 'up{job="blackbox"}'
+        values: '1+0x9'
+      - series: 'up{job="blackbox-internal"}'
+        values: '1+0x9'
+      - series: 'up{job="blackbox-public"}'
+        values: '1+0x9'
+      - series: 'up{job="prometheus"}'
+        values: '1+0x9'
+    promql_expr_test:
+      - expr: test_target_absent
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="test_target_absent", job="sipeg-api"}'
+            value: 1
+
+  - interval: 1m
+    input_series:
+      - series: 'sipeg_host_network_collection_timestamp_seconds{job="node"}'
+        values: '0+0x9'
+    promql_expr_test:
+      - expr: test_host_network_age
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="test_host_network_age", job="node"}'
+            value: 300
+
+  - interval: 1m
+    input_series:
+      - series: 'pg_stat_database_numbackends{job="postgres",datname="sipeg"}'
+        values: '50+0x9'
+      - series: 'pg_stat_database_numbackends{job="postgres",datname="postgres"}'
+        values: '40+0x9'
+      - series: 'pg_settings_max_connections{job="postgres"}'
+        values: '100+0x9'
+    promql_expr_test:
+      - expr: test_postgres_connections_ratio
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="test_postgres_connections_ratio"}'
+            value: 90
+
+  - interval: 1m
+    input_series:
+      - series: 'docker_container_status_state_code{job="docker",project="sipeg",service="api"}'
+        values: '1+0x9'
+      - series: 'docker_container_status_state_code{job="docker",project="sipeg",service="db"}'
+        values: '5+0x9'
+    promql_expr_test:
+      - expr: test_docker_not_running
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="test_docker_not_running", project="sipeg", service="db"}'
+            value: 1
+
+  - interval: 1m
+    input_series:
+      - series: 'probe_success{job="blackbox-internal",check="api-health",route="internal"}'
+        values: '0+0x9'
+      - series: 'probe_success{job="blackbox-public",check="api-health",route="public"}'
+        values: '1+0x9'
+    promql_expr_test:
+      - expr: test_probe_success
+        eval_time: 5m
+        exp_samples:
+          - labels: '{__name__="test_probe_success", check="api-health", job="blackbox-internal", route="internal"}'
+            value: 0
+          - labels: '{__name__="test_probe_success", check="api-health", job="blackbox-public", route="public"}'
+            value: 1

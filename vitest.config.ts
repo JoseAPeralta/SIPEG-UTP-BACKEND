@@ -12,6 +12,7 @@ export default defineConfig({
     // overrides an existing variable, so this wins over any .env file.
     env: {
       LOG_LEVEL: 'silent',
+      METRICS_ENABLED: 'false',
     },
     coverage: {
       provider: 'v8',
