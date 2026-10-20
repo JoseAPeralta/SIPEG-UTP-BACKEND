@@ -74,6 +74,7 @@ export const auth = betterAuth({
       '/sign-up/email': { window: 60, max: 3 },
       '/request-password-reset': { window: 60, max: 3 },
       '/reset-password': { window: 60, max: 5 },
+      '/jwks': false,
     },
   },
   emailAndPassword: {
