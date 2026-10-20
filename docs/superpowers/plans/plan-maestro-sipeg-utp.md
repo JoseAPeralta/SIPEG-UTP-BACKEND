@@ -725,15 +725,48 @@ Pendientes accionables al cierre de la fase:
 
 **Depende de:** Fase 1.
 
-**Entregable:** subida segura de CV/imagenes y servicio de email configurable.
+**Entregable:** almacenamiento en Cloudflare R2, subida y descarga segura de CV/imagenes, infraestructura para los PDF de certificados y servicio de email configurable.
 
-- [ ] **6.1 Decidir almacenamiento.** Crear ADR; opcion inicial recomendada: disco local fuera de rutas ejecutables con nombres aleatorios; alternativa S3-compatible.
-- [ ] **6.2 Implementar subida segura.** Limite de tamano, allowlist MIME/extension, magic bytes, nombres aleatorios, proteccion path traversal y acceso privado a CV.
-- [ ] **6.3 Crear endpoints de archivos.** `POST /api/v1/uploads/cv` y `POST /api/v1/uploads/images` con autenticacion o rate limit estricto segun el flujo.
-- [ ] **6.4 Implementar email.** SMTP configurable y modo desarrollo; plantillas de verificacion, reset, propuesta, actividad y certificado.
-- [ ] **6.5 Documentar variables.** Agregar `MAIL_*` y `UPLOAD_*`/`STORAGE_*` a `.env.example` y validarlas al arrancar.
+**Decision confirmada (2026-10-19):** el usuario eligio Cloudflare R2. La decision del proveedor esta tomada; el ADR, aprovisionamiento e implementacion siguen pendientes. La separacion prevista es banners publicos y CV, feedback y certificados privados.
 
-**Criterio de salida:** MIME falso, exceso de tamano y traversal son rechazados; CV no accesible por URL publica; logs sin tokens.
+- [ ] **6.1 Formalizar almacenamiento en Cloudflare R2.**
+  - [ ] **6.1.1 Crear ADR-0012.** Guardar `docs/adr/adr-0012-cloudflare-r2-file-storage.md` con la integracion S3-compatible, alternativas descartadas, visibilidad por categoria, costos, limites de compatibilidad y estrategia de recuperacion.
+  - [ ] **6.1.2 Aprovisionar buckets por ambiente.** Separar desarrollo y produccion, con un bucket publico para banners y otro privado para CV, imagenes de feedback y PDF de certificados; documentar sus nombres y propositos.
+  - [ ] **6.1.3 Configurar credenciales.** Permisos de lectura/escritura limitados a los buckets necesarios, independientes por ambiente y disponibles solo en el backend; documentar rotacion y revocacion.
+  - [ ] **6.1.4 Configurar acceso publico.** Conectar un dominio personalizado al bucket de banners. No habilitar dominio publico ni `r2.dev` en los buckets privados; no usar `r2.dev` como URL publica de produccion.
+- [ ] **6.2 Implementar almacenamiento y subida segura.**
+  - [ ] **6.2.1 Crear cliente R2 centralizado.** Utilizar `@aws-sdk/client-s3` y `@aws-sdk/s3-request-presigner`, endpoint S3 de R2 y region `auto`; encapsular subida, consulta de existencia/metadata, lectura, firma GET y eliminacion, sin llamadas al SDK desde controladores.
+  - [ ] **6.2.2 Persistir metadata.** Registrar bucket, clave aleatoria, nombre original, MIME detectado, tamano, SHA-256, categoria y vinculo con el recurso o contexto de subida. Crear la migracion y definir la transicion desde `bannerUrl`, `cvUrl`, `imageUrl` y `pdfUrl`; no almacenar URLs firmadas ni presentar los placeholders del seed como archivos existentes.
+  - [ ] **6.2.3 Validar antes de almacenar.** Limites por categoria, allowlist de extensiones/MIME y magic bytes; rechazar contenido incompatible y nombres con traversal. Generar las claves en el servidor, sin usar rutas suministradas por el cliente. Acotar memoria, concurrencia y duracion de la subida, y limpiar temporales en `/tmp` si se utilizan.
+  - [ ] **6.2.4 Preservar versiones.** Generar una clave nueva por archivo; una actualizacion de propuesta no sobrescribe ni elimina el CV de versiones anteriores. Preparar el almacenamiento para las Fases 8 y 10 sin adelantar sus endpoints de dominio.
+  - [ ] **6.2.5 Manejar fallos parciales.** R2 y PostgreSQL no comparten transaccion: compensar o reconciliar subidas cuya persistencia falla, impedir referencias utilizables a objetos ausentes y establecer timeouts/reintentos acotados con claves estables por intento logico. Traducir errores del SDK sin exponer credenciales ni detalles internos.
+- [ ] **6.3 Crear endpoints de archivos y controlar acceso.**
+  - [ ] **6.3.1 Implementar subida.** `POST /api/v1/uploads/cv` y `POST /api/v1/uploads/images`, con validacion en el backend antes de enviar el archivo a R2; documentar request multipart y respuesta con identificador de archivo.
+  - [ ] **6.3.2 Autorizar por proposito y recurso.** Distinguir banners publicos de feedback privado; la visibilidad y el bucket los resuelve el servidor. Impedir asociar archivos ajenos o reutilizar un archivo privado como banner. Definir el contexto seguro de subida del ponente sin cuenta y su vinculacion a la propuesta, coordinado con la Fase 8; rate limiting no sustituye esa autorizacion.
+  - [ ] **6.3.3 Implementar descarga privada.** Resolver el archivo por identificador, comprobar existencia y verificar propiedad o permisos del recurso antes de emitir una URL firmada GET. Proponer TTL inicial configurable de 300 segundos y `Content-Disposition` seguro; documentar que quien posea el enlace podra usarlo hasta su expiracion.
+  - [ ] **6.3.4 Configurar entrega y CORS.** URLs estables con claves nuevas y cache para banners; enlaces privados sobre el endpoint S3 de R2, no sobre dominios personalizados. Configurar CORS con origenes explicitos y solo los metodos/headers requeridos cuando el navegador use `fetch` contra R2; la subida backend a R2 no requiere CORS del bucket.
+  - [ ] **6.3.5 Proteger endpoints y logs.** Autenticacion/autorizacion segun el flujo, rate limiting y limites de consumo, especialmente en subidas publicas. Excluir credenciales, contenido de CV y URLs firmadas completas de logs y errores.
+- [ ] **6.4 Completar email.**
+  - [ ] **6.4.1 Reutilizar infraestructura existente.** Aprovechar SMTP en `src/lib/email.ts`, las variables `MAIL_*` y las plantillas de verificacion/reset en `src/modules/auth/auth.email.ts`; verificar el transporte en desarrollo sin registrar destinatarios, enlaces ni tokens.
+  - [ ] **6.4.2 Completar plantillas de dominio.** Propuestas, actividades y certificados; coordinar su conexion con 8.8, 12.1 y Fase 10 respectivamente.
+- [ ] **6.5 Configurar variables y despliegue.**
+  - [ ] **6.5.1 Documentar y validar configuracion.** Incorporar `STORAGE_*` para endpoint, region, credenciales, buckets, URL publica y TTL de enlaces; `UPLOAD_*` para tamanos maximos y limites de subida. Mantener nombres independientes del SDK y validar combinaciones al arrancar en `src/config/env.ts`.
+  - [ ] **6.5.2 Actualizar ejemplos y Compose.** Alinear `.env.example`, `.env.prod.example`, `compose.dev.yaml` y `compose.prod.yaml`; documentar creacion de buckets, dominios y rotacion de credenciales. Mantener la API con filesystem de solo lectura y sin volumen persistente local para los objetos.
+  - [ ] **6.5.3 Separar pruebas de produccion.** Suite unitaria con cliente de almacenamiento simulado; integracion real opt-in contra buckets de desarrollo y PostgreSQL aislado, con limpieza de objetos de prueba y sin credenciales reales versionadas.
+- [ ] **6.6 Implementar conservacion y recuperacion.**
+  - [ ] **6.6.1 Limpiar archivos huerfanos.** Implementar reconciliacion de subidas abandonadas y fallos parciales, con periodo de gracia y verificacion de referencias antes de borrar; excluir objetos usados por propuestas, versiones, feedback y certificados, incluso historicos.
+  - [ ] **6.6.2 Definir retencion.** Establecer reglas por categoria antes de habilitar expiracion automatica. Documentar reemplazo/eliminacion de banners y su cache; las reglas lifecycle no deben borrar archivos referenciados ni historicos que el dominio exige conservar.
+  - [ ] **6.6.3 Implementar respaldo y restauracion.** Extender la operativa de `deploy/backup/` para incluir objetos y un manifiesto que permita relacionarlos con el respaldo de PostgreSQL, con credenciales separadas y copias recuperables ante borrados del origen. R2 no implementa el versionado de buckets de S3: no asumir que habilitarlo permite deshacer un borrado. Probar restauracion e integridad con SHA-256.
+  - [ ] **6.6.4 Supervisar operacion y costos.** Definir seguimiento de volumen almacenado, solicitudes, errores de R2 y fallos de limpieza/respaldo, integrado con la observabilidad existente.
+- [ ] **6.7 Verificar y documentar.**
+  - [ ] **6.7.1 Probar comportamiento y seguridad con TDD.** MIME falso, exceso de tamano, nombres maliciosos, acceso horizontal, archivos ajenos, separacion publico/privado, expiracion de enlaces y fallos parciales. Cubrir preservacion de versiones y limpieza que respeta referencias historicas.
+  - [ ] **6.7.2 Verificar integracion real con R2.** Subida, consulta, lectura publica de un banner de prueba, rechazo de lectura anonima de un documento privado, descarga firmada, expiracion, eliminacion y restauracion en desarrollo. Confirmar que las rutas placeholder del seed no generan una promesa de descarga valida.
+  - [ ] **6.7.3 Actualizar contrato y documentacion.** Mantener esquemas/OpenAPI y Bruno alineados; documentar efectos para el frontend, incluyendo URLs temporales y descarga por identificador. Actualizar README, CONTEXT y AGENTS con la infraestructura realmente implementada.
+  - [ ] **6.7.4 Ejecutar gates de cierre.** `pnpm test`, `pnpm run typecheck`, `pnpm run lint`, `pnpm run build`, `pnpm run docs:generate`, `pnpm run docs:check` y checks de formato; validar, formatear y generar Prisma si cambia el esquema, verificar migraciones y ejecutar los requests Bruno del flujo de archivos en desarrollo.
+
+**Criterio de salida:** archivos invalidos rechazados antes de almacenarse; documentos privados inaccesibles sin autorizacion o enlace firmado vigente; banners entregados desde el bucket publico; versiones historicas preservadas; fallos parciales recuperables; limpieza sin borrar referencias vigentes/historicas; restauracion de objetos y metadata comprobada; logs sin secretos ni URLs firmadas; contrato y documentacion sincronizados.
+
+**Referencias R2:** [compatibilidad S3](https://developers.cloudflare.com/r2/api/s3/api/), [URLs firmadas](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [buckets publicos](https://developers.cloudflare.com/r2/buckets/public-buckets/) y [reglas lifecycle](https://developers.cloudflare.com/r2/buckets/object-lifecycles/).
 
 ---
 
@@ -873,7 +906,7 @@ Pendientes accionables al cierre de la fase:
 
 | #   | Decision                                                 | Fase | Recomendacion inicial                                                                                  |
 | --- | -------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------ |
-| 1   | Storage de archivos: disco o S3                          | 6    | Disco local seguro con ADR                                                                             |
+| 1   | Storage de archivos                                      | 6    | Cloudflare R2 confirmado por el usuario (2026-10-19); pendientes ADR-0012 e implementacion de Fase 6   |
 | 2   | Proveedor SMTP/email                                     | 6    | SMTP configurable; desarrollo en modo log                                                              |
 | 3   | Identidad anonima del ponente para editar propuesta      | 8    | Token secreto y temporal enviado por email                                                             |
 | 4   | Crear actividad al aprobar propuesta                     | 8    | No automatico; accion manual posterior                                                                 |
