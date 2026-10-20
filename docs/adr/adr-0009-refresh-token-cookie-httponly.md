@@ -69,6 +69,10 @@ Este ADR deja la eleccion de topologia deliberadamente abierta: no presupone si
 la API y el frontend compartiran dominio registrable. La eleccion, su
 recomendacion y las decisiones derivadas estan en `docs/despliegue.md`.
 
+> **Actualizacion 2026-10-20:** topologia resuelta. API y frontend comparten el
+> dominio registrable `sipeg-utp.com`, por lo que el valor desplegado es
+> `AUTH_REFRESH_COOKIE_SAME_SITE=lax`. Ver ADR-0012 y `docs/despliegue.md`.
+
 ### Defensa CSRF
 
 Una cookie se envia sola, asi que un endpoint que la consume puede quedar
