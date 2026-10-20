@@ -21,7 +21,12 @@ if [[ -z "$LATEST" ]]; then
 fi
 
 RAW_FILE="$(mktemp)"
+FAILED=1
 cleanup() {
+  if [[ "$FAILED" == "1" ]]; then
+    echo '--- logs del contenedor de verificacion ---' >&2
+    docker logs --tail 50 sipeg-restore-verify 2>&1 || true
+  fi
   rm -f "$RAW_FILE"
   docker rm -f sipeg-restore-verify >/dev/null 2>&1 || true
 }
@@ -37,12 +42,25 @@ docker run -d --name sipeg-restore-verify \
   postgres:18.6-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd \
   >/dev/null
 
-for _ in $(seq 1 30); do
+# El entrypoint arranca un servidor temporal para initdb/CREATE DATABASE y lo
+# apaga antes del definitivo. Exigir dos respuestas consecutivas separadas por
+# un segundo evita confundir ese primer servidor con el final.
+READY=0
+for _ in $(seq 1 60); do
   if docker exec sipeg-restore-verify pg_isready -U postgres -d sipeg_verify >/dev/null 2>&1; then
-    break
+    sleep 1
+    if docker exec sipeg-restore-verify pg_isready -U postgres -d sipeg_verify >/dev/null 2>&1; then
+      READY=1
+      break
+    fi
   fi
   sleep 1
 done
+
+if [[ "$READY" != "1" ]]; then
+  echo 'El contenedor de verificacion no acepto conexiones a tiempo.' >&2
+  exit 1
+fi
 
 docker cp "$RAW_FILE" sipeg-restore-verify:/tmp/restore.dump
 docker exec sipeg-restore-verify \
@@ -58,4 +76,5 @@ if [[ "$MIGRATIONS" -lt 1 ]]; then
   exit 1
 fi
 
+FAILED=0
 echo "restore_verify_ok file=$LATEST migrations=$MIGRATIONS users=$USERS"
