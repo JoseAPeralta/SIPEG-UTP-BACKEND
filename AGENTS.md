@@ -254,11 +254,12 @@ For errors:
 - Stack: proveedor de auth modular con env vars **library-agnostic** (`AUTH_*`). Internamente usa Better Auth 1.7.x + plugin JWT. Si se reemplaza el proveedor, las env vars no cambian.
 - Password hashing: **Argon2id** (OWASP Password Storage Cheat Sheet, parametros `t=2, m=19 MiB, p=1`). Configurable opcionalmente via `AUTH_ARGON2_MEMORY_COST`, `AUTH_ARGON2_TIME_COST`, `AUTH_ARGON2_PARALLELISM`.
 - Sesiones del proveedor = refresh tokens (vida configurable via `AUTH_REFRESH_TTL`, default 7 dias). Rotacion automatica, revocacion server-side inmediata via delete en `sessions`. Expiracion absoluta: `disableSessionRefresh: true` evita el sliding del proveedor y la rotacion conserva `expiresAt`.
-- Access tokens: JWT EdDSA Ed25519 (vida 15 min por defecto), firmados con la clave privada del JWKS almacenado en la tabla `jwks`. Validados contra `/api/auth/jwks` cacheado con jose (`createRemoteJWKSet`). La API privada es stateless.
+- Access tokens: JWT EdDSA Ed25519 (vida 15 min por defecto), firmados con la clave privada del JWKS almacenado en la tabla `jwks`. Validados contra el endpoint `AUTH_JWKS_URL` cacheado con jose (`createRemoteJWKSet`). Compose usa loopback (`http://127.0.0.1:3000/api/auth/jwks`) para evitar challenges del edge; fuera de Compose, ausente o vacio conserva `/api/auth/jwks` relativo a `AUTH_URL`. La API privada es stateless.
 - Algoritmos JWT permitidos en el verifier: solo `['EdDSA']`. Issuer/Audience validados contra `AUTH_ISSUER`/`AUTH_AUDIENCE` (default = `AUTH_URL`).
 - Variables de entorno relevantes:
   - `AUTH_SECRET` (requerido, >=32 chars) — secreto de Better Auth para cookies y cifrado simetrico
   - `AUTH_URL` (default `http://localhost:3000`)
+  - `AUTH_JWKS_URL` (HTTP(S), opcional; default Docker `http://127.0.0.1:3000/api/auth/jwks`) — compartido por el verificador JWT y el health via `src/config/auth-jwks.ts`. El health mide ese endpoint, no el borde publico; verificar el tunel y el JWKS publico externamente. No cambia issuer/audience.
   - `AUTH_ISSUER`, `AUTH_AUDIENCE` (default = `AUTH_URL`)
   - `AUTH_TOKEN_TTL` (default `15m`), `AUTH_REFRESH_TTL` (default `7d`)
   - `AUTH_EMAIL_VERIFICATION_URL`, `AUTH_PASSWORD_RESET_URL`

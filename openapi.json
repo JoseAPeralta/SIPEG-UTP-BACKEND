@@ -11003,7 +11003,7 @@
           },
           "authJwksReachable": {
             "type": "boolean",
-            "description": "Whether the JWKS endpoint is reachable."
+            "description": "Whether the configured JWKS endpoint is reachable from the API (internal in Docker)."
           }
         },
         "required": [

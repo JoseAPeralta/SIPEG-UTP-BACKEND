@@ -7,6 +7,7 @@ describe('health routes', () => {
     vi.stubEnv('AUTH_SECRET', 'a'.repeat(32));
     vi.stubEnv('DATABASE_URL', 'postgresql://test:test@localhost:5432/test');
     vi.stubEnv('AUTH_URL', 'http://localhost:3000');
+    vi.stubEnv('AUTH_JWKS_URL', undefined);
     vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173');
     vi.stubEnv('AUTH_PASSWORD_RESET_URL', 'http://localhost:5173/reset-password');
     vi.resetModules();
@@ -60,6 +61,43 @@ describe('health routes', () => {
       expect(response.body.data.authJwksReachable).toBe(false);
     },
   );
+
+  it('probes the internal JWKS endpoint while AUTH_URL stays public', async () => {
+    vi.stubEnv('AUTH_URL', 'https://api.sipeg-utp.com');
+    vi.stubEnv('AUTH_JWKS_URL', 'http://127.0.0.1:3000/api/auth/jwks');
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+      return new Response(null, {
+        status: url === 'http://127.0.0.1:3000/api/auth/jwks' ? 200 : 403,
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { app } = await import('../../app.js');
+    const response = await request(app).get('/api/v1/health').expect(200);
+
+    expect(response.body.data.authJwksReachable).toBe(true);
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      'http://127.0.0.1:3000/api/auth/jwks',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(timeoutSpy).toHaveBeenCalledWith(3_000);
+  });
+
+  it('reports false when the configured internal JWKS endpoint fails', async () => {
+    vi.stubEnv('AUTH_JWKS_URL', 'http://127.0.0.1:3000/api/auth/jwks');
+    const fetchMock = vi.fn().mockRejectedValue(new Error('connection refused'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { app } = await import('../../app.js');
+    const response = await request(app).get('/api/v1/health').expect(200);
+
+    expect(response.body.data.authJwksReachable).toBe(false);
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      'http://127.0.0.1:3000/api/auth/jwks',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
 
   it('reports authJwksReachable false and probes with a 3-second timeout when JWKS is unreachable', async () => {
     const timeoutSpy = vi.spyOn(AbortSignal, 'timeout');

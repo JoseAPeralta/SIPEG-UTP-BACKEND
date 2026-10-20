@@ -7,6 +7,7 @@ import {
 } from 'jose';
 
 import { env } from '../config/env.js';
+import { resolveJwksUrl } from '../config/auth-jwks.js';
 import { ApiError } from './ApiError.js';
 
 export interface AuthenticatedTokenPayload extends JWTPayload {
@@ -30,7 +31,7 @@ export interface JwtVerifier {
 }
 
 const buildConfig = (): VerifierConfig => ({
-  jwksUrl: new URL('/api/auth/jwks', env.AUTH_URL).toString(),
+  jwksUrl: resolveJwksUrl(),
   issuer: env.AUTH_ISSUER ?? env.AUTH_URL,
   audience: env.AUTH_AUDIENCE ?? env.AUTH_URL,
 });

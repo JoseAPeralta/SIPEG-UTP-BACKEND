@@ -1,13 +1,13 @@
 import type { RequestHandler } from 'express';
 
 import { env } from '../../config/env.js';
+import { resolveJwksUrl } from '../../config/auth-jwks.js';
 import { successResponse } from '../../utils/response.js';
 import type { HealthStatusResponse } from './health.model.js';
 
 const checkJwks = async (): Promise<boolean> => {
   try {
-    const url = new URL('/api/auth/jwks', env.AUTH_URL).toString();
-    const response = await fetch(url, { signal: AbortSignal.timeout(3_000) });
+    const response = await fetch(resolveJwksUrl(), { signal: AbortSignal.timeout(3_000) });
     return response.ok;
   } catch {
     return false;

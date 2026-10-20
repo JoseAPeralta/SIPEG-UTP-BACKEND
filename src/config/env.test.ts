@@ -6,6 +6,48 @@ const importEnv = async () => {
   return import('./env.js');
 };
 
+describe('env AUTH_JWKS_URL', () => {
+  beforeEach(() => {
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('AUTH_SECRET', 'a'.repeat(32));
+    vi.stubEnv('CORS_ORIGIN', 'http://localhost:5173');
+    vi.stubEnv('AUTH_PASSWORD_RESET_URL', 'http://localhost:5173/reset-password');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it.each(['http://127.0.0.1:3000/api/auth/jwks', 'https://auth.example.com/keys'])(
+    'accepts the HTTP(S) endpoint %s',
+    async (url) => {
+      vi.stubEnv('AUTH_JWKS_URL', url);
+
+      const { env } = await importEnv();
+
+      expect(env.AUTH_JWKS_URL).toBe(url);
+    },
+  );
+
+  it.each([undefined, ''])('treats %s as an absent endpoint', async (value) => {
+    vi.stubEnv('AUTH_JWKS_URL', value);
+
+    const { env } = await importEnv();
+
+    expect(env.AUTH_JWKS_URL).toBeUndefined();
+  });
+
+  it.each(['not-a-url', '/api/auth/jwks', 'file:///tmp/jwks', 'ftp://example.com/keys'])(
+    'rejects an invalid or non-HTTP(S) endpoint %s',
+    async (url) => {
+      vi.stubEnv('AUTH_JWKS_URL', url);
+
+      await expect(importEnv().then(() => undefined)).rejects.toThrow(/AUTH_JWKS_URL/);
+    },
+  );
+});
+
 describe('env optional empty strings', () => {
   afterEach(() => {
     vi.unstubAllEnvs();

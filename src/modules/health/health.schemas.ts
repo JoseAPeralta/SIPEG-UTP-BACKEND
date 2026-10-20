@@ -7,7 +7,10 @@ export const healthResponseSchema = z
     status: z.literal('ok').meta({ description: 'Service liveness marker.' }),
     service: z.string().meta({ description: 'Service name.' }),
     environment: z.string().meta({ description: 'Runtime environment.' }),
-    authJwksReachable: z.boolean().meta({ description: 'Whether the JWKS endpoint is reachable.' }),
+    authJwksReachable: z.boolean().meta({
+      description:
+        'Whether the configured JWKS endpoint is reachable from the API (internal in Docker).',
+    }),
   })
   .meta({
     id: 'HealthStatus',
