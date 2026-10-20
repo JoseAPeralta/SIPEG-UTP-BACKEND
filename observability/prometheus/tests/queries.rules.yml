@@ -1,0 +1,33 @@
+groups:
+  - name: sipeg-test-queries
+    interval: 1m
+    rules:
+      - record: test_http_5xx_ratio
+        expr: >-
+          (100 * sum(rate(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health",status_code=~"5.."}[5m])) / clamp_min(sum(rate(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])), 0.000000001)) and on() (sum(increase(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])) > 20)
+
+      - record: test_http_p95
+        expr: >-
+          histogram_quantile(0.95, sum by (le) (rate(sipeg_http_request_duration_seconds_bucket{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])))
+
+      - record: test_target_down
+        expr: >-
+          up{job=~"node|sipeg-api|postgres|docker|blackbox|blackbox-internal|blackbox-public|prometheus"} == bool 0
+
+      - record: test_target_absent
+        expr: >-
+          label_replace(absent(up{job="node"}), "job", "node", "", "") or label_replace(absent(up{job="sipeg-api"}), "job", "sipeg-api", "", "") or label_replace(absent(up{job="postgres"}), "job", "postgres", "", "") or label_replace(absent(up{job="docker"}), "job", "docker", "", "") or label_replace(absent(up{job="blackbox"}), "job", "blackbox", "", "") or label_replace(absent(up{job="blackbox-internal"}), "job", "blackbox-internal", "", "") or label_replace(absent(up{job="blackbox-public"}), "job", "blackbox-public", "", "") or label_replace(absent(up{job="prometheus"}), "job", "prometheus", "", "")
+
+      - record: test_host_network_age
+        expr: time() - sipeg_host_network_collection_timestamp_seconds
+
+      - record: test_postgres_connections_ratio
+        expr: >-
+          100 * sum(pg_stat_database_numbackends{job="postgres"}) / clamp_min(max(pg_settings_max_connections{job="postgres"}), 1)
+
+      - record: test_docker_not_running
+        expr: >-
+          count by (project, service) (docker_container_status_state_code{job="docker",service!~"migrate|seed"} != 1) > 0
+
+      - record: test_probe_success
+        expr: probe_success{job=~"blackbox-internal|blackbox-public"}
