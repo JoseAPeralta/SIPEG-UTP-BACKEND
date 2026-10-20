@@ -284,7 +284,7 @@ automatica.
 | Loki                 | `3.7.8`       | `compose.observability.yaml`            | `sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193` |
 | Grafana Alloy        | `v1.20.0`     | `compose.observability.yaml`            | `sha256:f111cce835516c5f99166342be7038496b52ced16667be5a11e19258a3e4cd30` |
 | Grafana              | `13.2.2`      | `compose.observability.yaml`            | `sha256:ac461fb352abc50da10a51c7d02462e9c05488f11f53f14b3ad79a8145f638a0` |
-| docker-socket-proxy  | `v0.5.0`      | `compose.observability.yaml`            | `sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459` |
+| docker-socket-proxy  | `v0.4.2`      | `compose.observability.yaml`            | `sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476` |
 | PostgreSQL           | `18.6-alpine` | `compose.dev.yaml`, `compose.prod.yaml` | `sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd` |
 | Mailpit (desarrollo) | `v1.27.8`     | `compose.dev.yaml`                      | `sha256:6abc8e633df15eaf785cfcf38bae48e66f64beecdc03121e249d0f9ec15f0707` |
 | Cloudflare Tunnel    | `2026.9.3`    | `compose.cloudflare.yaml`               | `sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c` |

@@ -67,7 +67,9 @@ services:
   # /var/run/docker.sock: apuntar al proxy limita el radio de accion a GET sobre
   # /containers, que es lo unico que el pipeline necesita.
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    # v0.4.2 (HAProxy 3.2.4) evita la regresion de /version de v0.5.0 con
+    # HAProxy 3.4.2. El digest fija la imagen (ADR-0007).
+    image: tecnativa/docker-socket-proxy:v0.4.2@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
     environment:
       # Permitido: lo que llaman discovery.docker y loki.source.docker
       # (GET /containers/json, GET /containers/{id}/json, GET /containers/{id}/logs)
@@ -124,8 +126,11 @@ services:
     mem_limit: ${SOCKET_PROXY_MEM_LIMIT:-64m}
     pids_limit: 128
     read_only: true
+    # HAProxy crea /run/haproxy.pid al arrancar. Con el rootfs de solo lectura,
+    # /run debe ser un tmpfs escribible; /tmp ya lo era.
     tmpfs:
       - /tmp
+      - /run:mode=1777
     networks:
       - observability
 
