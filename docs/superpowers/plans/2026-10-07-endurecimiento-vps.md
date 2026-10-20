@@ -873,7 +873,7 @@ Esperado: solo el usuario administrador en el grupo (o ninguno si se usa
 `sudo docker`); socket `660 root docker`. Retirar del grupo a cualquier cuenta
 que no lo necesite: `sudo gpasswd -d <usuario> docker`.
 
-- [ ] **Step 5: Confirmar que el stack quedo sano [VPS]** — pendiente del despliegue del stack
+- [x] **Step 5: Confirmar que el stack quedo sano [VPS]** — verificado durante el despliegue del 2026-10-20: API, PostgreSQL, Loki, Grafana y socket-proxy saludables; health publico 200 con `authJwksReachable: true`
 
 ```bash
 sudo docker compose \
@@ -994,7 +994,7 @@ echo "exit=$?"
 Esperado: `exit=0`. No imprimir la configuracion resuelta (contiene secretos
 ficticios, pero el habito importa).
 
-- [ ] **Step 6: Aplicar en produccion [VPS]** — pendiente del despliegue del stack (VPS nuevo); el `up -d` y el health se ejecutan entonces
+- [x] **Step 6: Aplicar en produccion [VPS]** — aplicado en el despliegue del 2026-10-20 sobre el compose endurecido (tag `2026-10-20-r1`); health publico 200
 
 ```bash
 sudo docker compose \
@@ -1007,7 +1007,7 @@ curl -fsS http://127.0.0.1:3000/api/v1/health
 
 Esperado: health `200` con `authJwksReachable: true`.
 
-- [ ] **Step 7: Verificar limites y read-only efectivos [VPS]** — pendiente del despliegue; requiere contenedores en ejecucion
+- [x] **Step 7: Verificar limites y read-only efectivos [VPS]** — api `readonly=true`, `mem=768m`, `pids=256`; db `mem=1g`, `CapDrop=["ALL"]`
 
 ```bash
 API_ID="$(docker ps -q --filter label=com.docker.compose.service=api)"
@@ -1038,7 +1038,7 @@ git status --short
 - Create: `deploy/backup/sipeg-pg-backup.timer`
 - Create: `deploy/backup/install.sh`
 
-- [x] **Step 1: Crear `deploy/backup/backup.env.example` [repo]**
+- [x] **Step 1: Crear `deploy/backup/backup.env.example` [repo]** — `COMPOSE_FILES` va entre comillas simples: el script hace `source` del archivo y sin comillas bash ejecuta `compose.prod.yaml` como comando (fallo real en el primer backup)
 
 ```env
 # Copiar a /etc/sipeg/backup.env (chmod 600) y completar.
@@ -1113,7 +1113,7 @@ fi
 echo "backup_ok file=$OUT_FILE size=$(stat -c%s "$OUT_FILE")"
 ```
 
-- [x] **Step 3: Crear `deploy/backup/pg-restore-verify.sh` [repo]** — desviacion del plan: la verificacion consulta `"users"` (tabla real del schema, `@@map("users")`), no `"user"`
+- [x] **Step 3: Crear `deploy/backup/pg-restore-verify.sh` [repo]** — desviacion del plan: la verificacion consulta `"users"` (tabla real del schema, `@@map("users")`), no `"user"`. Ademas se corrigio una carrera: el entrypoint de postgres arranca un servidor temporal y lo apaga antes del definitivo, por lo que la espera exige dos `pg_isready` consecutivos; al agotar el tiempo se vuelcan las logs del contenedor antes de borrarlo
 
 ```bash
 #!/usr/bin/env bash
@@ -1264,7 +1264,7 @@ sudo chmod 600 /etc/sipeg/backup.key
 Copiar `/etc/sipeg/backup.key` a un gestor de secretos **fuera del VPS**. Sin
 esa copia, un fallo del VPS deja los backups irrecuperables.
 
-- [ ] **Step 9: Instalar y configurar [VPS]** — diferido al dia del despliegue (el `install.sh` registra y habilita el timer con la config completa; con la demo pendiente el timer fallaria al no existir db)
+- [x] **Step 9: Instalar y configurar [VPS]** — `install.sh` ejecutado: timer habilitado, `backup.env` con los valores del despliegue y watch `sipeg_secrets` cargado (`-w /opt/sipeg-utp-backend/.env.prod`); `COMPOSE_FILES` se comillo a mano por el bug corregido en el artefacto
 
 ```bash
 sudo deploy/backup/install.sh
@@ -1897,7 +1897,7 @@ pnpm run docs:check
 Esperado: todo en verde. Este plan no cambia `src/`, asi que cualquier fallo
 es preexistente o de entorno.
 
-- [ ] **Step 6: Drill de reinicio [VPS]** — diferido al despliegue: el esperado incluye `db`/`api`/observabilidad arriba y health publico
+- [x] **Step 6: Drill de reinicio [VPS]** — reinicio realizado durante la verificacion del despliegue: los servicios volvieron automaticamente y el health siguio en 200; queda la pasada final de `verify.sh` sin fallos al cerrar T9/T10
 
 ```bash
 sudo reboot
