@@ -261,6 +261,13 @@ El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET 
 
 - Password hashing con **Argon2id** (parametros OWASP: `t=2, m=19 MiB, p=1`).
 - Access tokens: JWT EdDSA Ed25519 (15 min) validados contra JWKS cacheado.
+- El verificador y el health consultan `AUTH_JWKS_URL`. En Docker el default es
+  `http://127.0.0.1:3000/api/auth/jwks`, dentro del contenedor de la API, para que
+  Bot Fight Mode u otros challenges del edge no bloqueen la validacion de tokens.
+  `AUTH_URL`, issuer y audience conservan la URL publica. Fuera de Compose, si
+  `AUTH_JWKS_URL` falta o esta vacia, se usa `/api/auth/jwks` relativo a `AUTH_URL`.
+  `authJwksReachable` indica acceso al endpoint configurado; la ruta publica y el
+  tunel se verifican por separado.
 - Refresh tokens: sesiones server-side (`AUTH_REFRESH_TTL`, 7 dias por defecto), expiracion absoluta y revocacion inmediata. Viajan en la cookie `sipeg-refresh` (`HttpOnly`, `Path=/api/v1/auth`, host-only, `Secure` en produccion) y **no** en el cuerpo de la respuesta: asi la sesion se comparte entre pestanas y un XSS no puede leer la credencial. Ver `docs/adr/adr-0009-refresh-token-cookie-httponly.md`.
 - Endpoints principales (`/api/v1/auth/*`):
   - `POST /auth/login` — devuelve el access token EdDSA en el cuerpo y el refresh token en la cookie `sipeg-refresh`; credenciales invalidas o cuenta desactivada responden 401 generico (`Invalid email or password`) sin revelar si el correo existe; una cuenta no verificada responde 403; limite de 5 intentos/min por IP.
@@ -280,6 +287,7 @@ El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET 
 - Variables de entorno (sin prefijo del proveedor):
   - `AUTH_SECRET` (requerido, generar con `openssl rand -base64 32`)
   - `AUTH_URL` (default `http://localhost:3000`)
+  - `AUTH_JWKS_URL` (HTTP(S), opcional; default Docker `http://127.0.0.1:3000/api/auth/jwks`)
   - `AUTH_TOKEN_TTL` (default `15m`)
   - `AUTH_REFRESH_COOKIE_SAME_SITE` (`lax|strict|none`, default `lax`; **obligatoria en produccion**): `lax`/`strict` si la API y el frontend comparten sitio, `none` si estan en sitios distintos, lo que exige HTTPS real
   - `AUTH_REFRESH_TTL` (default `7d`)

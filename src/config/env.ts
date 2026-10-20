@@ -20,6 +20,10 @@ const envSchema = z
     CORS_ORIGIN: z.string().min(1).default('http://localhost:5173'),
     AUTH_SECRET: z.string().min(32, 'AUTH_SECRET must be at least 32 chars.'),
     AUTH_URL: z.string().url().default('http://localhost:3000'),
+    AUTH_JWKS_URL: z.preprocess(
+      (value) => (value === '' ? undefined : value),
+      z.url({ protocol: /^https?$/ }).optional(),
+    ),
     AUTH_ISSUER: optionalNonEmptyString,
     AUTH_AUDIENCE: optionalNonEmptyString,
     AUTH_TOKEN_TTL: ttlSchema.default('15m'),

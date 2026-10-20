@@ -27,6 +27,7 @@ API y frontend comparten el dominio registrable `sipeg-utp.com` aunque usen subd
 ```env
 CORS_ORIGIN=https://sipeg-utp.com
 AUTH_URL=https://api.sipeg-utp.com
+AUTH_JWKS_URL=http://127.0.0.1:3000/api/auth/jwks
 AUTH_REFRESH_COOKIE_SAME_SITE=lax
 ```
 
@@ -610,7 +611,7 @@ services:
 Notas:
 
 - Las redes `sipeg-utp-prod` y `observability` las declaran los overlays base; no se redefinen aquí.
-- El conector no publica puertos y no debe depender del health check de la API: el health público requiere que el túnel ya esté enrutando, lo que crearía una dependencia circular.
+- El conector no publica puertos y arranca independientemente de la API. Con la corrección de JWKS interno, el health y el verificador no dependen del túnel; la ruta pública se comprueba externamente.
 - `GF_SERVER_*` se aplica solo a Grafana y no afecta a desarrollo.
 - Registrar la imagen en el catálogo del ADR-0007 y actualizar el comentario de acceso público de Grafana y el comando de producción en `compose.observability.yaml`.
 
@@ -888,6 +889,8 @@ curl -i https://api.sipeg-utp.com/api/auth/jwks
 
 Expected: health `200` con `data.authJwksReachable: true`; JWKS `200` con claves públicas.
 
+Con `AUTH_JWKS_URL` interno, el campo del health acredita solo la accesibilidad del JWKS configurado desde la API. La segunda petición comprueba por separado la ruta pública y las reglas de Cloudflare para ese cliente; un challenge del edge no queda descartado por el health interno.
+
 - [ ] **Step 3: CORS**
 
 ```bash
@@ -925,7 +928,7 @@ Access-Control-Allow-Credentials: true
 | Error `1033` | Conector del túnel desconectado |
 | Error `502` | Nombre de servicio, puerto interno y redes Docker |
 | Error CORS | `CORS_ORIGIN` frente al origen real del frontend |
-| Health `200`, pero JWKS `false` | DNS/ruta de API y acceso público a `/api/auth/jwks` |
+| Health `200`, pero JWKS `false` | `AUTH_JWKS_URL`, puerto interno y acceso al endpoint configurado; verificar el JWKS público por separado |
 | Correo visible en Mailpit, pero no recibido | SMTP de entrega real |
 | Error TLS del SMTP | STARTTLS, cadena del certificado y `MAIL_HOST` |
 | Alertas visibles en Grafana, pero sin email | SMTP, contact point y política de notificación |
@@ -1111,3 +1114,20 @@ Pendientes:
 - **Tareas 7 y 8:** configurar Tunnel y Access, completar el token privado y desplegar; comprobar la conexión real y las rutas públicas con credenciales válidas.
 - **Tareas 9 y 10:** verificar el despliegue completo y consolidar la documentación y el ADR de la topología.
 - La observabilidad local conserva el pendiente de Alloy y el proxy del socket indicado tras la tarea 4.
+
+## Corrección post-despliegue: JWKS interno (2026-10-19)
+
+El operador confirmó en Security Events que **Bot Fight Mode** aplicaba **Managed Challenge** a `GET /api/auth/jwks` con user-agent `node`. La consulta desde el contenedor devolvía `403` con `cf-mitigated: challenge` en 169 ms, mientras otra petición externa del mismo contenedor devolvía `200`. DNS y salida funcionaban. Bruno obtenía un token al hacer login, pero el verificador no podía descargar las claves para las rutas privadas.
+
+Implementación y verificación local: [plan de JWKS interno](2026-10-19-internal-jwks-url.md).
+
+- [x] Agregar `AUTH_JWKS_URL` opcional, HTTP(S), con vacío equivalente a ausencia y fallback a `/api/auth/jwks` relativo a `AUTH_URL`.
+- [x] Compartir la resolución de URL entre el verificador y el health mediante `src/config/auth-jwks.ts`.
+- [x] Usar `http://127.0.0.1:3000/api/auth/jwks` por defecto en ambos Compose y en `.env.prod.example`.
+- [x] Conservar issuer y audience públicos, algoritmo EdDSA, caché y timeout de health de 3 segundos.
+- [x] Reproducir el challenge y verificar la corrección con un servidor HTTP de pruebas aislado. Cubrir fallback, `refresh()` y rechazo de issuer/audience internos.
+- [x] Verificar localmente: 39 pruebas focalizadas y 1639 de la suite completa aprobadas (9 de integración omitidas); tipos, lint, build, OpenAPI y Compose correctos. Implementación en el commit `9acc05e`.
+- [ ] Actualizar el código en el VPS, usar una etiqueta de imagen nueva y reconstruir las imágenes de API y migración/seed de esa publicación antes de levantar sus dependencias.
+- [ ] Confirmar en el VPS `authJwksReachable: true` y login seguido de una petición protegida desde el navegador.
+
+El health mide el endpoint configurado (loopback en Docker), no el borde público. La ruta pública conserva las reglas de Cloudflare y debe comprobarse externamente. No cambiar `AUTH_URL`, `AUTH_ISSUER` ni `AUTH_AUDIENCE` a loopback. El `.env.prod` existente puede conservarse: Compose aporta el default; si define explícitamente `AUTH_JWKS_URL`, ese valor tiene prioridad y debe revisarse.

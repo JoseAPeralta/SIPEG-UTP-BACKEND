@@ -97,6 +97,7 @@ services:
       TRUSTED_ORIGINS: ${TRUSTED_ORIGINS:-}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
       AUTH_URL: ${AUTH_URL:?AUTH_URL is required}
+      AUTH_JWKS_URL: ${AUTH_JWKS_URL:-http://127.0.0.1:3000/api/auth/jwks}
       AUTH_ISSUER: ${AUTH_ISSUER:-${AUTH_URL}}
       AUTH_AUDIENCE: ${AUTH_AUDIENCE:-${AUTH_URL}}
       AUTH_TOKEN_TTL: ${AUTH_TOKEN_TTL:-15m}

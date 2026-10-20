@@ -1,8 +1,8 @@
 # Overlay de produccion: Cloudflare Tunnel para la API y Grafana.
 # Combinar con compose.prod.yaml y compose.observability.yaml, en ese orden.
 # Las redes las declaran los archivos base; el token vive solo en .env.prod.
-# El conector inicia sin esperar a la API, para que la ruta publica del JWKS
-# pueda estar disponible durante el arranque.
+# El conector inicia independientemente de la API. La verificacion JWT y el
+# health usan el JWKS interno; la ruta publica se comprueba por separado.
 services:
   cloudflared:
     image: cloudflare/cloudflared:2026.9.3@sha256:072c067d25ccbe61d46e18f0d0723255f2bb5304f7317caa95b27031520ff92c

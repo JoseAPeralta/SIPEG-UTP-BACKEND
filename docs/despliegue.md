@@ -37,12 +37,12 @@ Todo lo siguiente es un hecho verificable del repositorio, no una propuesta:
 
 ### Opciones
 
-| Opcion | Descripcion | Coste y operativa | Datos |
-| --- | --- | --- | --- |
-| **A** | Un host con proxy inverso (nginx/Caddy) y subdominios del mismo dominio registrable | Menor coste; un solo lugar que operar, respaldar y asegurar | Todo en la institucion |
-| **B** | Dos hosts separados: API y frontend en equipos distintos | Dos superficies que asegurar, dos pipelines de despliegue | Repartidos |
-| **C** | Plataforma gestionada (Railway, Render, Fly) con dominios distintos | Menor carga operativa; coste variable y proveedor atado | Salen de la institucion |
-| **D** | Opcion A mas CDN o WAF delante del proxy | Mas superficie que asumir; exige verificar la cadena `X-Forwarded-For` | Todo en la institucion |
+| Opcion | Descripcion                                                                         | Coste y operativa                                                      | Datos                   |
+| ------ | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------- |
+| **A**  | Un host con proxy inverso (nginx/Caddy) y subdominios del mismo dominio registrable | Menor coste; un solo lugar que operar, respaldar y asegurar            | Todo en la institucion  |
+| **B**  | Dos hosts separados: API y frontend en equipos distintos                            | Dos superficies que asegurar, dos pipelines de despliegue              | Repartidos              |
+| **C**  | Plataforma gestionada (Railway, Render, Fly) con dominios distintos                 | Menor carga operativa; coste variable y proveedor atado                | Salen de la institucion |
+| **D**  | Opcion A mas CDN o WAF delante del proxy                                            | Mas superficie que asumir; exige verificar la cadena `X-Forwarded-For` | Todo en la institucion  |
 
 ### Criterios para decidir
 
@@ -84,10 +84,10 @@ despliegue.
 `SameSite` no depende del host ni del puerto, sino del **sitio**, es decir del
 dominio registrable (eTLD+1) y del esquema:
 
-| Caso | Ejemplo | Sitio | Valor |
-| --- | --- | --- | --- |
-| Mismo dominio registrable | `api.utp.ac.pa` + `app.utp.ac.pa` | mismo | `lax` |
-| Dominios distintos | `api.sipegutp.com` + `utp.ac.pa` | distinto | `none` |
+| Caso                      | Ejemplo                           | Sitio    | Valor  |
+| ------------------------- | --------------------------------- | -------- | ------ |
+| Mismo dominio registrable | `api.utp.ac.pa` + `app.utp.ac.pa` | mismo    | `lax`  |
+| Dominios distintos        | `api.sipegutp.com` + `utp.ac.pa`  | distinto | `none` |
 
 Con `none` la cookie exige `Secure`, y por tanto **HTTPS real en ambos extremos**.
 `AUTH_REFRESH_COOKIE_SAME_SITE=none` se rechaza fuera de produccion precisamente
@@ -102,24 +102,48 @@ La sesion sobrevive a esa navegacion, pero la cookie no, y el refresh siguiente
 falla con 401. `lax` no cuesta nada aqui: la cookie solo se usa en peticiones
 same-site, que es exactamente lo que ambos valores permiten.
 
+## JWKS interno detras de Cloudflare
+
+El verificador JWT y el health usan `AUTH_JWKS_URL` para descargar las claves.
+Ambos Compose de la API establecen por defecto:
+
+```dotenv
+AUTH_JWKS_URL=http://127.0.0.1:3000/api/auth/jwks
+```
+
+Es el loopback del propio contenedor, no el del VPS ni un hostname publico. Esto
+evita la ida y vuelta por Internet y los challenges de Cloudflare Bot Fight Mode
+que un cliente Node no puede resolver. `AUTH_URL`, `AUTH_ISSUER` y
+`AUTH_AUDIENCE` conservan sus valores publicos; cambiar el transporte del JWKS
+no cambia la identidad de los tokens ni elimina la comprobacion de firmas.
+
+Fuera de Compose, si `AUTH_JWKS_URL` falta o esta vacia, se conserva el endpoint
+`/api/auth/jwks` relativo a `AUTH_URL`. La variable admite solo HTTP(S).
+
+`authJwksReachable` mide la accesibilidad del endpoint configurado con un limite
+de 3 segundos. En Docker no acredita la disponibilidad del tunel ni del JWKS
+publico. Comprobar esa ruta desde fuera y probar una peticion protegida desde
+el navegador; las reglas de Cloudflare siguen aplicandose a clientes externos.
+
 ## Decisiones derivadas
 
 Cada fila queda bloqueada hasta que se elija la opcion de despliegue.
 
-| # | Decision | Depende de | Consecuencia de equivocarse |
-| --- | --- | --- | --- |
-| 1 | Dominio registrable de API y frontend | Opcion | Si difieren, `none` y HTTPS obligatorio |
-| 2 | `AUTH_REFRESH_COOKIE_SAME_SITE` | #1 | Sin esta variable el stack no arranca |
-| 3 | `Secure` de cookies | Entorno | Ya forzado a `true` en produccion |
-| 4 | Frontera confiable y cadena `X-Forwarded-For` | Opcion | Una IP incorrecta en el valor seleccionado por `trust proxy = 1` agrupa mal los limitadores |
-| 5 | `CORS_ORIGIN` y `TRUSTED_ORIGINS` | Origen real del frontend | Origen equivocado bloquea login y verificacion |
-| 6 | `AUTH_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE` | URL publica de la API | Issuer o audience incorrectos invalidan el JWT |
-| 7 | `VITE_API_BASE_URL` | URL publica de la API | El frontend lanza al arrancar |
-| 8 | Emision y renovacion de certificados TLS | Proxy | HTTPS sin renovar rompe la sesion |
-| 9 | Logs de acceso del proxy | Formato compatible con Loki | Se pierde el rastro de 4xx/5xx en frontera |
-| 10 | Backup y restore de Postgres | Topologia | Sin restore probado, un fallo es perdida de datos |
-| 11 | Ejecucion de migraciones por despliegue | Pipeline | `migrate` y `seed` son servicios efimeros en cada despliegue |
-| 12 | Acceso operativo a Grafana | Topologia | Hoy solo por loopback; necesita `root_url` y proxy |
+| #   | Decision                                      | Depende de                  | Consecuencia de equivocarse                                                                 |
+| --- | --------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------- |
+| 1   | Dominio registrable de API y frontend         | Opcion                      | Si difieren, `none` y HTTPS obligatorio                                                     |
+| 2   | `AUTH_REFRESH_COOKIE_SAME_SITE`               | #1                          | Sin esta variable el stack no arranca                                                       |
+| 3   | `Secure` de cookies                           | Entorno                     | Ya forzado a `true` en produccion                                                           |
+| 4   | Frontera confiable y cadena `X-Forwarded-For` | Opcion                      | Una IP incorrecta en el valor seleccionado por `trust proxy = 1` agrupa mal los limitadores |
+| 5   | `CORS_ORIGIN` y `TRUSTED_ORIGINS`             | Origen real del frontend    | Origen equivocado bloquea login y verificacion                                              |
+| 6   | `AUTH_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE`    | URL publica de la API       | Issuer o audience incorrectos invalidan el JWT                                              |
+| 7   | `VITE_API_BASE_URL`                           | URL publica de la API       | El frontend lanza al arrancar                                                               |
+| 8   | Emision y renovacion de certificados TLS      | Proxy                       | HTTPS sin renovar rompe la sesion                                                           |
+| 9   | Logs de acceso del proxy                      | Formato compatible con Loki | Se pierde el rastro de 4xx/5xx en frontera                                                  |
+| 10  | Backup y restore de Postgres                  | Topologia                   | Sin restore probado, un fallo es perdida de datos                                           |
+| 11  | Ejecucion de migraciones por despliegue       | Pipeline                    | `migrate` y `seed` son servicios efimeros en cada despliegue                                |
+| 12  | Acceso operativo a Grafana                    | Topologia                   | Hoy solo por loopback; necesita `root_url` y proxy                                          |
+| 13  | `AUTH_JWKS_URL`                               | Endpoint interno de la API  | Usar el hostname publico expone la validacion JWT a challenges de Cloudflare                |
 
 ## Cuando se tome la decision
 
