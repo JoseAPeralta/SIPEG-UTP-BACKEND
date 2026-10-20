@@ -311,7 +311,7 @@ const { data, error } = await api.GET('/api/v1/activities', {
 });
 ```
 
-El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET /api/auth/jwks`, que consumen la verificacion de tokens y el health check. Todo lo demas bajo `/api/auth/*` responde `404`, de modo que el contrato publico es `/api/v1/*` y toda operacion sensible pasa por sus rate limiters.
+El unico endpoint del proveedor de autenticacion (Better Auth) expuesto es `GET /api/auth/jwks`, que consumen la verificacion de tokens y el health check. Todo lo demas bajo `/api/auth/*` responde `404`, de modo que el contrato publico es `/api/v1/*` y toda operacion sensible pasa por sus rate limiters. JWKS se excluye del limitador interno del proveedor y conserva un limite propio de 100 solicitudes/min por IP aplicado con `express-rate-limit`; el monitoreo periodico debe quedar muy por debajo de ese umbral.
 
 ### Auth
 
