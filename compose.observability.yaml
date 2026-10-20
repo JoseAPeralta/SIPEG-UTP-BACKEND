@@ -243,6 +243,48 @@ services:
     networks:
       - observability
 
+  prometheus:
+    image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=90d'
+      - '--storage.tsdb.retention.size=2GB'
+    volumes:
+      - ./observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    expose:
+      - '9090'
+    restart: unless-stopped
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: ${PROMETHEUS_MEM_LIMIT:-512m}
+    pids_limit: 512
+    networks:
+      - observability
+
+  node-exporter:
+    image: prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0
+    command:
+      - '--path.rootfs=/host'
+    pid: host
+    volumes:
+      - '/:/host:ro,rslave'
+    expose:
+      - '9100'
+    restart: unless-stopped
+    logging: *logging
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: ${NODE_EXPORTER_MEM_LIMIT:-64m}
+    pids_limit: 128
+    networks:
+      - observability
+
   # Alloy solo puede etiquetar los logs de la API si son JSON. En desarrollo
   # compose.dev.yaml activa LOG_PRETTY por defecto (pino-pretty no es JSON), asi
   # que el overlay lo desactiva aqui. En produccion no cambia nada: el logger ya
@@ -258,6 +300,7 @@ volumes:
   loki_data:
   alloy_data:
   grafana_data:
+  prometheus_data:
 
 networks:
   # Red propia del stack: los servicios de la aplicacion no la comparten y

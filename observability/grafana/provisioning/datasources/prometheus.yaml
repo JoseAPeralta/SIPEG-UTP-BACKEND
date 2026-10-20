@@ -1,0 +1,15 @@
+# Datasource Prometheus para metricas de host (SIPEG UTP).
+apiVersion: 1
+prune: true
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    orgId: 1
+    url: http://prometheus:9090
+    isDefault: false
+    editable: false
+    jsonData:
+      manageAlerts: true

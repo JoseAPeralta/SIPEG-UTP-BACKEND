@@ -391,3 +391,69 @@ groups:
                     type: gt
                     params:
                       - 30
+
+  - orgId: 1
+    name: sipeg-host
+    folder: 'SIPEG UTP'
+    interval: 5m
+    rules:
+      - uid: sipeg-disk-full
+        title: 'Host: disco por encima del 80%'
+        condition: B
+        for: 15m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          severity: warning
+        annotations:
+          summary: 'El disco raiz del VPS supera el 80% de uso'
+          description: >-
+            node_filesystem_avail_bytes / node_filesystem_size_bytes por encima
+            del 80% en el filesystem raiz durante 15 minutos. Revisar volumenes
+            Docker, backups locales y retencion de Loki.
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 900
+              to: 0
+            datasourceUid: prometheus
+            queryType: instant
+            model:
+              refId: A
+              instant: true
+              editorMode: code
+              expr: >-
+                100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+                / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})
+              datasource:
+                type: prometheus
+                uid: prometheus
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            queryType: ''
+            model:
+              refId: B
+              type: classic_conditions
+              expression: A
+              datasource:
+                type: __expr__
+                uid: __expr__
+              conditions:
+                - type: query
+                  query:
+                    params:
+                      - A
+                    reducer:
+                      type: last
+                      params: []
+                    operator:
+                      type: and
+                    evaluator:
+                      type: gt
+                      params:
+                        - 80
