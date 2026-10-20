@@ -178,7 +178,10 @@ services:
   # caida no siga presentando datos antiguos como actuales.
   telegraf:
     image: telegraf:1.40.2@sha256:aedc74ac64c623b6e6760545a8ff56a63b99a798bba3d361279a2887642798cf
-    command: ['--config', '/etc/telegraf/telegraf.conf']
+    # La imagen lee /etc/telegraf/telegraf.conf por defecto. No sobrescribir
+    # `command`: el entrypoint espera `telegraf` y `--config` termina en 127.
+    # Ejecutar como `telegraf` evita setcap/setpriv con `cap_drop: ALL`.
+    user: 'telegraf:telegraf'
     volumes:
       - ./observability/telegraf/telegraf.conf:/etc/telegraf/telegraf.conf:ro
     expose:
@@ -195,7 +198,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    mem_limit: ${TELEGRAF_MEM_LIMIT:-128m}
+    mem_limit: ${TELEGRAF_MEM_LIMIT:-256m}
     pids_limit: 128
     networks:
       - metrics
@@ -294,7 +297,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    mem_limit: ${GRAFANA_MEM_LIMIT:-512m}
+    mem_limit: ${GRAFANA_MEM_LIMIT:-1g}
     cpus: ${GRAFANA_CPUS:-1.0}
     pids_limit: 512
     networks:

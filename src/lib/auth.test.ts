@@ -70,6 +70,24 @@ describe('auth instance', () => {
     });
   });
 
+  it('disables the provider limiter on JWKS so continuous monitoring is not throttled', async () => {
+    process.env['NODE_ENV'] = 'test';
+    process.env['AUTH_SECRET'] = 'a'.repeat(32);
+    process.env['DATABASE_URL'] = 'postgresql://test:test@localhost:5432/test';
+    process.env['AUTH_URL'] = 'http://localhost:3000';
+    process.env['AUTH_EMAIL_VERIFICATION_URL'] = 'http://localhost:5173/verify-email';
+    process.env['AUTH_PASSWORD_RESET_URL'] = 'http://localhost:5173/reset-password';
+    vi.resetModules();
+
+    vi.doMock('../config/prisma.js', () => ({
+      getPrismaClient: () => ({}),
+    }));
+
+    const { auth } = await import('./auth.js');
+
+    expect(auth.options.rateLimit?.customRules?.['/jwks']).toBe(false);
+  });
+
   it('silences the internal logger of the provider', async () => {
     process.env['NODE_ENV'] = 'test';
     process.env['AUTH_SECRET'] = 'a'.repeat(32);

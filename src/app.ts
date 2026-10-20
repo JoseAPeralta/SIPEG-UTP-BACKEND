@@ -13,6 +13,7 @@ import { openApiDocument } from './docs/openapi.js';
 import { errorHandler } from './middlewares/error.middleware.js';
 import { createHttpMetricsMiddleware } from './middlewares/httpMetrics.middleware.js';
 import { notFoundHandler } from './middlewares/notFound.middleware.js';
+import { jwksRateLimit } from './middlewares/rateLimit.middleware.js';
 import { apiRoutes } from './routes.js';
 import { requestLogger } from './middlewares/requestLogger.middleware.js';
 import { ApiError } from './utils/ApiError.js';
@@ -65,7 +66,7 @@ app.use(
   }),
 );
 
-app.get('/api/auth/jwks', toNodeHandler(auth));
+app.get('/api/auth/jwks', jwksRateLimit, toNodeHandler(auth));
 app.all('/api/auth/*splat', notFoundHandler);
 
 // Necesario para leer la cookie de refresco en /api/v1/auth. `cookie-parser` no

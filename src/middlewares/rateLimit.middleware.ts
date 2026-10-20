@@ -142,6 +142,12 @@ export const resetPasswordRateLimit = authRateLimit({
   name: 'reset_password',
 });
 
+export const jwksRateLimit = authRateLimit({
+  windowMs: 60_000,
+  max: 100,
+  name: 'jwks.ip',
+});
+
 export const emailVerificationRateLimit = authRateLimit({
   windowMs: 60_000,
   max: 5,

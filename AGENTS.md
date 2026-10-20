@@ -277,7 +277,7 @@ For errors:
   - Verify email: 5/min por IP
   - Change password: 5/min por usuario autenticado (o IP si no hay usuario)
   - El email de la llave se normaliza (`trim().toLowerCase()`, maximo 254 chars); sin email cae a la llave por IP
-  - Better Auth rate limit global: 100/min (configurable)
+  - Better Auth rate limit global: 100/min (configurable), excepto `/jwks`: excluido del proveedor y protegido por `express-rate-limit` a 100/min por IP
 - `src/lib/auth.ts` es la unica instancia del proveedor.
 - `src/lib/password.ts` centraliza hashing Argon2id (usado por el proveedor via `password.hash`/`password.verify`).
 - `src/lib/email.ts` es el transporte SMTP comun; `src/modules/auth/auth.email.ts` contiene las plantillas de identidad. Produccion exige `MAIL_HOST`/`MAIL_FROM`; `MAIL_USER` y `MAIL_PASSWORD` se configuran juntos. Nunca loguear destinatarios, enlaces ni tokens.

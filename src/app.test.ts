@@ -215,6 +215,22 @@ describe('Better Auth native surface', () => {
     expect(response.body).toEqual({ keys: [] });
   });
 
+  it('rate limits JWKS by IP before the provider handler', async () => {
+    const { app } = await loadApp();
+
+    for (let index = 0; index < 100; index += 1) {
+      await request(app).get('/api/auth/jwks').expect(200);
+    }
+
+    const response = await request(app).get('/api/auth/jwks').expect(429);
+
+    expect(response.body).toEqual({
+      success: false,
+      message: 'Too many requests, please try again later.',
+      errors: [],
+    });
+  }, 15_000);
+
   it.each([
     ['post', '/api/auth/request-password-reset'],
     ['post', '/api/auth/reset-password'],

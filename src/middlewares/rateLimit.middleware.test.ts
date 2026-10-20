@@ -184,6 +184,29 @@ describe('rate limit middleware', () => {
     expect((next.mock.calls[0]?.[0] as ApiError | undefined)?.statusCode).toBe(429);
   });
 
+  it('protects JWKS with a 100 requests per minute bucket keyed by IP', async () => {
+    vi.resetModules();
+    const captured: Array<{
+      windowMs?: number;
+      limit?: number;
+      keyGenerator?: (req: Request) => string;
+    }> = [];
+    vi.doMock('express-rate-limit', () => ({
+      default: vi.fn((options) => {
+        captured.push(options);
+        return () => {};
+      }),
+      ipKeyGenerator: (ip: string) => ip,
+    }));
+    const { jwksRateLimit } = await import('./rateLimit.middleware.js');
+
+    jwksRateLimit(buildReq({ ip: '::ffff:1.2.3.4' }), buildRes(), vi.fn());
+
+    const jwks = captured.find((options) => options.limit === 100);
+    expect(jwks?.windowMs).toBe(60_000);
+    expect(jwks?.keyGenerator?.(buildReq({ ip: '::ffff:1.2.3.4' }))).toBe('ip:1.2.3.4');
+  });
+
   it('keys the refresh limiter by session so two tabs do not share a bucket', async () => {
     vi.resetModules();
     const keys: string[] = [];
