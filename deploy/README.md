@@ -15,18 +15,118 @@ sudo deploy/host/verify.sh
 
 Componentes individuales de `deploy/host/install.sh`:
 
-| Componente | Que aplica |
-| --- | --- |
-| `ssh` | Directivas SSH y jail de fail2ban |
-| `firewall` | UFW (deny incoming, allow outgoing, SSH limitado) |
-| `patches` | unattended-upgrades, needrestart y source de apt de Docker (`resolute`) |
-| `kernel` | sysctl, limites de core y journald |
-| `docker` | `daemon.json` y reinicio del daemon |
-| `sudo` | Politica de sudo |
-| `audit` | Reglas de auditd (incluye watch sobre `.env.prod`) |
+| Componente | Que aplica                                                                               |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `ssh`      | Directivas SSH y jail de fail2ban                                                        |
+| `firewall` | UFW (deny incoming, allow outgoing, SSH limitado)                                        |
+| `patches`  | unattended-upgrades, needrestart y source de apt de Docker (`resolute`)                  |
+| `kernel`   | sysctl, limites de core y journald                                                       |
+| `docker`   | `daemon.json` y reinicio del daemon                                                      |
+| `sudo`     | Politica de sudo                                                                         |
+| `audit`    | Reglas de auditd (incluye watch sobre `.env.prod`)                                       |
+| `metrics`  | Usuario `sipeg-metrics`, recolector de red del host, directorio textfile y timer de 60 s |
 
 `DRY_RUN=1` imprime las acciones sin aplicarlas. Cada archivo sobrescrito se
 respalda en `/var/backups/sipeg-hardening/<timestamp>/`.
+
+## Despliegue de metricas (Prometheus y exportadores)
+
+Orden exacto en el VPS para la primera aplicacion o para actualizar el stack de
+metricas. No imprimir `.env.prod` ni sus valores; revisarlo con el editor o el
+gestor de secretos.
+
+1. Revisar `.env.prod` y confirmar que existen `HOST_METRICS_DIR` (produccion:
+   `/var/lib/sipeg-node-exporter/textfile`), `POSTGRES_MONITOR_USER`,
+   `POSTGRES_MONITOR_PASSWORD_FILE` (ruta del HOST, fuera de Git), los limites
+   `POSTGRES_EXPORTER_MEM_LIMIT`, `TELEGRAF_MEM_LIMIT`,
+   `BLACKBOX_EXPORTER_MEM_LIMIT`, `PROMETHEUS_MEM_LIMIT`,
+   `NODE_EXPORTER_MEM_LIMIT`, `API_MEM_LIMIT` y un `IMAGE_TAG` nuevo. Confirmar
+   permisos del archivo:
+
+   ```bash
+   stat -c '%a %U:%G' .env.prod
+   ```
+
+2. Instalar el recolector de red del host **antes** de recrear Node Exporter:
+
+   ```bash
+   sudo deploy/host/install.sh metrics
+   ```
+
+3. Aprovisionar el rol de solo lectura de PostgreSQL. Crea el secreto si falta y
+   no imprime la contrasena:
+
+   ```bash
+   sudo deploy/observability/provision-postgres-monitor.sh
+   ```
+
+4. Validar la configuracion combinada sin imprimir secretos:
+
+   ```bash
+   docker compose \
+     -f compose.prod.yaml \
+     -f compose.observability.yaml \
+     -f compose.cloudflare.yaml \
+     --env-file .env.prod \
+     config --quiet
+   ```
+
+5. Levantar con `IMAGE_TAG` nuevo. La primera aplicacion puede recrear `db`
+   (nueva red `postgres-metrics`), `api` (listener `9464` y red `metrics`),
+   `prometheus` (nuevos scrapes), `alloy` y `docker-socket-proxy` (red
+   `docker-api`) y `node-exporter` (textfile). Prever una ventana de
+   mantenimiento breve: `db` y `api` se reinician.
+
+   ```bash
+   docker compose \
+     -f compose.prod.yaml \
+     -f compose.observability.yaml \
+     -f compose.cloudflare.yaml \
+     --env-file .env.prod \
+     up -d
+   ```
+
+6. Verificar servicios, targets y datos:
+
+   ```bash
+   docker compose \
+     -f compose.prod.yaml \
+     -f compose.observability.yaml \
+     -f compose.cloudflare.yaml \
+     --env-file .env.prod \
+     ps -a
+   pnpm run observability:check -- --metrics --window 10
+   docker compose \
+     -f compose.prod.yaml \
+     -f compose.observability.yaml \
+     -f compose.cloudflare.yaml \
+     --env-file .env.prod \
+     run --rm --no-deps --entrypoint /bin/promtool prometheus \
+     check config /etc/prometheus/prometheus.yml
+   docker run --rm \
+     -v "$PWD/observability/prometheus:/etc/prometheus:ro" \
+     --entrypoint /bin/promtool prom/prometheus:v3.15.0 \
+     test rules /etc/prometheus/tests/queries.test.yml
+   ```
+
+   En Grafana, comprobar que los 8 jobs estan `up` y que los 7 dashboards
+   muestran datos. Registrar la recepcion y la resolucion de una alerta de
+   prueba controlada. El detalle de `up`, `pg_up`, `probe_success` y datos
+   ausentes esta en `observability/README.md`.
+
+7. Reversion: restaurar el `IMAGE_TAG` y la configuracion Compose anteriores;
+   retirar los servicios y reglas nuevos (dashboards de Prometheus y
+   `metrics.yaml`) conservando los volumenes `prometheus_data`, `grafana_data`,
+   `loki_data` y el volumen de PostgreSQL; y desactivar el timer del recolector
+   de red:
+
+   ```bash
+   sudo systemctl disable --now sipeg-host-network-metrics.timer
+   ```
+
+   No borrar volumenes ni el secreto de monitorizacion durante la reversion. El
+   `IMAGE_TAG` es obligatorio y no se reutiliza para codigo distinto. Ver
+   `observability/README.md` y `docs/adr/adr-0014-prometheus-metrics-and-dashboards.md`.
 
 ## Backups
 
@@ -76,16 +176,16 @@ docker compose -f compose.prod.yaml -f compose.observability.yaml \
 
 ## Rotacion de secretos
 
-| Secreto | Efecto de rotarlo | Procedimiento |
-| --- | --- | --- |
-| `AUTH_SECRET` | Invalida cookies del proveedor; cierra sesiones | Editar `.env.prod`, `up -d api` |
-| `AUTH` (claves JWKS) | No se rota a mano: lo gestiona la app | Reiniciar `api` |
-| `POSTGRES_PASSWORD` | Exige cambiarla tambien en PostgreSQL | `ALTER USER` + `.env.prod` + `up -d` |
-| `LOG_PSEUDONYMIZATION_KEY` | Corta la correlacion de pseudonimos previos | Editar `.env.prod`, `up -d api` |
-| `GRAFANA_SECRET_KEY` | Invalida sesiones y ajustes cifrados de Grafana | Editar `.env.prod`, recrear Grafana |
-| `GRAFANA_ADMIN_PASSWORD` | Solo aplica con volumen vacio | Cambiar desde la UI |
-| `CLOUDFLARE_TUNNEL_TOKEN` | Corta el tunel hasta reiniciar `cloudflared` | Rotar en Cloudflare, `.env.prod`, `up -d cloudflared` |
-| `backup.key` | Los backups previos dejan de descifrarse | Regenerar y re-cifrar; conservar la anterior |
+| Secreto                    | Efecto de rotarlo                               | Procedimiento                                         |
+| -------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| `AUTH_SECRET`              | Invalida cookies del proveedor; cierra sesiones | Editar `.env.prod`, `up -d api`                       |
+| `AUTH` (claves JWKS)       | No se rota a mano: lo gestiona la app           | Reiniciar `api`                                       |
+| `POSTGRES_PASSWORD`        | Exige cambiarla tambien en PostgreSQL           | `ALTER USER` + `.env.prod` + `up -d`                  |
+| `LOG_PSEUDONYMIZATION_KEY` | Corta la correlacion de pseudonimos previos     | Editar `.env.prod`, `up -d api`                       |
+| `GRAFANA_SECRET_KEY`       | Invalida sesiones y ajustes cifrados de Grafana | Editar `.env.prod`, recrear Grafana                   |
+| `GRAFANA_ADMIN_PASSWORD`   | Solo aplica con volumen vacio                   | Cambiar desde la UI                                   |
+| `CLOUDFLARE_TUNNEL_TOKEN`  | Corta el tunel hasta reiniciar `cloudflared`    | Rotar en Cloudflare, `.env.prod`, `up -d cloudflared` |
+| `backup.key`               | Los backups previos dejan de descifrarse        | Regenerar y re-cifrar; conservar la anterior          |
 
 ## Frontera Cloudflare
 

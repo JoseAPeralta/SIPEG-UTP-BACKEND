@@ -157,6 +157,23 @@ instalador idempotente y verificable:
   advierte "Old style watch rules are slower". Migrar a
   `-a always,exit -F path=` queda como mejora futura.
 
+### Métricas del host y presupuesto (2026-10-20)
+
+El componente `metrics` de `deploy/host/install.sh` crea el usuario y grupo sin
+privilegios `sipeg-metrics`, instala el recolector de red en
+`/usr/local/libexec/sipeg/collect-network.sh` y habilita el timer
+`sipeg-host-network-metrics.timer` cada 60 segundos. El recolector escribe de
+forma atómica el archivo `sipeg-host-network.prom` en
+`/var/lib/sipeg-node-exporter/textfile`, propiedad de `sipeg-metrics` y legible
+por Node Exporter a traves del bind mount de solo lectura
+(`HOST_METRICS_DIR`). El archivo no se crea ni se edita a mano.
+
+PostgreSQL Exporter, Telegraf y Blackbox Exporter agregan un presupuesto de
+**256 MiB** de techos de memoria (64 + 128 + 64 MiB), que se suma al consumo
+existente. Las cifras son cotas, no reservas, y deben validarse durante 48–72
+horas. Los detalles de recolección, dashboards y alertas estan en ADR-0014 y
+`observability/README.md`.
+
 ## Backlog De Mejoras Futuras
 
 Sugerencias de Lynis y Docker Bench revisadas y no aplicadas en esta fase:

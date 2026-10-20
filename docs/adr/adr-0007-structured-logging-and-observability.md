@@ -515,3 +515,17 @@ cumplir, para que no se introduzca en silencio un fallo de seguridad:
 - **REF-004**: Pino v10, Grafana Alloy, Loki (retencion, cardinalidad,
   autenticacion) y Grafana Alerting.
 - **REF-005**: Docker `local` logging driver.
+
+## Actualización 2026-10-20
+
+La decision de metricas se registra en
+`docs/adr/adr-0014-prometheus-metrics-and-dashboards.md`, que complementa este
+ADR sin reemplazarlo. Prometheus ya existia; se incorporaron PostgreSQL Exporter,
+Telegraf y Blackbox Exporter, y la API expone un listener privado de metricas en
+`9464`. Los siete dashboards de Prometheus se provisionan en la misma carpeta
+`SIPEG UTP` y las alertas de metricas viven en
+`observability/grafana/provisioning/alerting/metrics.yaml`, separadas de las
+reglas de Loki de `rules.yaml`. La tabla historica de imagenes fijadas de este
+ADR se conserva sin cambios; las imagenes nuevas siguen la misma politica
+`repo:tag@sha256:digest` y su inventario operativo esta en
+`observability/README.md`.
