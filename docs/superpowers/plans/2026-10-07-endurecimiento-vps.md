@@ -1501,7 +1501,7 @@ pendiente.
 - Modify: `observability/grafana/provisioning/alerting/rules.yaml`
 - Modify: `.env.prod.example`
 
-- [ ] **Step 1: Obtener tag y digest vigentes [operador]**
+- [x] **Step 1: Obtener tag y digest vigentes [operador]** — `prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e` y `prom/node-exporter:v1.12.1@sha256:1b4e4438faca4dd7e001dd445d161a4a2091b0fededa84093b3a8dfeae1f1be0` (estables, verificados en Docker Hub)
 
 ```bash
 docker buildx imagetools inspect prom/prometheus:latest
@@ -1511,7 +1511,7 @@ docker buildx imagetools inspect prom/node-exporter:latest
 Elegir una version estable publicada (no `latest`) y anotar tag + digest. La
 politica del ADR-0007 exige `repo:tag@sha256:...`.
 
-- [ ] **Step 2: Crear `observability/prometheus/prometheus.yml` [repo]**
+- [x] **Step 2: Crear `observability/prometheus/prometheus.yml` [repo]**
 
 ```yaml
 global:
@@ -1523,7 +1523,7 @@ scrape_configs:
       - targets: ['node-exporter:9100']
 ```
 
-- [ ] **Step 3: Agregar servicios a `compose.observability.yaml` [repo]**
+- [x] **Step 3: Agregar servicios a `compose.observability.yaml` [repo]** — prometheus (retencion 90d/2GB, volumen `prometheus_data`, 512m) y node-exporter (`pid: host`, `/:/host:ro,rslave`, 64m); `compose config --quiet` valida
 
 Reemplazar `<TAG_PROMETHEUS>` y `<TAG_NODE_EXPORTER>` por los valores del
 Step 1:
@@ -1574,7 +1574,7 @@ Step 1:
 
 Agregar `prometheus_data:` al bloque `volumes:`.
 
-- [ ] **Step 4: Crear el datasource `prometheus.yaml` [repo]**
+- [x] **Step 4: Crear el datasource `prometheus.yaml` [repo]** — uid `prometheus`, `http://prometheus:9090`, `isDefault: false` (Loki sigue por defecto)
 
 ```yaml
 # Datasource Prometheus para metricas de host (SIPEG UTP).
@@ -1594,7 +1594,7 @@ datasources:
       manageAlerts: true
 ```
 
-- [ ] **Step 5: Agregar la regla de disco a `rules.yaml` [repo]**
+- [x] **Step 5: Agregar la regla de disco a `rules.yaml` [repo]** — grupo `sipeg-host` con `sipeg-disk-full` (>80% durante 15m). Riesgo a verificar en el despliegue: con `--path.rootfs=/host` el label `mountpoint` puede ser `/host` en vez de `/`; como `noDataState` es OK, si el query no devuelve datos la alerta no dispara nunca
 
 Agregar un segundo grupo al final de `groups:`:
 
@@ -1666,7 +1666,7 @@ Agregar un segundo grupo al final de `groups:`:
                         - 80
 ```
 
-- [ ] **Step 6: Documentar variables [repo]**
+- [x] **Step 6: Documentar variables [repo]** — `PROMETHEUS_MEM_LIMIT=512m` y `NODE_EXPORTER_MEM_LIMIT=64m` anadidas a `.env.prod.example`
 
 En `.env.prod.example`:
 
