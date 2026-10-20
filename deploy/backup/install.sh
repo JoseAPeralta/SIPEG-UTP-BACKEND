@@ -23,5 +23,5 @@ fi
 
 systemctl daemon-reload
 systemd-analyze verify /etc/systemd/system/sipeg-pg-backup.service /etc/systemd/system/sipeg-pg-backup.timer
-systemctl enable sipeg-pg-backup.timer
+systemctl enable --now sipeg-pg-backup.timer
 echo 'Backup instalado. Iniciar una vez a mano: systemctl start sipeg-pg-backup.service'

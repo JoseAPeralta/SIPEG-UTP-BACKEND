@@ -1212,7 +1212,7 @@ RandomizedDelaySec=300
 WantedBy=timers.target
 ```
 
-- [x] **Step 6: Crear `deploy/backup/install.sh` [repo]**
+- [x] **Step 6: Crear `deploy/backup/install.sh` [repo]** — correccion post-instalacion: `systemctl enable --now`, porque `enable` solo crea el symlink y el timer queda inactivo hasta el proximo reinicio (detectado en el VPS: `is-enabled=enabled` pero `list-timers` en 0)
 
 ```bash
 #!/usr/bin/env bash
@@ -1274,7 +1274,7 @@ sudo nano /etc/sipeg/backup.env
 Ajustar `COMPOSE_DIR`, `COMPOSE_FILES` (quitar `compose.cloudflare.yaml` si el
 overlay aun no existe) y `OFFSITE_CMD`.
 
-- [ ] **Step 10: Ejecutar el primer backup y verificar [VPS]** — diferido al despliegue (requiere contenedor db con pg_dump)
+- [x] **Step 10: Ejecutar el primer backup y verificar [VPS]** — `backup_ok` (94.9 kB cifrado, permisos 600) y `restore_verify_ok … migrations=18 users=2`
 
 ```bash
 sudo systemctl start sipeg-pg-backup.service
