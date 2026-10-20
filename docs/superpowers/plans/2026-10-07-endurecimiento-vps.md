@@ -1871,7 +1871,7 @@ Revisar el `Hardening index` y las sugerencias. No aplicar sugerencias que
 contradigan este plan (por ejemplo, deshabilitar Docker o cambiar la politica
 de claves SSH); anotar el resto como mejoras futuras.
 
-- [x] **Step 4: Auditoria de Docker Bench (una sola ejecucion) [VPS]** — 74 checks, 37 PASS. Requiere `-e DOCKER_API_VERSION=1.44` (la imagen trae CLI 18.06/API 1.38 y el daemon API 1.56 exige minimo 1.40) y montar `/usr/lib/systemd`. Ajustes derivados: watches `sipeg_docker` sobre `docker.service`, `docker.socket` y `/etc/default/docker`, y `"userland-proxy": false`; imagen `cloudflare/cloudflared:latest` eliminada. Riesgos aceptados para el ADR: particiones separadas, `/var/lib/docker`, userns-remap, plugin de autorizacion, healthchecks de imagenes oficiales
+- [x] **Step 4: Auditoria de Docker Bench (una sola ejecucion) [VPS]** — 74 checks, 37 PASS. Requiere `-e DOCKER_API_VERSION=1.44` (la imagen trae CLI 18.06/API 1.38 y el daemon API 1.56 exige minimo 1.40) y montar `/usr/lib/systemd`. Ajustes derivados: watches `sipeg_docker` sobre `docker.service`, `docker.socket` y `/etc/default/docker`, y `"userland-proxy": false`; imagen `cloudflare/cloudflared:latest` eliminada. Riesgos aceptados para el ADR: particiones separadas, `/var/lib/docker`, userns-remap, plugin de autorizacion, healthchecks de imagenes oficiales. Aplicado en VPS: 11 reglas cargadas y `docker ok`; auditd 4.x advierte "Old style watch rules are slower" (sintaxis `-w` legacy, funcional; migrar a `-a always,exit -F path=` como mejora futura)
 
 ```bash
 docker run --rm --net host --pid host --userns host --cap-add audit_control \
@@ -1884,7 +1884,7 @@ docker run --rm --net host --pid host --userns host --cap-add audit_control \
 Revisar WARN aplicables. La imagen es efimera de diagnostico: la politica de
 digests aplica al stack, no a esta ejecucion puntual.
 
-- [ ] **Step 5: Regresion del repositorio [repo]**
+- [x] **Step 5: Regresion del repositorio [repo]** — `pnpm test` 1623 pasan (9 skip), `typecheck`, `lint` y `build` sin errores, `docs:check` sin drift
 
 ```bash
 pnpm test
@@ -1897,7 +1897,7 @@ pnpm run docs:check
 Esperado: todo en verde. Este plan no cambia `src/`, asi que cualquier fallo
 es preexistente o de entorno.
 
-- [ ] **Step 6: Drill de reinicio [VPS]**
+- [ ] **Step 6: Drill de reinicio [VPS]** — diferido al despliegue: el esperado incluye `db`/`api`/observabilidad arriba y health publico
 
 ```bash
 sudo reboot
