@@ -20,7 +20,7 @@
 | PostgreSQL                | Red Docker `sipeg-utp-prod`, sin puertos publicados |
 | Loki, Alloy y proxy del socket | Red Docker `observability`, sin puertos públicos |
 | Mailpit                   | Solo desarrollo                                    |
-| Correo de producción      | Transporte SMTP real, aún por definir              |
+| Correo de producción      | Brevo (plan gratuito) por SMTP con STARTTLS        |
 
 API y frontend comparten el dominio registrable `sipeg-utp.com` aunque usen subdominios distintos, por lo que la cookie de refresco usa `SameSite=lax`.
 
@@ -36,8 +36,7 @@ El frontend ya usa `credentials: "include"` y expone las rutas `/verify-email` y
 
 - Secretos privados de `.env.prod` (se generan durante la ejecución).
 - Credenciales del ADMIN inicial.
-- Proveedor SMTP resuelto con Brevo; queda completar `MAIL_*` en `.env.prod` y probar la entrega.
-- Correos autorizados en la política de Cloudflare Access para Grafana.
+- Proveedor SMTP resuelto con Brevo y `MAIL_*` completado en `.env.prod`; queda probar la entrega real.
 
 ### Supuesto sobre el correo
 
@@ -667,7 +666,7 @@ Confirmar que el VPS puede abrir conexiones SMTP salientes al proveedor elegido.
 
 Obtener host, puerto, modalidad TLS y credenciales; verificar `sipeg-utp.com`; publicar los registros SPF y DKIM indicados por el proveedor y una política DMARC inicial (`v=DMARC1; p=none`).
 
-- [ ] **Step 3: Completar `MAIL_*`**
+- [x] **Step 3: Completar `MAIL_*`**
 
 Editar `.env.prod`:
 
@@ -693,11 +692,11 @@ Configurar el SMTP de Grafana y un contact point Email; enviar una notificación
 Realizado hasta ahora:
 
 - **Step 1 completado.** El VPS está en la región **Beauharnois (BHS)**, no en una Local Zone. Desde ahí, `openssl s_client -starttls smtp` contra `smtp-relay.brevo.com:587` estableció TLS 1.3 y el certificado validó con `Verified peername: smtp-relay.brevo.com`. Las conexiones SMTP salientes funcionan.
-- **Step 2 completado.** Proveedor elegido: **Brevo (plan gratuito)**, host `smtp-relay.brevo.com`, puerto `587` con STARTTLS (`MAIL_SECURE=false`). Dominio `sipeg-utp.com` autenticado; publicados en Cloudflare los registros de validación de Brevo (código TXT, DKIM y DMARC `v=DMARC1; p=none; rua=mailto:rua@dmarc.brevo.com`), más los CNAME de marca de enlaces e imágenes. Remitente `SIPEG UTP <no-reply@sipeg-utp.com>` autorizado. Clave SMTP generada y la IP pública del VPS autorizada en Brevo.
+- **Step 2 completado.** Proveedor elegido: **Brevo (plan gratuito)**, host `smtp-relay.brevo.com`, puerto `587` con STARTTLS (`MAIL_SECURE=false`). Dominio `sipeg-utp.com` autenticado; publicados en Cloudflare los registros de validación de Brevo (código TXT, DKIM y DMARC `v=DMARC1; p=none; rua=mailto:rua@dmarc.brevo.com`), más los CNAME de marca de enlaces e imágenes. Remitente `SIPEG UTP <no-reply@sipeg-utp.com>` autorizado. Clave SMTP generada; la IP pública del VPS quedó autorizada en Brevo.
+- **Step 3 completado.** `.env.prod` contiene `MAIL_HOST`, `MAIL_PORT=587`, `MAIL_SECURE=false`, `MAIL_USER`, `MAIL_PASSWORD` y `MAIL_FROM` sin campos vacíos. Se verificó su presencia sin imprimir la clave.
 
 Pendiente:
 
-- **Step 3:** completar `MAIL_*` en `.env.prod` (privado).
 - **Step 4:** probar la entrega real con un buzón externo. Se deja para la tarea 8, con la API en ejecución; el plan ya lo ubicaba en ese punto.
 - **Step 5:** SMTP de Grafana, opcional y atado al plan `2026-10-07-endurecimiento-vps.md`.
 
@@ -709,7 +708,7 @@ Pendiente:
 
 ### Workers (frontend)
 
-- [ ] **Step 1: Variable de build**
+- [x] **Step 1: Variable de build**
 
 En el proyecto `sipeg-utp-frontend`: **Settings → Build → Build variables and secrets**, definir:
 
@@ -717,24 +716,24 @@ En el proyecto `sipeg-utp-frontend`: **Settings → Build → Build variables an
 VITE_API_BASE_URL=https://api.sipeg-utp.com
 ```
 
-- [ ] **Step 2: Confirmar build y deploy**
+- [x] **Step 2: Confirmar build y deploy**
 
 | Ajuste | Valor |
 | --- | --- |
 | Build command | `pnpm run build` |
 | Deploy command | `pnpm exec wrangler deploy` |
 
-- [ ] **Step 3: Dominio y redeploy**
+- [x] **Step 3: Dominio y redeploy**
 
 Asociar `sipeg-utp.com` como dominio personalizado del Worker, lanzar un build nuevo y verificar la carga directa y la recarga de `/verify-email` y `/reset-password`.
 
 ### Tunnel y Access
 
-- [ ] **Step 4: Aplicación Access**
+- [x] **Step 4: Aplicación Access**
 
 Crear una aplicación self-hosted para `grafana.sipeg-utp.com`, con política **Allow** limitada a los correos administradores. Anotar Team Name y Application AUD.
 
-- [ ] **Step 5: Rutas publicadas**
+- [x] **Step 5: Rutas publicadas**
 
 En `Networking → Tunnels → sipeg-produccion → Routes`:
 
@@ -745,7 +744,7 @@ En `Networking → Tunnels → sipeg-produccion → Routes`:
 
 Path vacío incluye `/api/v1/*` y `/api/auth/jwks`. Activar **Protect with Access** solo en Grafana.
 
-- [ ] **Step 6: DNS y caché**
+- [x] **Step 6: DNS y caché**
 
 Confirmar los CNAME `api` y `grafana` hacia `<UUID>.cfargotunnel.com` con proxy activado; verificar certificados y **Always Use HTTPS**; crear una regla **Bypass cache** para ambos hostnames:
 
@@ -754,6 +753,28 @@ Confirmar los CNAME `api` y `grafana` hacia `<UUID>.cfargotunnel.com` con proxy 
 ```
 
 Mantener Access y los desafíos interactivos fuera del tráfico normal de la API, incluido su JWKS.
+
+### Progreso de la tarea 7 (2026-10-10)
+
+Realizado:
+
+- **Steps 1-3 completados.** Proyecto `sipeg-utp-frontend` con `VITE_API_BASE_URL=https://api.sipeg-utp.com`, build `pnpm run build`, deploy `pnpm exec wrangler deploy` y `sipeg-utp.com` asociado como dominio personalizado del Worker.
+- **Step 4 completado.** Aplicación Access self-hosted para `grafana.sipeg-utp.com` con política **Allow** limitada a correos administradores. Team name: `sipeg`.
+- **Step 5 completado.** Rutas publicadas `api.sipeg-utp.com` → `http://api:3000` y `grafana.sipeg-utp.com` → `http://grafana:3000`, con `Protect with Access` activo solo en Grafana. El AUD debe confirmarse con Enter para que quede como etiqueta; sin esa confirmación el panel rechaza el guardado.
+- **Step 6 completado.** DNS de `api` y `grafana` resuelve a IPs de Cloudflare, con proxy activo. **Always Use HTTPS** activo en la zona. Regla de caché `Bypass cache - API y Grafana` desplegada con la expresión de los dos hostnames; el formulario no mostraba «Place at» y el orden se gestiona en la lista de reglas.
+
+Verificaciones realizadas:
+
+- `http://api.sipeg-utp.com` y `http://grafana.sipeg-utp.com` responden `301` hacia HTTPS.
+- Certificado TLS válido en ambos: `CN=sipeg-utp.com`, SAN `*.sipeg-utp.com`, emitido por Google Trust Services.
+- `https://grafana.sipeg-utp.com` responde `302` hacia `https://sipeg.cloudflareaccess.com/cdn-cgi/access/login/...`, lo que confirma la aplicación Access y el team name.
+- `https://api.sipeg-utp.com` responde `530` sin redirección a Access. Es el error esperado mientras el conector no corre en el VPS y confirma que la API no está detrás de Access.
+
+Pendiente para la tarea 8:
+
+- Confirmar `200` en `/api/v1/health` y `/api/auth/jwks`.
+- Confirmar `cf-cache-status: BYPASS` o `DYNAMIC` en las respuestas de API y Grafana.
+- Probar en navegador que un correo autorizado entra y uno no autorizado queda bloqueado por Access.
 
 ---
 
