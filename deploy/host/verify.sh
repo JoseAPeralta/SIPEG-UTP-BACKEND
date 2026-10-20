@@ -49,7 +49,7 @@ check 'docker icc desactivado' bash -c 'test "$(docker network inspect bridge -f
 check 'api rootfs read-only' bash -c 'test "$(docker inspect -f "{{.HostConfig.ReadonlyRootfs}}" $(docker ps -q --filter label=com.docker.compose.service=api))" = "true"'
 check 'contact point sipeg-email aplicado' bash -c 'docker exec $(docker ps -q --filter label=com.docker.compose.service=grafana) sh -c "curl -sf -u \"admin:\$GF_SECURITY_ADMIN_PASSWORD\" http://localhost:3000/api/v1/provisioning/contact-points" | grep -q sipeg-email'
 check 'sin puertos fuera de loopback (excepto 22 y DHCP 68)' bash -c 'test -z "$(ss -tulpnH | awk "\$5 !~ /^(127\.|\[::1\])/ && \$5 !~ /:22$/ && \$5 !~ /:68$/")"'
-check 'docker sin puertos publicos fuera de loopback' bash -c 'test -z "$(docker ps --format "{{.Ports}}" | grep -v "127.0.0.1" | grep -v "^$")"'
+check 'docker sin puertos publicos fuera de loopback' bash -c 'test -z "$(docker ps --format "{{.Ports}}" | tr "," "\n" | sed "s/^ *//" | grep -E "^([0-9.]+|\[[0-9a-f:]+\]):" | grep -Ev "^(127\.|\[::1\])")"'
 
 printf '\nResumen: %d PASS, %d FAIL\n' "$PASS" "$FAIL"
 [[ "$FAIL" -eq 0 ]]
