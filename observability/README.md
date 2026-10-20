@@ -774,9 +774,12 @@ En producción se usa el mismo comando con los tres archivos y `--env-file
   y no comprueba PostgreSQL. Los probes deben validar el contenido y `pg_up`
   cubre la base; un 200 aislado no demuestra salud funcional.
 - **Presupuesto de memoria.** Los límites son techos, no reservas. La suma de
-  límites ronda 4,1 GiB sobre una RAM física de 3,7 GiB; el consumo observado de
-  contenedores es ~733 MiB y hay 2,5 GiB disponibles. La calibración posterior
-  debe confirmar que los picos no degradan el host.
+  límites ronda 4,7 GiB sobre una RAM física de 3,7 GiB. En la calibración del
+  2026-10-20 el consumo observado de contenedores era ~1,2 GiB y el host tenía
+  ~2,4 GiB disponibles; Telegraf alcanzó el 95% de su techo anterior y Grafana el
+  99,97%, con eventos `memory.events:max` y memoria en swap. Los techos actuales
+  son 256 MiB para Telegraf y 1 GiB para Grafana; validar los picos y que el host
+  no entre en swap antes de considerarlos definitivos.
 - **Probes desde un solo punto.** Los probes públicos distinguen el origen de
   Cloudflare mientras el VPS esté operativo, pero no sustituyen una observación
   externa independiente.

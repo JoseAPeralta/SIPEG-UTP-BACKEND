@@ -198,7 +198,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    mem_limit: ${TELEGRAF_MEM_LIMIT:-128m}
+    mem_limit: ${TELEGRAF_MEM_LIMIT:-256m}
     pids_limit: 128
     networks:
       - metrics
@@ -297,7 +297,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    mem_limit: ${GRAFANA_MEM_LIMIT:-512m}
+    mem_limit: ${GRAFANA_MEM_LIMIT:-1g}
     cpus: ${GRAFANA_CPUS:-1.0}
     pids_limit: 512
     networks:
