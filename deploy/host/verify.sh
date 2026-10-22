@@ -61,6 +61,7 @@ check 'archivo de red del host presente' test -s /var/lib/sipeg-node-exporter/te
 check_value 'permisos del archivo de red del host' 644 "$(stat -c '%a' /var/lib/sipeg-node-exporter/textfile/sipeg-host-network.prom 2>/dev/null)"
 check 'archivo de red del host actualizado en los ultimos 3 min' bash -c 'find /var/lib/sipeg-node-exporter/textfile -maxdepth 1 -name "sipeg-host-network.prom" -mmin -3 | grep -q .'
 check 'timer de backup habilitado' systemctl is-enabled --quiet sipeg-pg-backup.timer
+check 'timer de backup activo' systemctl is-active --quiet sipeg-pg-backup.timer
 check 'ultimo backup menor a 26h' bash -c 'find /var/backups/sipeg -name "sipeg_utp_*.dump.enc" -mmin -1560 | grep -q .'
 check 'docker live-restore' bash -c 'test "$(docker info -f "{{.LiveRestoreEnabled}}")" = "true"'
 check 'drop-in de consumidores Docker' test -f /etc/systemd/system/docker.service.d/10-sipeg-consumers.conf
