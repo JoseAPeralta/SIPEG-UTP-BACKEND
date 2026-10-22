@@ -79,7 +79,7 @@
       "url": "/d/sipeg-security"
     }
   ],
-  "timezone": "utc",
+  "timezone": "America/Panama",
   "schemaVersion": 42,
   "version": 1,
   "refresh": "30s",

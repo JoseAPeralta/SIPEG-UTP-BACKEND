@@ -41,7 +41,15 @@ check_value 'sysctl vm.swappiness' 10 "$(sysctl -n vm.swappiness)"
 check 'unattended-upgrades activo' systemctl is-active --quiet unattended-upgrades
 check 'auditd activo' systemctl is-active --quiet auditd
 check 'reglas auditd cargadas' bash -c 'auditctl -l | grep -q sipeg_'
-check 'AIDE instalado' command -v aide
+check 'AIDE instalado' command -v aide.wrapper
+check 'AIDE exclusiones instaladas' test -f /etc/aide/aide.conf.d/00_aide_sipeg
+check 'AIDE base de datos presente' test -s /var/lib/aide/aide.db
+check 'AIDE config valida' aide.wrapper --config-check
+check 'AIDE excluye Docker' bash -c 'aide.wrapper --path-check=f:/var/lib/docker/test; [ $? -eq 1 ]'
+check 'AIDE con prioridad baja' bash -c 'test "$(systemctl show dailyaidecheck.service -p Nice --value)" = "19"'
+check 'AIDE con IO idle' bash -c 'test "$(systemctl show dailyaidecheck.service -p IOSchedulingClass --value)" = "3"'
+check 'AIDE timer activo' systemctl is-active --quiet dailyaidecheck.timer
+check 'AIDE timer a las 04:00 Panama' grep -q '04:00:00 America/Panama' /etc/systemd/system/dailyaidecheck.timer.d/10-sipeg-timer.conf
 check 'usuario sipeg-metrics existe' id -u sipeg-metrics
 check 'grupo sipeg-metrics existe' getent group sipeg-metrics
 check 'recolector de red instalado y ejecutable' test -x /usr/local/libexec/sipeg/collect-network.sh

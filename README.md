@@ -144,8 +144,10 @@ sudo deploy/host/verify.sh
 
 Cubre SSH con claves y fail2ban, UFW, parches automaticos, sysctl, auditd,
 AIDE, limites por contenedor, backups cifrados con restore verificado y alertas
-de Grafana por correo. El runbook completo (rotacion de secretos, restore
-manual y reversion) esta en `deploy/README.md`. Ver
+de Grafana por correo. AIDE corre a las 04:00 Panama con exclusiones de Docker,
+journal, sysstat y sus reportes; el backup de PostgreSQL corre a las 03:00
+Panama. El runbook completo (rotacion de secretos, restore manual y reversion)
+esta en `deploy/README.md`. Ver
 `docs/adr/adr-0013-vps-hardening-baseline.md`.
 
 ## Scripts

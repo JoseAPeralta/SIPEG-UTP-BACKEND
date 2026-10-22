@@ -5,7 +5,7 @@
   "tags": ["sipeg", "loki", "security"],
   "editable": false,
   "graphTooltip": 1,
-  "timezone": "utc",
+  "timezone": "America/Panama",
   "schemaVersion": 42,
   "version": 1,
   "refresh": "30s",

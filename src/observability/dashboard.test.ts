@@ -46,6 +46,19 @@ const datasourceUid = (datasource: DashboardDatasource | string | undefined): st
 const expressions = (dashboard: DashboardFile): string[] =>
   dashboard.panels.flatMap((panel) => (panel.targets ?? []).map((target) => target.expr ?? ''));
 
+const ALL_DASHBOARDS = [
+  'api-overview.json',
+  'api-http.json',
+  'availability.json',
+  'docker-overview.json',
+  'errors.json',
+  'nodejs-runtime.json',
+  'operations-overview.json',
+  'postgres-overview.json',
+  'security.json',
+  'vps-overview.json',
+] as const;
+
 const PROMETHEUS_DASHBOARDS = [
   {
     fileName: 'vps-overview.json',
@@ -145,6 +158,14 @@ describe('API Overview dashboard', () => {
   });
 });
 
+describe.each(ALL_DASHBOARDS)('%s dashboard timezone', (fileName) => {
+  it('uses the institutional Panama timezone', async () => {
+    const dashboard = await loadDashboard(fileName);
+
+    expect(dashboard.timezone).toBe('America/Panama');
+  });
+});
+
 describe.each(PROMETHEUS_DASHBOARDS)('$title dashboard', ({ fileName, uid, title, fragments }) => {
   it('has a stable identity and provisioning defaults', async () => {
     const dashboard = await loadDashboard(fileName);
@@ -152,7 +173,7 @@ describe.each(PROMETHEUS_DASHBOARDS)('$title dashboard', ({ fileName, uid, title
     expect(dashboard.uid).toBe(uid);
     expect(dashboard.title).toBe(title);
     expect(dashboard.schemaVersion).toBe(42);
-    expect(dashboard.timezone).toBe('utc');
+    expect(dashboard.timezone).toBe('America/Panama');
     expect(dashboard.editable).toBe(false);
   });
 

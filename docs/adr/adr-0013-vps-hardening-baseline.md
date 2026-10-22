@@ -79,7 +79,9 @@ instalador idempotente y verificable:
 - **NEG-003**: auditd con watch sobre `.env.prod` genera eventos en cada
   lectura del archivo; hay que revisar el ruido antes de ampliar reglas.
 - **NEG-004**: AIDE consume CPU y disco en cada chequeo; en VPS pequenos puede
-  solaparse con el backup.
+  solaparse con el backup. Medido el 2026-10-20/21: 28-41 min de pared,
+  26-36 min de CPU, 1.8-1.9 GiB de RAM y 660 MB de swap, con `/var/lib/docker`
+  de 4.9 GB incluido. Se mitiga con exclusiones y prioridad baja; ver IMP-016.
 - **NEG-005**: La clave de backup fuera del VPS es un punto unico de fallo
   operativo: sin ella los backups no se descifran.
 - **NEG-006**: Con `live-restore`, un reinicio del daemon de Docker conserva los
@@ -118,7 +120,8 @@ instalador idempotente y verificable:
   `install.sh` idempotentes con respaldo en
   `/var/backups/sipeg-hardening/<timestamp>/`.
 - **IMP-002**: `deploy/host/verify.sh` es el criterio de exito objetivo:
-  21 comprobaciones PASS/FAIL. Resultado final en produccion: 21 PASS, 0 FAIL.
+  comprobaciones PASS/FAIL de SSH, firewall, kernel, Docker, AIDE, metricas,
+  backups y alertas. El resultado esperado en produccion es 0 FAIL.
 - **IMP-003**: El prefijo `10-` del archivo SSH es funcional: gana a
   `50-cloud-init.conf` por orden alfabetico en `sshd_config.d`.
 - **IMP-004**: Las variables de limites y alertas se documentan en
@@ -168,6 +171,18 @@ instalador idempotente y verificable:
   `docker-socket-proxy`, `telegraf` y `alloy`; si el stack no esta levantado no
   hace nada. `deploy/host/verify.sh` comprueba el drop-in, el helper y el health
   del proxy.
+- **IMP-016**: El componente `aide` instala
+  `/etc/aide/aide.conf.d/00_aide_sipeg` (exclusiones de Docker, containerd,
+  `/var/lib/aide`, journal, reportes de AIDE, sysstat y backups locales), un
+  drop-in de `dailyaidecheck.service` con `Nice=19`/`IOSchedulingClass=idle` y
+  un drop-in del timer a las 04:00 Panama. El archivo de exclusiones va en `00_`
+  para evaluarse antes del catch-all `/ 0 Full` de `99_aide_root` y de las reglas
+  `31_aide_*`/`70_aide_*`. Despues de cambiar exclusiones se ejecuta `aideinit`
+  a mano; el instalador no lo hace porque el escaneo es pesado. Se conservan
+  `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/boot`, systemd, SSH/auditd y los
+  logs de auth/syslog/audit/ufw; el tradeoff es que Docker/journal/sysstat y los
+  reportes de AIDE dejan de estar cubiertos por AIDE (Docker se verifica por
+  digests y los logs por auditd/Loki).
 
 ### Métricas del host y presupuesto (2026-10-20)
 

@@ -1,0 +1,17 @@
+# Exclusiones de AIDE para SIPEG UTP.
+# El catch-all `/ 0 Full` vive en 99_aide_root; este archivo debe cargarse
+# antes que el y antes de las reglas especificas 31_aide_*/70_aide_*.
+!/var/lib/docker
+!/var/lib/docker/.*
+!/var/lib/containerd
+!/var/lib/containerd/.*
+!/var/lib/aide
+!/var/lib/aide/.*
+!/var/log/journal
+!/var/log/journal/.*
+!/var/log/aide
+!/var/log/aide/.*
+!/var/log/sysstat
+!/var/log/sysstat/.*
+!/var/backups/sipeg
+!/var/backups/sipeg/.*

@@ -397,6 +397,11 @@ For errors:
   `10-sipeg-consumers.conf` reinicia proxy, Telegraf y Alloy; si se retira,
   hacerlo a mano y comprobar `docker-socket-proxy healthy` antes de dar el
   reinicio por completado. Ver `observability/README.md`.
+- AIDE corre a diario a las 04:00 Panama con exclusiones de Docker, journal,
+  sysstat y sus propios reportes. Los cambios viven en `deploy/host/aide/` y se
+  aplican con `sudo deploy/host/install.sh aide`; despues de cambiar exclusiones
+  hay que reconstruir la base con `sudo ionice -c3 nice -n19 aideinit -y -f`. Ver
+  `docs/adr/adr-0013-vps-hardening-baseline.md`.
 
 ## Deployment And Network Rules
 

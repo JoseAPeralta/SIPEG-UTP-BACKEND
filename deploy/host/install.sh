@@ -5,7 +5,7 @@
 #   sudo deploy/host/install.sh <componente|all>
 #   DRY_RUN=1 sudo deploy/host/install.sh all
 #
-# Componentes: ssh firewall patches kernel docker sudo audit metrics
+# Componentes: ssh firewall patches kernel docker aide sudo audit metrics
 #
 # Cada archivo instalado se respalda en /var/backups/sipeg-hardening/<UTC>/
 # antes de sobrescribirse. Los servicios se validan (sshd -t, visudo -cf,
@@ -90,6 +90,21 @@ component_docker() {
   log 'docker reiniciado: live-restore conserva los contenedores; el drop-in reinicia proxy/Telegraf/Alloy'
 }
 
+component_aide() {
+  run apt-get install -y aide aide-common
+  install_file "$HOST_DIR/aide/00_aide_sipeg" /etc/aide/aide.conf.d/00_aide_sipeg 0644
+  install_file "$HOST_DIR/aide/10-sipeg-resources.conf" \
+    /etc/systemd/system/dailyaidecheck.service.d/10-sipeg-resources.conf 0644
+  install_file "$HOST_DIR/aide/10-sipeg-timer.conf" \
+    /etc/systemd/system/dailyaidecheck.timer.d/10-sipeg-timer.conf 0644
+  run systemctl daemon-reload
+  run systemd-analyze verify dailyaidecheck.service dailyaidecheck.timer
+  run aide.wrapper --config-check
+  run systemctl enable dailyaidecheck.timer
+  run systemctl restart dailyaidecheck.timer
+  log 'AIDE actualizado: exclusiones, prioridad baja y timer 04:00 Panama; ejecutar aideinit -y -f si cambio la configuracion'
+}
+
 component_sudo() {
   install_file "$HOST_DIR/sudoers/90-sipeg" /etc/sudoers.d/90-sipeg 0440
   run visudo -cf /etc/sudoers.d/90-sipeg
@@ -140,9 +155,9 @@ main() {
   require_root
   local component="${1:-all}"
   case "$component" in
-    ssh|firewall|patches|kernel|docker|sudo|audit|metrics) "component_$component" ;;
+    ssh|firewall|patches|kernel|docker|aide|sudo|audit|metrics) "component_$component" ;;
     all)
-      for c in ssh firewall patches kernel docker sudo audit metrics; do
+      for c in ssh firewall patches kernel docker aide sudo audit metrics; do
         "component_$c"
       done
       ;;

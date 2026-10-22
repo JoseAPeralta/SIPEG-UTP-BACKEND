@@ -401,6 +401,36 @@ una caida total del host no genera aviso. Detalle en `observability/README.md`.
 
 El `IMAGE_TAG` es obligatorio y no se reutiliza para codigo distinto.
 
+## AIDE y ventana de mantenimiento
+
+AIDE corre a diario a las **04:00 Panama** (hasta 30 min de retraso) y consume
+CPU, I/O y memoria mientras escanea. En la medicion del 2026-10-20/21 el chequeo
+completo duro 28-41 min, consumio 26-36 min de CPU, uso 1.8-1.9 GiB de RAM y
+660 MB de swap porque incluia `/var/lib/docker` (4.9 GB), `/var/log` y su propia
+base.
+
+El componente `aide` de `deploy/host/install.sh` instala las exclusiones y los
+drop-ins de systemd. Despues de cambiar exclusiones hay que reconstruir la base:
+
+```bash
+sudo deploy/host/install.sh aide
+sudo ionice -c3 nice -n19 aideinit -y -f
+sudo deploy/host/verify.sh
+```
+
+`-y -f` reemplaza la base anterior sin preguntar. Ejecutalo en una ventana de
+mantenimiento: el escaneo sigue siendo la operacion mas pesada de AIDE.
+
+Se excluyen Docker, containerd, la base/reportes de AIDE, journal, sysstat y los
+backups locales. Se conservan `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`, `/boot`,
+systemd, SSH/auditd y los logs de auth/syslog/audit/ufw. El tradeoff esta en el
+ADR-0013.
+
+El backup de PostgreSQL corre a las **03:00 Panama** (explicito en
+`deploy/backup/sipeg-pg-backup.timer`) y dura pocos segundos. No es la causa de
+los picos de AIDE (`01:50-03:50` antes del cambio) ni de `apt-daily`
+(~03:27).
+
 ## Pendientes operativos
 
 - **Rate limiting:** el aislamiento de buckets entre dos redes no se probo para no

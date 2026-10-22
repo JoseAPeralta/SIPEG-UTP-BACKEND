@@ -546,6 +546,11 @@ horas y refresco de 30 s. Los UIDs son estables: cambiarlos rompe enlaces y
 alertas. Los dashboards se provisionan por archivo; la versión que corre es la
 del repositorio.
 
+Los diez dashboards fijan `"timezone": "America/Panama"` (UTC-05:00, sin DST;
+ADR-0002) y Grafana usa la misma zona como preferencia por defecto mediante
+`GF_DATE_FORMATS_DEFAULT_TIMEZONE`. Las series y los logs se almacenan en UTC:
+la zona horaria solo cambia su representación.
+
 ## Alertas de métricas
 
 Las reglas de Prometheus viven en
@@ -774,6 +779,10 @@ En producción se usa el mismo comando con los tres archivos y `--env-file
   `docker-socket-proxy` queda apuntando al inode anterior y el proxy responde 503. El drop-in de systemd reinicia proxy, Telegraf y Alloy despues de cada
   arranque de Docker; si se retira, hay que hacerlo a mano y verificar el health
   del proxy.
+- **AIDE y ventanas nocturnas.** AIDE corre a diario a las 04:00 Panama y puede
+  consumir CPU, I/O y memoria durante el escaneo; no confundir ese pico con el
+  backup de PostgreSQL (03:00) ni con `apt-daily`. Los dashboards provisionados
+  usan UTC: 02:00/03:00 UTC equivalen a 21:00/22:00 Panama.
 - **Cobertura de Docker según el cgroup.** La lista exacta de campos de memoria y
   blkio depende de lo que publique el cgroup del host. En cgroup v2 parte de las
   series de blkio puede faltar; `health_code` solo existe si el contenedor
