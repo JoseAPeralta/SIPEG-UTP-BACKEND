@@ -522,7 +522,7 @@ docker_container_health_health_code
 - Datasource explícito: UID `prometheus`.
 - UIDs e IDs de panel estables.
 - Títulos y descripciones en español.
-- UTC, siguiendo los dashboards existentes.
+- `America/Panama` (UTC-05:00, sin DST) en todos los dashboards (ADR-0002); las series se almacenan en UTC.
 - Ventana inicial de seis horas.
 - Refresco de 30 segundos; VPS puede usar 60 segundos.
 - Unidades explícitas: segundos, bytes, bytes/s y porcentajes.

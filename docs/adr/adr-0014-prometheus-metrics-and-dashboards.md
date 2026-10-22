@@ -289,7 +289,9 @@ esta fase.
   `.env.prod` ni se registra.
 - **IMP-004**: Los dashboards se provisionan por archivo en `SIPEG UTP`, con
   datasource explicito `prometheus`, UIDs estables y ventana inicial de seis
-  horas. El catalogo y los UIDs estan en `observability/README.md`.
+  horas. Todos fijan `timezone: America/Panama` (ADR-0002) y Grafana usa esa
+  zona como preferencia por defecto; las series permanecen en UTC. El catalogo
+  y los UIDs estan en `observability/README.md`.
 - **IMP-005**: La verificacion usa `pnpm run observability:check` para el estado
   aplicado en Grafana y `promtool check config` para la configuracion de
   Prometheus. La comprobacion de metricas y los fixtures de PromQL se agregan en

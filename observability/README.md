@@ -546,6 +546,11 @@ horas y refresco de 30 s. Los UIDs son estables: cambiarlos rompe enlaces y
 alertas. Los dashboards se provisionan por archivo; la versión que corre es la
 del repositorio.
 
+Los diez dashboards fijan `"timezone": "America/Panama"` (UTC-05:00, sin DST;
+ADR-0002) y Grafana usa la misma zona como preferencia por defecto mediante
+`GF_DATE_FORMATS_DEFAULT_TIMEZONE`. Las series y los logs se almacenan en UTC:
+la zona horaria solo cambia su representación.
+
 ## Alertas de métricas
 
 Las reglas de Prometheus viven en
