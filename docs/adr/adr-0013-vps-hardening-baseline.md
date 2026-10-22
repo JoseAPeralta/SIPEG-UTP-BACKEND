@@ -82,6 +82,11 @@ instalador idempotente y verificable:
   solaparse con el backup.
 - **NEG-005**: La clave de backup fuera del VPS es un punto unico de fallo
   operativo: sin ella los backups no se descifran.
+- **NEG-006**: Con `live-restore`, un reinicio del daemon de Docker conserva los
+  contenedores pero no re-resuelve el bind mount de `/var/run/docker.sock` en
+  `docker-socket-proxy`; el proxy queda `unhealthy` con 503 y rompe Telegraf y
+  Alloy. Se mitiga con un drop-in de `docker.service` que reinicia proxy,
+  Telegraf y Alloy despues de cada arranque del daemon.
 
 ## Alternatives Considered
 
@@ -156,6 +161,13 @@ instalador idempotente y verificable:
 - **IMP-014**: La regla de auditd sigue la sintaxis legacy `-w`; auditd 4.x
   advierte "Old style watch rules are slower". Migrar a
   `-a always,exit -F path=` queda como mejora futura.
+- **IMP-015**: El componente `docker` instala
+  `/etc/systemd/system/docker.service.d/10-sipeg-consumers.conf` y
+  `/usr/local/libexec/sipeg/restart-docker-consumers.sh`. El helper busca los
+  contenedores por etiquetas Compose (`sipeg-utp-prod`) y reinicia
+  `docker-socket-proxy`, `telegraf` y `alloy`; si el stack no esta levantado no
+  hace nada. `deploy/host/verify.sh` comprueba el drop-in, el helper y el health
+  del proxy.
 
 ### Métricas del host y presupuesto (2026-10-20)
 

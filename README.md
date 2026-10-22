@@ -742,6 +742,12 @@ informa: no recrea nada.** 14 comprobaciones:
   montando `/var/run/docker.sock` directamente en Alloy. `POST=0` deja pasar solo
   `GET`/`HEAD`; `NETWORKS=1` es necesario porque Alloy lista redes para resolver
   los nombres de red de cada contenedor.
+- Con `live-restore`, un reinicio del daemon de Docker conserva los contenedores
+  pero deja obsoleto el bind mount de `/var/run/docker.sock` en el proxy. El
+  drop-in `/etc/systemd/system/docker.service.d/10-sipeg-consumers.conf`
+  reinicia `docker-socket-proxy`, Telegraf y Alloy despues de cada arranque; si
+  se retira, hacerlo a mano y verificar `docker-socket-proxy healthy`. Ver
+  `observability/README.md` y `docs/despliegue.md`.
 - `docker compose ... down` sobre el proyecto combinado tambien baja la aplicacion
   y borra sus volumenes: para retirar solo el stack de observabilidad, usa
   `docker compose -f compose.dev.yaml -f compose.observability.yaml rm -sf loki alloy grafana docker-socket-proxy`

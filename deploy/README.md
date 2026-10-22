@@ -21,13 +21,35 @@ Componentes individuales de `deploy/host/install.sh`:
 | `firewall` | UFW (deny incoming, allow outgoing, SSH limitado)                                        |
 | `patches`  | unattended-upgrades, needrestart y source de apt de Docker (`resolute`)                  |
 | `kernel`   | sysctl, limites de core y journald                                                       |
-| `docker`   | `daemon.json` y reinicio del daemon                                                      |
+| `docker`   | `daemon.json`, drop-in de reinicio de consumidores del socket y reinicio del daemon      |
 | `sudo`     | Politica de sudo                                                                         |
 | `audit`    | Reglas de auditd (incluye watch sobre `.env.prod`)                                       |
 | `metrics`  | Usuario `sipeg-metrics`, recolector de red del host, directorio textfile y timer de 60 s |
 
 `DRY_RUN=1` imprime las acciones sin aplicarlas. Cada archivo sobrescrito se
 respalda en `/var/backups/sipeg-hardening/<timestamp>/`.
+
+### Reinicio de Docker y consumidores del socket
+
+Con `live-restore: true`, un `systemctl restart docker` conserva los contenedores
+en ejecucion, pero el bind mount de `/var/run/docker.sock` en
+`docker-socket-proxy` sigue apuntando al socket anterior. El proxy devuelve 503
+y Telegraf/Alloy dejan de recolectar. El componente `docker` instala el drop-in
+`/etc/systemd/system/docker.service.d/10-sipeg-consumers.conf`, que ejecuta
+`/usr/local/libexec/sipeg/restart-docker-consumers.sh` despues de cada arranque
+del daemon para reiniciar `docker-socket-proxy`, `telegraf` y `alloy` por
+etiquetas Compose.
+
+Verificar despues de instalar:
+
+```bash
+bash deploy/host/docker/restart-docker-consumers.test.sh
+systemctl show docker -p ExecStartPost
+sudo deploy/host/verify.sh
+```
+
+El texto de la alerta `Servicio Docker crítico ausente` tambien enlaza al
+diagnostico de `observability/README.md`.
 
 ## Despliegue de metricas (Prometheus y exportadores)
 

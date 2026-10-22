@@ -143,6 +143,38 @@ Puertos internos (solo `expose`, sin publicacion):
 - Ningun exportador ni el listener de metricas de la API se publican por el
   tunel ni por `0.0.0.0`.
 
+### Reinicio del daemon de Docker
+
+`live-restore: true` mantiene los contenedores en ejecucion cuando se reinicia
+el daemon, pero el bind mount de `/var/run/docker.sock` en
+`docker-socket-proxy` conserva el inode anterior. El proxy empieza a responder
+`503` (`SC--`) y Telegraf/Alloy dejan de recolectar aunque sus contenedores
+sigan arriba.
+
+El componente `docker` de `deploy/host/install.sh` instala el drop-in
+`/etc/systemd/system/docker.service.d/10-sipeg-consumers.conf`, que ejecuta
+`/usr/local/libexec/sipeg/restart-docker-consumers.sh` despues de cada arranque
+del daemon. El helper reinicia `docker-socket-proxy`, `telegraf` y `alloy` por
+etiquetas Compose. Si el drop-in no esta instalado, la recuperacion manual es:
+
+```bash
+docker compose \
+  -f compose.prod.yaml \
+  -f compose.observability.yaml \
+  -f compose.cloudflare.yaml \
+  --env-file .env.prod \
+  up -d --force-recreate docker-socket-proxy
+docker compose \
+  -f compose.prod.yaml \
+  -f compose.observability.yaml \
+  -f compose.cloudflare.yaml \
+  --env-file .env.prod \
+  restart telegraf alloy
+```
+
+Verificar con `docker compose ... ps`, `docker exec ... wget -qO- http://localhost:2375/_ping`
+y `sudo deploy/host/verify.sh` (incluye el check `docker-socket-proxy healthy`).
+
 ## Cookies, CORS y proxy
 
 `sipeg-utp.com`, `api.sipeg-utp.com` y `grafana.sipeg-utp.com` comparten el dominio
