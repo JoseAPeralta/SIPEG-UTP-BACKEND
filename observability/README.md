@@ -555,6 +555,9 @@ la carpeta **SIPEG UTP** al arrancar Grafana. Son **15 reglas** agrupadas en
 `sipeg-metrics-availability`. No sustituyen ni modifican las reglas de Loki de
 `rules.yaml`; `sipeg-disk-full` y `sipeg-5xx` conservan su UID y no deben
 redefinirse sin mantenerlo.
+`src/observability/provisioning.test.ts` valida que cada etapa
+`classic_conditions` de `rules.yaml` y `metrics.yaml` declare `reducer`,
+`operator` y `evaluator` como hermanos de `query`; se ejecuta con `pnpm test`.
 El contacto `sipeg-email` y la política de notificación se reutilizan sin
 cambios en la ruta de correo. Las reglas añaden los labels `severity` y
 `component` para filtrar y agrupar; la política actual sigue agrupando por
