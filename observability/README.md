@@ -766,6 +766,11 @@ En producción se usa el mismo comando con los tres archivos y `--env-file
   Docker falla pero Telegraf sigue vivo, `up{job="docker"}` puede continuar en
   `1` mientras las series de contenedores desaparecen. Los paneles deben
   comprobar la presencia y el valor de las series, no solo `up`.
+- **Socket de Docker y `live-restore`.** Un reinicio del daemon conserva los
+  contenedores, pero el bind mount de `/var/run/docker.sock` en
+  `docker-socket-proxy` queda apuntando al inode anterior y el proxy responde 503. El drop-in de systemd reinicia proxy, Telegraf y Alloy despues de cada
+  arranque de Docker; si se retira, hay que hacerlo a mano y verificar el health
+  del proxy.
 - **Cobertura de Docker según el cgroup.** La lista exacta de campos de memoria y
   blkio depende de lo que publique el cgroup del host. En cgroup v2 parte de las
   series de blkio puede faltar; `health_code` solo existe si el contenedor
@@ -841,6 +846,25 @@ En producción se usa el mismo comando con los tres archivos y `--env-file
    docker compose -f compose.dev.yaml -f compose.observability.yaml \
      logs --tail=100 prometheus postgres-exporter telegraf blackbox-exporter
    ```
+
+   Si `up{job="docker"}` es `1` pero no existen series `docker_*`, y
+   `docker-socket-proxy` esta `unhealthy` con HAProxy devolviendo `503` y `SC--`
+   incluso a `/_ping`, el bind mount quedo apuntando al socket anterior. Ocurre
+   tras un reinicio del daemon de Docker con `live-restore: true`: los
+   contenedores siguen vivos, pero el inode de `/var/run/docker.sock` cambio.
+   Recrear el proxy y reiniciar Telegraf/Alloy:
+
+   ```bash
+   docker compose -f compose.prod.yaml -f compose.observability.yaml \
+     -f compose.cloudflare.yaml --env-file .env.prod \
+     up -d --force-recreate docker-socket-proxy
+   docker compose -f compose.prod.yaml -f compose.observability.yaml \
+     -f compose.cloudflare.yaml --env-file .env.prod \
+     restart telegraf alloy
+   ```
+
+   El drop-in `/etc/systemd/system/docker.service.d/10-sipeg-consumers.conf`
+   automatiza este reinicio despues de cada arranque de Docker.
 
 5. Si la red del host no avanza, revisar el timer y el archivo sin crearlo a
    mano:

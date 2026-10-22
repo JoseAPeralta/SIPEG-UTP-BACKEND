@@ -80,8 +80,14 @@ component_kernel() {
 
 component_docker() {
   install_file "$HOST_DIR/docker/daemon.json" /etc/docker/daemon.json 0644
+  run install -d -m 0755 -o root -g root /usr/local/libexec/sipeg
+  install_file "$HOST_DIR/docker/restart-docker-consumers.sh" \
+    /usr/local/libexec/sipeg/restart-docker-consumers.sh 0755
+  install_file "$HOST_DIR/docker/10-sipeg-consumers.conf" \
+    /etc/systemd/system/docker.service.d/10-sipeg-consumers.conf 0644
+  run systemctl daemon-reload
   run systemctl restart docker
-  log 'docker reiniciado: los contenedores se detuvieron; levantar el stack con docker compose up -d'
+  log 'docker reiniciado: live-restore conserva los contenedores; el drop-in reinicia proxy/Telegraf/Alloy'
 }
 
 component_sudo() {

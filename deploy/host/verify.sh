@@ -55,6 +55,10 @@ check 'archivo de red del host actualizado en los ultimos 3 min' bash -c 'find /
 check 'timer de backup habilitado' systemctl is-enabled --quiet sipeg-pg-backup.timer
 check 'ultimo backup menor a 26h' bash -c 'find /var/backups/sipeg -name "sipeg_utp_*.dump.enc" -mmin -1560 | grep -q .'
 check 'docker live-restore' bash -c 'test "$(docker info -f "{{.LiveRestoreEnabled}}")" = "true"'
+check 'drop-in de consumidores Docker' test -f /etc/systemd/system/docker.service.d/10-sipeg-consumers.conf
+check 'drop-in de consumidores Docker cargado' bash -c 'systemctl show docker -p ExecStartPost | grep -q restart-docker-consumers.sh'
+check 'script de reinicio de consumidores Docker' test -x /usr/local/libexec/sipeg/restart-docker-consumers.sh
+check 'docker-socket-proxy healthy' bash -c 'id=$(docker ps -q --filter label=com.docker.compose.project=sipeg-utp-prod --filter label=com.docker.compose.service=docker-socket-proxy | head -1); [ -n "$id" ] && [ "$(docker inspect -f "{{.State.Health.Status}}" "$id")" = "healthy" ]'
 check 'docker icc desactivado' bash -c 'test "$(docker network inspect bridge -f "{{index .Options \"com.docker.network.bridge.enable_icc\"}}")" = "false"'
 check 'api rootfs read-only' bash -c 'test "$(docker inspect -f "{{.HostConfig.ReadonlyRootfs}}" $(docker ps -q --filter label=com.docker.compose.service=api))" = "true"'
 check 'contact point sipeg-email aplicado' bash -c 'docker exec $(docker ps -q --filter label=com.docker.compose.service=grafana) sh -c "curl -sf -u \"admin:\$GF_SECURITY_ADMIN_PASSWORD\" http://localhost:3000/api/v1/provisioning/contact-points" | grep -q sipeg-email'

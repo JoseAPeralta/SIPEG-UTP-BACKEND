@@ -625,7 +625,9 @@ groups:
             cambió el filtro de nombres. `vector(0)` mantiene un cero cuando las
             tres series existen para que `noDataState: Alerting` no dispare con
             el sistema sano. Revisar `up{job="docker"}` y la salida de Telegraf
-            antes de reiniciar servicios.
+            antes de reiniciar servicios. Si `docker-socket-proxy` está
+            unhealthy y HAProxy devuelve 503 `SC--`, recrear el proxy y
+            reiniciar Telegraf/Alloy; ver `observability/README.md`.
         data:
           - refId: A
             relativeTimeRange:

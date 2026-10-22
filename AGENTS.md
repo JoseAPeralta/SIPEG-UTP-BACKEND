@@ -392,6 +392,11 @@ For errors:
   `deploy/host/verify.sh` la comprueba. No editar archivos del host a mano sin
   reflejar el cambio en `deploy/`. Ver
   `docs/adr/adr-0013-vps-hardening-baseline.md`.
+- Con `live-restore: true`, un reinicio del daemon de Docker deja el bind mount
+  de `/var/run/docker.sock` obsoleto en `docker-socket-proxy`. El drop-in
+  `10-sipeg-consumers.conf` reinicia proxy, Telegraf y Alloy; si se retira,
+  hacerlo a mano y comprobar `docker-socket-proxy healthy` antes de dar el
+  reinicio por completado. Ver `observability/README.md`.
 
 ## Deployment And Network Rules
 
