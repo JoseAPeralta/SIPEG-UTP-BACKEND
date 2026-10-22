@@ -448,12 +448,12 @@ groups:
                   query:
                     params:
                       - A
-                    reducer:
-                      type: last
-                      params: []
-                    operator:
-                      type: and
-                    evaluator:
-                      type: gt
-                      params:
-                        - 80
+                  reducer:
+                    type: last
+                    params: []
+                  operator:
+                    type: and
+                  evaluator:
+                    type: gt
+                    params:
+                      - 80
