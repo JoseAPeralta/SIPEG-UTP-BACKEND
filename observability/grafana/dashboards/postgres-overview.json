@@ -67,7 +67,7 @@
       "url": "/d/sipeg-errors"
     }
   ],
-  "timezone": "utc",
+  "timezone": "America/Panama",
   "schemaVersion": 42,
   "version": 1,
   "refresh": "30s",

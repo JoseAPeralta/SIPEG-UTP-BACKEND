@@ -240,6 +240,10 @@ services:
       GF_USERS_ALLOW_SIGN_UP: 'false'
       # Sin telemetria hacia el exterior del host, igual que en Loki.
       GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      # Zona horaria institucional (ADR-0002). Los dashboards provisionados
+      # tambien la fijan; esto cubre Explore y los dashboards nuevos. Los datos
+      # siguen almacenandose en UTC: solo cambia su representacion.
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: 'America/Panama'
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       # Sin default: el de la imagen es `admin`, que es publico. Ademas solo se
       # aplica al inicializar un volumen vacio (ver `.env.example`).
