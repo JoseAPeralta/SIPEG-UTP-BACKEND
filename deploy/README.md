@@ -22,6 +22,7 @@ Componentes individuales de `deploy/host/install.sh`:
 | `patches`  | unattended-upgrades, needrestart y source de apt de Docker (`resolute`)                  |
 | `kernel`   | sysctl, limites de core y journald                                                       |
 | `docker`   | `daemon.json`, drop-in de reinicio de consumidores del socket y reinicio del daemon      |
+| `aide`     | AIDE diario con exclusiones, prioridad baja y ventana a las 04:00 Panama                 |
 | `sudo`     | Politica de sudo                                                                         |
 | `audit`    | Reglas de auditd (incluye watch sobre `.env.prod`)                                       |
 | `metrics`  | Usuario `sipeg-metrics`, recolector de red del host, directorio textfile y timer de 60 s |
@@ -50,6 +51,44 @@ sudo deploy/host/verify.sh
 
 El texto de la alerta `Servicio Docker crítico ausente` tambien enlaza al
 diagnostico de `observability/README.md`.
+
+### AIDE
+
+AIDE ejecuta un chequeo diario a las 04:00 Panama (con hasta 30 min de retraso)
+y escanea el filesystem contra su base. En este VPS el escaneo completo consumia
+28-41 min de pared y 26-36 min de CPU, con 1.8-1.9 GiB de RAM y 660 MB de swap,
+porque incluia `/var/lib/docker` (4.9 GB), `/var/log` y su propia base/reportes.
+
+El componente `aide` instala:
+
+- `/etc/aide/aide.conf.d/00_aide_sipeg`: exclusiones de Docker, containerd,
+  `/var/lib/aide`, `/var/log/journal`, `/var/log/aide`, `/var/log/sysstat` y
+  `/var/backups/sipeg`. El archivo va en `00_` porque el catch-all
+  `/ 0 Full` esta en `99_aide_root` y las reglas negativas deben evaluarse antes.
+- Un drop-in de `dailyaidecheck.service` con `Nice=19`,
+  `IOSchedulingClass=idle`, `IOSchedulingPriority=7`, `CPUWeight=10` e
+  `IOWeight=10`.
+- Un drop-in de `dailyaidecheck.timer` para mover el chequeo a las 04:00.
+
+Despues de instalar o cambiar exclusiones hay que reconstruir la base:
+
+```bash
+sudo deploy/host/install.sh aide
+sudo ionice -c3 nice -n19 aideinit -y -f
+sudo ls -lh /var/lib/aide/
+```
+
+`-y -f` reemplaza la base anterior sin preguntar. Ejecutalo en una ventana de
+mantenimiento: el escaneo sigue siendo la operacion mas pesada de AIDE.
+
+El tradeoff es explicito: AIDE deja de vigilar los arboles de Docker, journal,
+sysstat y sus propios reportes. Docker se verifica por digests de imagen y los
+logs por auditd/Loki. Se conservan `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`,
+`/boot`, systemd, SSH/auditd y los logs de auth/syslog/audit/ufw. Ver
+`docs/adr/adr-0013-vps-hardening-baseline.md`.
+
+El backup diario quedo a las **03:00 Panama** (explicito en el timer) y dura
+pocos segundos; no es la causa de los picos de AIDE ni de `apt-daily`.
 
 ## Despliegue de metricas (Prometheus y exportadores)
 
