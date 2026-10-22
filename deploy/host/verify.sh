@@ -41,11 +41,11 @@ check_value 'sysctl vm.swappiness' 10 "$(sysctl -n vm.swappiness)"
 check 'unattended-upgrades activo' systemctl is-active --quiet unattended-upgrades
 check 'auditd activo' systemctl is-active --quiet auditd
 check 'reglas auditd cargadas' bash -c 'auditctl -l | grep -q sipeg_'
-check 'AIDE instalado' command -v aide.wrapper
+check 'AIDE instalado' command -v aide
 check 'AIDE exclusiones instaladas' test -f /etc/aide/aide.conf.d/00_aide_sipeg
 check 'AIDE base de datos presente' test -s /var/lib/aide/aide.db
-check 'AIDE config valida' aide.wrapper --config-check
-check 'AIDE excluye Docker' bash -c 'aide.wrapper --path-check=f:/var/lib/docker/test; [ $? -eq 1 ]'
+check 'AIDE config valida' aide --config /etc/aide/aide.conf --config-check
+check 'AIDE excluye Docker' bash -c 'aide --config /etc/aide/aide.conf --path-check=f:/var/lib/docker/test; [ $? -eq 1 ]'
 check 'AIDE con prioridad baja' bash -c 'test "$(systemctl show dailyaidecheck.service -p Nice --value)" = "19"'
 check 'AIDE con IO idle' bash -c 'test "$(systemctl show dailyaidecheck.service -p IOSchedulingClass --value)" = "3"'
 check 'AIDE timer activo' systemctl is-active --quiet dailyaidecheck.timer
@@ -61,6 +61,7 @@ check 'archivo de red del host presente' test -s /var/lib/sipeg-node-exporter/te
 check_value 'permisos del archivo de red del host' 644 "$(stat -c '%a' /var/lib/sipeg-node-exporter/textfile/sipeg-host-network.prom 2>/dev/null)"
 check 'archivo de red del host actualizado en los ultimos 3 min' bash -c 'find /var/lib/sipeg-node-exporter/textfile -maxdepth 1 -name "sipeg-host-network.prom" -mmin -3 | grep -q .'
 check 'timer de backup habilitado' systemctl is-enabled --quiet sipeg-pg-backup.timer
+check 'timer de backup activo' systemctl is-active --quiet sipeg-pg-backup.timer
 check 'ultimo backup menor a 26h' bash -c 'find /var/backups/sipeg -name "sipeg_utp_*.dump.enc" -mmin -1560 | grep -q .'
 check 'docker live-restore' bash -c 'test "$(docker info -f "{{.LiveRestoreEnabled}}")" = "true"'
 check 'drop-in de consumidores Docker' test -f /etc/systemd/system/docker.service.d/10-sipeg-consumers.conf

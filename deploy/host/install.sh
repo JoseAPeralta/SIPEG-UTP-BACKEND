@@ -99,7 +99,7 @@ component_aide() {
     /etc/systemd/system/dailyaidecheck.timer.d/10-sipeg-timer.conf 0644
   run systemctl daemon-reload
   run systemd-analyze verify dailyaidecheck.service dailyaidecheck.timer
-  run aide.wrapper --config-check
+  run aide --config /etc/aide/aide.conf --config-check
   run systemctl enable dailyaidecheck.timer
   run systemctl restart dailyaidecheck.timer
   log 'AIDE actualizado: exclusiones, prioridad baja y timer 04:00 Panama; ejecutar aideinit -y -f si cambio la configuracion'
