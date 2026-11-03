@@ -48,6 +48,8 @@ Use these skills as the source of project-specific operating knowledge:
 - `architecture-blueprint-generator`: Use when asked to document or analyze the architecture. Generate architecture blueprints from the actual codebase, not from desired theory.
 - `create-architectural-decision-record`: Use when documenting a significant architectural decision. Save ADRs under `docs/adr/adr-NNNN-<title-slug>.md` with the required template.
 - `git-commit`: Use only when the user explicitly asks for a commit. Analyze the actual diff, avoid secrets, stage one logical change, and use Conventional Commits.
+- `cloudflare`: Use for Cloudflare product selection and current guidance. Bundles local references for R2 and Tunnel plus links to the official docs.
+- `cloudflare-one`: Use for Cloudflare Tunnel, Access, Gateway and WARP configuration or troubleshooting.
 
 ## General Workflow Rules
 
@@ -434,6 +436,8 @@ For errors:
 - If API response contracts change, document the effect for the frontend integration.
 - Create ADRs for significant architectural decisions using `docs/adr/adr-NNNN-<title-slug>.md`.
 - Generate architecture blueprints only from actual code and configuration.
+- For any Cloudflare topic (R2, Tunnel, Access, CDN/cache, DNS, Workers), query the project `cloudflare-docs` MCP (`search_cloudflare_documentation`) first and load the `cloudflare` or `cloudflare-one` skill as appropriate. Use Context7 only as a fallback when the official MCP returns nothing; never rely on Context7 for Cloudflare decisions.
+- Cite the official `developers.cloudflare.com` URL and check the page's last-updated date or compatibility dates before applying version-sensitive guidance.
 - Avoid stale TODOs. If a future task is important, document it as a clear follow-up rather than adding vague placeholders.
 
 ## Backend Boundary
