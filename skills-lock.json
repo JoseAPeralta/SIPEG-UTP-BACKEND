@@ -13,6 +13,18 @@
       "skillPath": "skills/architecture-blueprint-generator/SKILL.md",
       "computedHash": "9b20f13d1d96ba1c2550e1ce535f932e943c42939d3fae906a9e0d6c1bfb471a"
     },
+    "cloudflare": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloudflare/SKILL.md",
+      "computedHash": "f08c8c1be96dfad7f9d5418b1345477dd2e55af58c8da01326c9a2616c7ed721"
+    },
+    "cloudflare-one": {
+      "source": "cloudflare/skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloudflare-one/SKILL.md",
+      "computedHash": "da0bcb29285124b0efd7bb4d9197a34f25732a323d1802a9d7ab6c4536cfa318"
+    },
     "create-architectural-decision-record": {
       "source": "github/awesome-copilot",
       "sourceType": "github",
