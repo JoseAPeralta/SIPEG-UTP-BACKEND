@@ -10,6 +10,11 @@
       "type": "local",
       "command": ["pnpm", "exec", "bruno-mcp", "--collection", "bruno", "--no-auto-discovery"],
       "enabled": true
+    },
+    "cloudflare-docs": {
+      "type": "remote",
+      "url": "https://docs.mcp.cloudflare.com/mcp",
+      "enabled": true
     }
   }
 }
