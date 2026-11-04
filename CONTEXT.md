@@ -28,7 +28,7 @@ El backend debe soportar usuarios, autenticacion, permisos, programas de eventos
 
 ## Stack
 
-- Node.js 24.x LTS o la ultima version LTS activa disponible.
+- Node.js 26.13.0 LTS y pnpm 12.16.1.
 - TypeScript.
 - Express 5.
 - Prisma ORM 7 sobre PostgreSQL 18.

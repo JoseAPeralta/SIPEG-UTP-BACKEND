@@ -6,4 +6,4 @@ allowBuilds:
   prisma: true
   protobufjs: false
 minimumReleaseAgeExclude:
-  - '@types/node@24.13.6'
+  - '@types/node@26.6.6'

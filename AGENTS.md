@@ -12,7 +12,7 @@
 - **Scope of this repository**: Node.js backend only.
 - **Frontend**: A separate React frontend consumes this API over HTTP from Cloudflare Workers.
 - **Product goal**: Event management platform for users, event programs, activities, attendance, certificates, classrooms, speaker registration, reports, and statistics.
-- **Runtime target**: Node.js 24.x LTS, or the latest active LTS available in the project environment.
+- **Runtime target**: Node.js 26.13.0 LTS (see `.node-version`), with pnpm 12.16.1.
 - **Backend framework**: Express.
 - **ORM**: Prisma.
 - **Authentication**: Better Auth 1.7.x + plugin JWT. Modulos `auth`, `authorization` y `users` activos, con middlewares `authenticate`/`authorize`, rate limiting y utilitarios de tokens. Ver `docs/adr/adr-0001-time-aware-collaboration-authorization.md`.
