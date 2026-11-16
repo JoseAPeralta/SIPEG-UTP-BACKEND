@@ -32,7 +32,7 @@
 
 Use these skills as the source of project-specific operating knowledge:
 
-- `writing-plans`: Use for specs or multi-step work before touching code. Plans should map files, include concrete steps, include test commands, avoid placeholders, and be saved under `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md` unless the user chooses another location.
+- `writing-plans`: Use for specs or multi-step work before touching code. Plans should map files, include concrete steps, include test commands, and avoid placeholders. In Plan mode, present the plan only in the conversation; do not save a file. Outside Plan mode, save requested plan files under `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md` unless the user chooses another location within the authorized scope.
 - `executing-plans`: Use when a written plan exists. Review it critically first, track progress with todos, follow steps exactly, run verifications, and stop on unclear instructions or repeated verification failures.
 - `test-driven-development`: Use for new features, bug fixes, refactors, and behavior changes. Write a failing test first, verify the failure, implement the minimum code to pass, then refactor while tests stay green. Documentation-only and simple configuration-only updates do not require TDD unless behavior is affected.
 - `nodejs-backend-patterns`: Use for Express backend structure, middleware, controllers, services, repositories, error handling, logging, health checks, graceful shutdown, database access, and API response patterns.
@@ -53,6 +53,8 @@ Use these skills as the source of project-specific operating knowledge:
 
 ## General Workflow Rules
 
+- In Plan mode, do not create, modify, move, or delete files anywhere, including plan files and temporary files. Present plans and proposed changes only in the conversation; do not run commands or tools that write files. Wait until the user exits Plan mode before applying changes.
+- In every mode, do not create, modify, move, or delete files outside the current working directory unless the user explicitly requests that external operation. Tool defaults, skill instructions, temporary directories, global configuration, and worktrees are not implicit authorization; ask first when an external write is needed.
 - Inspect existing files before editing.
 - Preserve existing user changes. Never revert, delete, or overwrite unrelated work unless explicitly requested.
 - Make the smallest correct change that satisfies the task.
