@@ -18,7 +18,19 @@ groups:
           component: monitoring
         annotations:
           summary: Un target esperado de Prometheus está caído o desapareció
-          description: La consulta devuelve 1 cuando up=0 para node, sipeg-api, postgres, docker, blackbox, blackbox-internal, blackbox-public o prometheus, o cuando el job esperado ya no existe en la configuración. Se usa `== bool 0` para que un target caído produzca 1 y la condición clásica > 0 pueda dispararse. Revisar los targets y el último error de scrape en Prometheus; un job ausente suele indicar una configuración eliminada o un Prometheus reiniciado con un archivo incompleto.
+          description: |
+            La consulta devuelve 1 cuando up=0 para node, sipeg-api, postgres, docker, blackbox, blackbox-internal, blackbox-public o prometheus, o cuando el job esperado ya no existe en la configuración. Se usa `== bool 0` para que un target caído produzca 1 y la condición clásica > 0 pueda dispararse. Revisar los targets y el último error de scrape en Prometheus; un job ausente suele indicar una configuración eliminada o un Prometheus reiniciado con un archivo incompleto.
+            Detalle: indicador de recolección fallida o job ausente; fallo=1; esperado=0; condición >0 durante 2m.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -77,7 +89,19 @@ groups:
           component: host
         annotations:
           summary: El recolector de red del host lleva más de 3 minutos sin escribir
-          description: '`time() - sipeg_host_network_collection_timestamp_seconds` supera 180 segundos. El timestamp solo avanza tras una recolección correcta, así que un target node en 1 puede convivir con tráfico antiguo. Revisar `systemctl status sipeg-host-network-metrics.timer`, el journal del servicio y los permisos del directorio textfile. No crear el archivo .prom a mano.'
+          description: |
+            `time() - sipeg_host_network_collection_timestamp_seconds` supera 180 segundos. El timestamp solo avanza tras una recolección correcta, así que un target node en 1 puede convivir con tráfico antiguo. Revisar `systemctl status sipeg-host-network-metrics.timer`, el journal del servicio y los permisos del directorio textfile. No crear el archivo .prom a mano.
+            Detalle: antigüedad del recolector en segundos; condición >180 s durante 2m.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -136,7 +160,19 @@ groups:
           component: postgres
         annotations:
           summary: El PostgreSQL Exporter reporta errores de scrape o colectores fallidos
-          description: '`pg_exporter_last_scrape_error` es mayor que 0 o algún colector reporta `pg_scrape_collector_success=0` durante 5 minutos. Un fallo del colector no siempre tumba `pg_up`, pero deja métricas incompletas. Revisar los logs de `postgres-exporter`, el rol `sipeg_monitor`, la conectividad con `db:5432` y el colector que falla en el panel de PostgreSQL.'
+          description: |
+            `pg_exporter_last_scrape_error` es mayor que 0 o algún colector reporta `pg_scrape_collector_success=0` durante 5 minutos. Un fallo del colector no siempre tumba `pg_up`, pero deja métricas incompletas. Revisar los logs de `postgres-exporter`, el rol `sipeg_monitor`, la conectividad con `db:5432` y el colector que falla en el panel de PostgreSQL.
+            Detalle: indicador de error del exporter o fallo del collector; condición >0 durante 5m. Si existe collector, identifica el recolector afectado.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -200,7 +236,19 @@ groups:
           component: host
         annotations:
           summary: La CPU del VPS supera el 90% durante 15 minutos
-          description: Uso medio de CPU del host por encima del 90% calculado desde `node_cpu_seconds_total` en una ventana de 5 minutos y sostenido 15 minutos. Identificar el contenedor o proceso responsable en el panel de CPU y revisar si coincide con despliegues, backups o crecimiento anómalo. El umbral es inicial y se calibra con producción.
+          description: |
+            Uso medio de CPU del host por encima del 90% calculado desde `node_cpu_seconds_total` en una ventana de 5 minutos y sostenido 15 minutos. Identificar el contenedor o proceso responsable en el panel de CPU y revisar si coincide con despliegues, backups o crecimiento anómalo. El umbral es inicial y se calibra con producción.
+            Detalle: CPU utilizada en %; condición >90 % durante 15m; cálculo sobre ventana de 5m.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -259,7 +307,19 @@ groups:
           component: host
         annotations:
           summary: La memoria disponible del VPS cae por debajo del 10%
-          description: '`node_memory_MemAvailable_bytes` dividido por la memoria total del host es inferior al 10% durante 10 minutos. Revisar consumo por contenedor, presión de memoria y swap. Un valor bajo sostenido puede provocar OOM kills y afectar a PostgreSQL o a la API.'
+          description: |
+            `node_memory_MemAvailable_bytes` dividido por la memoria total del host es inferior al 10% durante 10 minutos. Revisar consumo por contenedor, presión de memoria y swap. Un valor bajo sostenido puede provocar OOM kills y afectar a PostgreSQL o a la API.
+            Detalle: memoria disponible en %; condición <10 % durante 10m.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -318,7 +378,19 @@ groups:
           component: host
         annotations:
           summary: Quedan menos del 10% de inodos libres en el disco raíz
-          description: El porcentaje de inodos libres en `/` es inferior al 10% durante 15 minutos. A diferencia del espacio en bytes, el agotamiento de inodos impide crear archivos aunque quede espacio libre. Buscar directorios con muchas entradas pequeñas, especialmente volúmenes Docker, logs y cachés de construcción.
+          description: |
+            El porcentaje de inodos libres en `/` es inferior al 10% durante 15 minutos. A diferencia del espacio en bytes, el agotamiento de inodos impide crear archivos aunque quede espacio libre. Buscar directorios con muchas entradas pequeñas, especialmente volúmenes Docker, logs y cachés de construcción.
+            Detalle: inodos libres en %; condición <10 % durante 15m.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -377,7 +449,19 @@ groups:
           component: host
         annotations:
           summary: El disco raíz del VPS supera el 90% de uso
-          description: Uso del filesystem raíz por encima del 90% durante 10 minutos. Es complementaria a `sipeg-disk-full`, que avisa al 80% con severidad warning y conserva su UID. Revisar volúmenes Docker, retención de Loki y Prometheus, backups locales y espacio recuperable antes de que se agote el disco.
+          description: |
+            Uso del filesystem raíz por encima del 90% durante 10 minutos. Es complementaria a `sipeg-disk-full`, que avisa al 80% con severidad warning y conserva su UID. Revisar volúmenes Docker, retención de Loki y Prometheus, backups locales y espacio recuperable antes de que se agote el disco.
+            Detalle: disco utilizado en %; condición >90 % durante 10m.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -441,7 +525,19 @@ groups:
           component: postgres
         annotations:
           summary: PostgreSQL no responde o pg_up no está disponible
-          description: '`1 - pg_up` es mayor que 0 durante 2 minutos, o la métrica desapareció. `up{job="postgres"}=1` con `pg_up=0` apunta a credenciales, red o disponibilidad de la base; si el exporter cae, ambos valores pueden cambiar. Revisar el estado de `db`, los logs de `postgres-exporter` y el rol `sipeg_monitor` sin imprimir secretos.'
+          description: |
+            `1 - pg_up` es mayor que 0 durante 2 minutos, o la métrica desapareció. `up{job="postgres"}=1` con `pg_up=0` apunta a credenciales, red o disponibilidad de la base; si el exporter cae, ambos valores pueden cambiar. Revisar el estado de `db`, los logs de `postgres-exporter` y el rol `sipeg_monitor` sin imprimir secretos.
+            Detalle: indicador 1-pg_up; fallo=1; esperado=0; condición >0 durante 2m. Una serie ausente no equivale a pg_up=0.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -500,7 +596,19 @@ groups:
           component: postgres
         annotations:
           summary: Se usa más del 85% de max_connections
-          description: La suma de `pg_stat_database_numbackends` supera el 85% de `pg_settings_max_connections` durante 5 minutos. Si se acerca al límite, las nuevas conexiones fallarán. Revisar sesiones por estado, conexiones inactivas y el pool de la API; no aumentar max_connections sin comprobar memoria y límites del contenedor.
+          description: |
+            La suma de `pg_stat_database_numbackends` supera el 85% de `pg_settings_max_connections` durante 5 minutos. Si se acerca al límite, las nuevas conexiones fallarán. Revisar sesiones por estado, conexiones inactivas y el pool de la API; no aumentar max_connections sin comprobar memoria y límites del contenedor.
+            Detalle: conexiones usadas en % de max_connections; condición >85 % durante 5m; alcance global de la consulta.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -559,7 +667,19 @@ groups:
           component: docker
         annotations:
           summary: Hay contenedores de servicios cuyo estado no es running
-          description: Al menos un contenedor con `state_code` distinto de 1 se mantiene fuera de ejecución durante 2 minutos. Se excluyen `migrate` y `seed` porque son trabajos one-shot que terminan correctamente. Revisar el estado, los reinicios y los logs del servicio afectado; un estado `restarting` puede indicar un fallo de arranque.
+          description: |
+            Al menos un contenedor con `state_code` distinto de 1 se mantiene fuera de ejecución durante 2 minutos. Se excluyen `migrate` y `seed` porque son trabajos one-shot que terminan correctamente. Revisar el estado, los reinicios y los logs del servicio afectado; un estado `restarting` puede indicar un fallo de arranque.
+            Detalle: cantidad de contenedores no running por proyecto y servicio; condición >0 durante 2m; excluye migrate y seed.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -618,7 +738,7 @@ groups:
           component: docker
         annotations:
           summary: Falta la serie de estado de api, db o cloudflared
-          description: >-
+          description: |
             La consulta usa `absent` para detectar que desaparecieron las series
             de `api`, `db` o `cloudflared`, no solo que estén detenidas. Ocurre
             si Telegraf dejó de recolectar, si el contenedor fue eliminado o si
@@ -628,6 +748,17 @@ groups:
             antes de reiniciar servicios. Si `docker-socket-proxy` está
             unhealthy y HAProxy devuelve 503 `SC--`, recrear el proxy y
             reiniciar Telegraf/Alloy; ver `observability/README.md`.
+            Detalle: indicador de serie de servicio crítico ausente; fallo=1; esperado=0; condición >0 durante 2m. Ausencia de métricas no demuestra por sí sola caída del servicio.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -691,14 +822,19 @@ groups:
           component: availability
         annotations:
           summary: Un probe interno o público lleva 2 minutos fallando
-          description: >-
-            `probe_success=0` en `blackbox-internal` o `blackbox-public` durante
-            2 minutos. Se usa `== bool 0` para que el fallo produzca 1 y la
-            condición clásica > 0 pueda dispararse; `absent` cubre la
-            desaparición de todas las series y `vector(0)` mantiene un cero
-            cuando todos los probes pasan. Un interno en 0 apunta al origen; un
-            público en 0 con el interno en 1 apunta a Cloudflare, al túnel o al
-            recorrido público.
+          description: |
+            Un probe funcional incumple el estado HTTP, el contenido esperado o TLS, o desaparecieron todas las series de probes. Comparar el mismo check entre route=internal y route=public: un fallo solo público orienta al recorrido público, pero no identifica por sí solo la causa. Un HTTP 403 exige revisar cf-mitigated y Security Events; no atribuirlo automáticamente a bots. Un código HTTP 0 puede acompañar errores de conexión, DNS, TLS o timeout; consultar el diagnóstico de Blackbox. Un HTTP 200 también puede fallar por contenido o por authJwksReachable=false. Revisar probe_success, probe_http_status_code, up y el panel Availability. El check api-jwks consulta health y valida authJwksReachable; el check jwks consulta /api/auth/jwks y valida keys. No aceptar 403 como sano ni silenciar la regla para ocultar el fallo. Todas estas comprobaciones salen del mismo VPS: no equivalen a monitoreo externo independiente.
+            Detalle: indicador de probe fallido o ausencia global; fallo=1; esperado=0; condición >0 durante 2m. El valor no es un código HTTP.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -757,7 +893,19 @@ groups:
           component: availability
         annotations:
           summary: El certificado TLS público vence en menos de 7 días
-          description: '`probe_ssl_earliest_cert_expiry` del job `blackbox-public` menos `time()` es menor que 7 días durante 1 hora. Comprobar la fecha de expiración y la renovación automática en Cloudflare. Si el valor es negativo, el certificado ya venció y los probes públicos deberían estar fallando.'
+          description: |
+            `probe_ssl_earliest_cert_expiry` del job `blackbox-public` menos `time()` es menor que 7 días durante 1 hora. Comprobar la fecha de expiración y la renovación automática en Cloudflare. Si el valor es negativo, el certificado ya venció y los probes públicos deberían estar fallando.
+            Detalle: días restantes del certificado TLS público; condición <7 días durante 1h. Un valor negativo indica expiración.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -816,7 +964,19 @@ groups:
           component: api
         annotations:
           summary: El p95 de latencia supera 1 segundo con tráfico suficiente
-          description: El p95 de `sipeg_http_request_duration_seconds` para rutas de negocio supera 1 segundo durante 10 minutos, pero solo si hubo más de 20 solicitudes completadas en 5 minutos. La condición de tráfico forma parte de la misma consulta para no alertar por falta de datos. Revisar latencia por ruta, saturación de PostgreSQL, event loop lag y CPU del proceso.
+          description: |
+            El p95 de `sipeg_http_request_duration_seconds` para rutas de negocio supera 1 segundo durante 10 minutos, pero solo si hubo más de 20 solicitudes completadas en 5 minutos. La condición de tráfico forma parte de la misma consulta para no alertar por falta de datos. Revisar latencia por ruta, saturación de PostgreSQL, event loop lag y CPU del proceso.
+            Detalle: latencia p95 en segundos; condición >1 s durante 10m; requiere más de 20 solicitudes completadas en 5m; alcance global de la consulta.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -875,7 +1035,19 @@ groups:
           component: api
         annotations:
           summary: Más del 5% de respuestas 5xx con tráfico suficiente
-          description: El porcentaje de respuestas 5xx sobre solicitudes completadas de rutas de negocio supera el 5% durante 5 minutos, con al menos 20 solicitudes en la ventana. La condición de tráfico forma parte de la misma consulta. Esta regla es independiente de `sipeg-5xx` de Loki, que conserva su UID y su umbral de conteo.
+          description: |
+            El porcentaje de respuestas 5xx sobre solicitudes completadas de rutas de negocio supera el 5% durante 5 minutos, con más de 20 solicitudes en la ventana. La condición de tráfico forma parte de la misma consulta. Esta regla es independiente de `sipeg-5xx` de Loki, que conserva su UID y su umbral de conteo.
+            Detalle: respuestas 5xx en %; condición >5 % durante 5m; requiere más de 20 solicitudes completadas en 5m; alcance global de la consulta.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
