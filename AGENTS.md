@@ -12,7 +12,7 @@
 - **Scope of this repository**: Node.js backend only.
 - **Frontend**: A separate React frontend consumes this API over HTTP from Cloudflare Workers.
 - **Product goal**: Event management platform for users, event programs, activities, attendance, certificates, classrooms, speaker registration, reports, and statistics.
-- **Runtime target**: Node.js 24.x LTS, or the latest active LTS available in the project environment.
+- **Runtime target**: Node.js 26.13.0 LTS (see `.node-version`), with pnpm 12.16.1.
 - **Backend framework**: Express.
 - **ORM**: Prisma.
 - **Authentication**: Better Auth 1.7.x + plugin JWT. Modulos `auth`, `authorization` y `users` activos, con middlewares `authenticate`/`authorize`, rate limiting y utilitarios de tokens. Ver `docs/adr/adr-0001-time-aware-collaboration-authorization.md`.
@@ -32,7 +32,7 @@
 
 Use these skills as the source of project-specific operating knowledge:
 
-- `writing-plans`: Use for specs or multi-step work before touching code. Plans should map files, include concrete steps, include test commands, avoid placeholders, and be saved under `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md` unless the user chooses another location.
+- `writing-plans`: Use for specs or multi-step work before touching code. Plans should map files, include concrete steps, include test commands, and avoid placeholders. In Plan mode, present the plan only in the conversation; do not save a file. Outside Plan mode, save requested plan files under `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md` unless the user chooses another location within the authorized scope.
 - `executing-plans`: Use when a written plan exists. Review it critically first, track progress with todos, follow steps exactly, run verifications, and stop on unclear instructions or repeated verification failures.
 - `test-driven-development`: Use for new features, bug fixes, refactors, and behavior changes. Write a failing test first, verify the failure, implement the minimum code to pass, then refactor while tests stay green. Documentation-only and simple configuration-only updates do not require TDD unless behavior is affected.
 - `nodejs-backend-patterns`: Use for Express backend structure, middleware, controllers, services, repositories, error handling, logging, health checks, graceful shutdown, database access, and API response patterns.
@@ -48,9 +48,13 @@ Use these skills as the source of project-specific operating knowledge:
 - `architecture-blueprint-generator`: Use when asked to document or analyze the architecture. Generate architecture blueprints from the actual codebase, not from desired theory.
 - `create-architectural-decision-record`: Use when documenting a significant architectural decision. Save ADRs under `docs/adr/adr-NNNN-<title-slug>.md` with the required template.
 - `git-commit`: Use only when the user explicitly asks for a commit. Analyze the actual diff, avoid secrets, stage one logical change, and use Conventional Commits.
+- `cloudflare`: Use for Cloudflare product selection and current guidance. Bundles local references for R2 and Tunnel plus links to the official docs.
+- `cloudflare-one`: Use for Cloudflare Tunnel, Access, Gateway and WARP configuration or troubleshooting.
 
 ## General Workflow Rules
 
+- In Plan mode, do not create, modify, move, or delete files anywhere, including plan files and temporary files. Present plans and proposed changes only in the conversation; do not run commands or tools that write files. Wait until the user exits Plan mode before applying changes.
+- In every mode, do not create, modify, move, or delete files outside the current working directory unless the user explicitly requests that external operation. Tool defaults, skill instructions, temporary directories, global configuration, and worktrees are not implicit authorization; ask first when an external write is needed.
 - Inspect existing files before editing.
 - Preserve existing user changes. Never revert, delete, or overwrite unrelated work unless explicitly requested.
 - Make the smallest correct change that satisfies the task.
@@ -434,6 +438,8 @@ For errors:
 - If API response contracts change, document the effect for the frontend integration.
 - Create ADRs for significant architectural decisions using `docs/adr/adr-NNNN-<title-slug>.md`.
 - Generate architecture blueprints only from actual code and configuration.
+- For any Cloudflare topic (R2, Tunnel, Access, CDN/cache, DNS, Workers), query the project `cloudflare-docs` MCP (`search_cloudflare_documentation`) first and load the `cloudflare` or `cloudflare-one` skill as appropriate. Use Context7 only as a fallback when the official MCP returns nothing; never rely on Context7 for Cloudflare decisions.
+- Cite the official `developers.cloudflare.com` URL and check the page's last-updated date or compatibility dates before applying version-sensitive guidance.
 - Avoid stale TODOs. If a future task is important, document it as a clear follow-up rather than adding vague placeholders.
 
 ## Backend Boundary

@@ -599,6 +599,111 @@ horas** hay que observar el volumen de notificaciones, los falsos positivos, la
 calidad de los datos y el coste de evaluación, y ajustar los umbrales y las
 ventanas con evidencia de producción.
 
+### Cómo interpretar los correos
+
+Las **21 reglas existentes** (15 en `metrics.yaml` y 6 en `rules.yaml`) incluyen
+en `description` el significado del valor, el umbral, la ventana y el detalle de
+las series afectadas. Se conserva `classic_conditions`: hay **una instancia por
+regla**, no una por probe o servicio. `$labels` pierde las etiquetas de consulta
+en este modo; las anotaciones recorren `$values.B0`, `$values.B1`, etc., que
+conservan las etiquetas de las series que incumplen la condición. Las variables
+de anotación usan un solo `$`: Grafana no les aplica la interpolación de
+variables de entorno del provisioning.
+
+Ejemplo ilustrativo de tres probes públicos fallidos (no un incidente real):
+
+```text
+Detalle: indicador de probe fallido o ausencia global; fallo=1; esperado=0; condición >0 durante 2m. El valor no es un código HTTP.
+- valor=1.00; check=api-health; route=public; instance=https://api.sipeg-utp.com/api/v1/health; job=blackbox-public; module=https_health_public
+- valor=1.00; check=api-jwks; route=public; instance=https://api.sipeg-utp.com/api/v1/health; job=blackbox-public; module=https_health_public_jwks
+- valor=1.00; check=jwks; route=public; instance=https://api.sipeg-utp.com/api/auth/jwks; job=blackbox-public; module=https_jwks_public
+```
+
+Solo se imprimen las etiquetas disponibles de esta lista cerrada: `check`,
+`route`, `instance`, `job`, `module`, `service`, `project`, `collector`,
+`mountpoint` y `fstype`. No se vuelcan todas las etiquetas ni se añaden usuarios,
+emails, IPs de clientes o payloads. `instance` identifica un target configurado,
+no una IP de usuario. Si la consulta agrega todo sin etiquetas, aparece
+`alcance=global, sin etiquetas de recurso`; no se inventa un identificador.
+
+| Reglas / señal                                                                  | Significado de `valor`                                                                                                                                          |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Target caído, PostgreSQL no disponible, servicio crítico ausente, probe fallido | Indicador de fallo/ausencia: `1` es alarma; `0` es lo esperado. No es un código HTTP.                                                                           |
+| Antigüedad del recolector de red                                                | Segundos desde la última recolección correcta; `>180 s`, sostenido 2m.                                                                                          |
+| Errores del exporter PostgreSQL                                                 | Indicador de error de scrape o de collector; `>0`, sostenido 5m. Revisar `collector` cuando esté presente.                                                      |
+| CPU, memoria e inodos                                                           | Porcentaje: CPU **utilizada** `>90 %` durante 15m; memoria **disponible** `<10 %` durante 10m; inodos **libres** `<10 %` durante 15m.                           |
+| Disco warning / critical                                                        | Porcentaje **utilizado**: `>80 %` durante 15m / `>90 %` durante 10m; no confundir con inodos.                                                                   |
+| Conexiones PostgreSQL                                                           | Porcentaje del límite de conexiones: `>85 %` durante 5m; agregado global.                                                                                       |
+| Servicio Docker no running                                                      | Número de contenedores afectados por proyecto y servicio; `>0` durante 2m; excluye `migrate` y `seed`.                                                          |
+| Certificado TLS                                                                 | Días restantes: `<7` durante 1h; un valor negativo indica expiración.                                                                                           |
+| Latencia API                                                                    | p95 en segundos: `>1 s` durante 10m, con más de 20 solicitudes completadas en 5m.                                                                               |
+| Ratio HTTP 5xx                                                                  | Porcentaje `>5 %` durante 5m, con más de 20 solicitudes completadas en 5m. No es el conteo de Loki.                                                             |
+| Reglas Loki                                                                     | Conteos en 5m: fatal `>0`, errores inesperados `>5`, respuestas 5xx `>10`, login fallido `>20`, rate limits `>30`. Solo rate limits exige además 2m sostenidos. |
+
+**Disponibilidad: investigar la misma ventana histórica, no solo el estado
+actual.** Identificar `check` y `route` en el correo y filtrar por esas etiquetas
+en Explore. Consultar estas series en el intervalo del incidente y comparar el
+mismo `check` interno y público:
+
+```promql
+probe_success{job=~"blackbox-internal|blackbox-public"}
+probe_http_status_code{job=~"blackbox-internal|blackbox-public"}
+probe_duration_seconds{job=~"blackbox-internal|blackbox-public"}
+up{job=~"blackbox|blackbox-internal|blackbox-public"}
+```
+
+Un interno sano y un público fallido orientan al recorrido público (DNS, TLS,
+edge, túnel), pero no prueban cuál es la causa. Ante un HTTP 403, recoger
+cabeceras **desde el VPS**:
+
+```bash
+curl -sS --max-time 15 -D - -o /dev/null \
+  https://api.sipeg-utp.com/api/v1/health
+```
+
+`cf-mitigated: challenge` confirma una Challenge Page de Cloudflare; correlacionar
+`cf-ray` y hora con Security Events para identificar servicio, acción y regla.
+Filtrar por el Ray ID sin el sufijo del centro de datos. Un 403 sin esa evidencia
+no debe atribuirse automáticamente a bots. HTTP 0 tampoco identifica una causa:
+revisar DNS, conexión, TLS, timeout y el diagnóstico de Blackbox. No crear
+excepciones de seguridad automáticamente ni aceptar un 403 como sano.
+
+HTTP 200 puede incumplir el contenido esperado. `check=api-jwks` consulta health y
+valida `authJwksReachable`; `check=jwks` consulta `/api/auth/jwks` y valida `keys`.
+La alerta no incluye códigos HTTP automáticamente: se consultan en Explore.
+Estos probes salen del mismo VPS, no de un monitor externo independiente.
+La consulta actual detecta la ausencia de **todas** las series de probes; este
+cambio de mensajes no añade detección de la desaparición de cada probe individual.
+
+**Firing/Resolved describen la instancia global de la regla**, no una causa ni la
+salud de todos los servicios. Una evaluación sin entradas `B0`, `B1`, etc. muestra
+un fallback neutral: `Sin detalle de series para esta evaluación…`; no confirma
+salud ni recuperación por sí solo. En NoData/Error, Grafana puede omitir o
+reutilizar anotaciones según el estado: consultar también el error del datasource.
+Una notificación Resolved puede no conservar el detalle original de los probes.
+Para saber cuándo se recuperó cada uno, consultar sus series históricas; no
+deducir tiempos exactos ni causas a partir de «Observed …».
+
+La política sigue igual: **30s** de espera inicial, **5m** entre actualizaciones
+del grupo y **4h** de repetición; agrupa por `grafana_folder` y `alertname`. Una
+anotación que cambia no garantiza un correo nuevo inmediato. Esto conserva la
+agrupación y evita multiplicar las instancias de alerta.
+
+`src/observability/alert-messages.test.ts` protege con snapshots el contrato de
+detección (excluye solo las anotaciones) y los contactos/políticas completos.
+También verifica cobertura de las 21 reglas, las unidades y la lista cerrada de
+etiquetas. **No ejecuta Go templates**: la expansión requiere evaluar instancias
+reales en el Grafana fijado y usar esas anotaciones en una vista previa de
+notificación. Las pruebas sintéticas locales deben mantener SMTP desactivado y
+no alterar servicios de negocio ni reglas provisionadas. El despliegue requiere
+autorización independiente; ver el plan
+`docs/superpowers/plans/2026-11-14-alertas-grafana-especificas.md`.
+
+Referencias: [anotaciones clásicas de Grafana](https://grafana.com/docs/grafana-cloud/observe-and-act/alert-and-measure-reliability/alerting/alerting-rules/templates/examples/),
+[interpolación de provisioning](https://grafana.com/docs/grafana/latest/alerting/set-up/provision-alerting-resources/file-provisioning/),
+[detección de Challenge Pages](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)
+(actualizado 2026-05-05).
+
 ## Verificación
 
 ### Estado aplicado en Grafana

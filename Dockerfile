@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_VERSION=24.21.0
-ARG PNPM_VERSION=12.4.2
+ARG NODE_VERSION=26.13.0
+ARG PNPM_VERSION=12.16.1
 
 FROM node:${NODE_VERSION}-slim AS base
 ARG PNPM_VERSION
@@ -9,9 +9,8 @@ WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates openssl \
     && rm -rf /var/lib/apt/lists/*
-ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 ENV UV_THREADPOOL_SIZE=4
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+RUN npm install --global pnpm@${PNPM_VERSION} && npm cache clean --force
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

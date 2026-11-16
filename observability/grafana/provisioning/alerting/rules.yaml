@@ -18,9 +18,8 @@
 # asi que en un volumen vacio esta es la parte que crea la carpeta `SIPEG UTP` y
 # el UID lo genera Grafana. Por eso `dashboards.yaml` ya no declara `folderUid`.
 #
-# NO hay contact point. Las alertas se evaluan y se ven en la UI
-# (http://127.0.0.1:GRAFANA_PORT/alerting/list), pero no notifican a nadie.
-# Anadirlo es una fase aparte.
+# Las alertas notifican por el contact point sipeg-email, provisionado en
+# contact-points.yaml, con la política de notification-policies.yaml.
 #
 # Umbrales calibrados contra la linea base medida de 24 h en el stack de
 # desarrollo (1460 accesos, 1 five-5xx, 0 fatales). Ver la seccion "Alertas" del
@@ -55,7 +54,7 @@ groups:
           severity: critical
         annotations:
           summary: 'Evento fatal de la API (o JWKS no disponible al arrancar)'
-          description: >-
+          description: |
             La API emitio app.fatal o app.jwks.failed en los ultimos 5 minutos.
             app.fatal es una excepcion no capturada: el proceso muere y el
             contenedor se reinicia. app.jwks.failed impide firmar access tokens,
@@ -63,6 +62,17 @@ groups:
             Umbral >0 porque un solo evento ya es accionable.
             Panel: Errors > Fallos fatales. Correlacion: en Grafana, filtrar por
             requestId del arranque fallido.
+            Detalle: eventos fatales en 5m; condición >0; sin espera adicional; alcance global de la consulta.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -124,13 +134,24 @@ groups:
           severity: critical
         annotations:
           summary: 'Mas de 5 errores inesperados en 5 minutos'
-          description: >-
+          description: |
             http.error.unexpected solo lo emite errorHandler, es decir fallos que
             la aplicacion no previo. Un cuerpo JSON malformado ya NO aparece aqui:
             responde 400 sin log de error. Umbral 5 en 5 min para que un pico
             puntual no avise y una excepcion sostenida si.
             Panel: Errors > Errores inesperados. Para el detalle por tipo, el
             panel de barras agrupa por event y err_type.
+            Detalle: errores inesperados en 5m; condición >5; sin espera adicional; alcance global de la consulta.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -192,13 +213,24 @@ groups:
           severity: critical
         annotations:
           summary: 'Mas de 10 respuestas 5xx en 5 minutos'
-          description: >-
+          description: |
             Cuenta el access log, no los eventos de error, asi que ve tambien los
             5xx que no pasan por errorHandler. Se espera que correlate 1 a 1 con
             la alerta de errores inesperados: si diverge, la causa es un 5xx
             emitido por otro punto de la cadena.
             Panel: Errors > 5xx en el tiempo, y 5xx por ruta para localizar el
             recurso. El requestId de la linea correlaciona con el error.
+            Detalle: respuestas 5xx en 5m; condición >10; sin espera adicional; alcance global de la consulta.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -260,7 +292,7 @@ groups:
           severity: warning
         annotations:
           summary: 'Mas de 20 intentos de login fallidos en 5 minutos'
-          description: >-
+          description: |
             Solo auth.login.failed. Los tokens invalidos y los 403 son señales
             distintas (probe vs. usuario legitimo sin permiso) y tienen sus
             propios paneles. Umbral 20 en 5 min: por encima del limitador de 30
@@ -268,6 +300,17 @@ groups:
             se topa antes con el limitador que con esta alerta.
             Panel: Security > Loginos exitosos vs fallidos, y Fallos de login por
             actor (pseudonimo HMAC, nunca el correo en claro).
+            Detalle: intentos de login fallidos en 5m; condición >20; sin espera adicional; alcance global de la consulta.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -320,9 +363,8 @@ groups:
       - uid: sipeg-rate-limits
         title: 'Rate limits excedidos'
         condition: B
-        # 2 min sostenido: es la unica regla con `for`, y no por suavizar el
-        # pico sino porque su umbral depende de una premisa que todavia no se
-        # cumple en produccion (ver description).
+        # Umbral >30 eventos en 5m, sostenido 2m; se conserva sin recalibración.
+        # Revisar el limitador y la cadena de IP antes de atribuir la causa.
         for: 2m
         noDataState: OK
         execErrState: Alerting
@@ -332,20 +374,21 @@ groups:
           severity: warning
         annotations:
           summary: 'Mas de 30 rate limits en 5 minutos, sostenidos 2 minutos'
-          description: >-
-            Umbral 30 en lugar de los 10 del plan original, y `for: 2m`, por
-            una dependencia que hoy no se cumple en produccion: los limitadores
-            por IP (30/min en login y registro) se agrupan por IP, y detras de un
-            proxy todos los clientes comparten una mientras ese proxy no envie
-            X-Forwarded-For de forma fiable. Con el valor de 10 la alerta
-            quedaria permanentemente disparada en ese escenario. Hay que
-            recalibrarla en cuanto exista el proxy TLS (ADR-0007, Puertos
-            Publicados) y se pueda confirmar la cadena de reenvio.
-            Ademas 10 rate limits en 5 min es trafico normal de una institucion
-            con usuarios compartidos: un formulario de forgot-password reenviado
-            agota el bucket de 3/min por correo.
+          description: |
+            Los rate limits dependen del limitador y de su bucket; usuarios legítimos pueden compartir una IP. El despliegue actual usa Cloudflare Tunnel y trust proxy=1. Revisar el panel de rate limits por limitador y verificar la cadena de IP antes de atribuir un pico a un ataque o recalibrar umbrales. Esta regla cuenta eventos, no usuarios únicos ni direcciones IP únicas.
             Panel: Security > Rate limits por limitador, que dice que endpoint
             esta exhausting.
+            Detalle: rate limits en 5m; condición >30 durante 2m; alcance global de la consulta.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:
@@ -407,10 +450,19 @@ groups:
           severity: warning
         annotations:
           summary: 'El disco raiz del VPS supera el 80% de uso'
-          description: >-
-            node_filesystem_avail_bytes / node_filesystem_size_bytes por encima
-            del 80% en el filesystem raiz durante 15 minutos. Revisar volumenes
-            Docker, backups locales y retencion de Loki.
+          description: |
+            El porcentaje de disco utilizado, calculado como 100 * (1 - bytes disponibles / bytes totales), supera el 80% en el filesystem raíz durante 15 minutos. Revisar volúmenes Docker, backups locales y retención de Loki. Es una señal distinta del agotamiento de inodos.
+            Detalle: disco utilizado en %; condición >80 % durante 15m.
+            {{ $found := false -}}
+            {{ range $key, $value := $values -}}
+            {{ if match "^B[0-9]+$" $key -}}
+            {{ $found = true -}}
+            - valor={{ printf "%.2f" $value.Value }}{{ with $value.Labels.check }}; check={{ . }}{{ end }}{{ with $value.Labels.route }}; route={{ . }}{{ end }}{{ with $value.Labels.instance }}; instance={{ . }}{{ end }}{{ with $value.Labels.job }}; job={{ . }}{{ end }}{{ with $value.Labels.module }}; module={{ . }}{{ end }}{{ with $value.Labels.service }}; service={{ . }}{{ end }}{{ with $value.Labels.project }}; project={{ . }}{{ end }}{{ with $value.Labels.collector }}; collector={{ . }}{{ end }}{{ with $value.Labels.mountpoint }}; mountpoint={{ . }}{{ end }}{{ with $value.Labels.fstype }}; fstype={{ . }}{{ end }}{{ if not $value.Labels }}; alcance=global, sin etiquetas de recurso{{ end }}
+            {{ end -}}
+            {{ end -}}
+            {{ if not $found -}}
+            Sin detalle de series para esta evaluación. Consultar el estado de la regla y los errores del datasource; este texto no confirma por sí solo ni salud ni recuperación.
+            {{ end }}
         data:
           - refId: A
             relativeTimeRange:

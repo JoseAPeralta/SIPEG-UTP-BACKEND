@@ -4,15 +4,15 @@ Backend REST API para SIPEG UTP. Este repositorio contiene solo el backend Node.
 
 ## Requisitos
 
-- Node.js 24.21.x LTS (ver `.node-version`).
-- pnpm 12.4.2 (via corepack).
+- Node.js 26.13.0 LTS (ver `.node-version`).
+- pnpm 12.16.1 (instalado con npm).
 - Docker con Compose v2 para los entornos contenerizados.
 - PostgreSQL 18 (contenedor `postgres:18.6-alpine` o instancia externa).
 
 ## Instalacion
 
 ```bash
-corepack enable
+npm install --global pnpm@12.16.1
 pnpm install
 ```
 

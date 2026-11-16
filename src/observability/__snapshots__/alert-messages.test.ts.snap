@@ -1,0 +1,1757 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`contact-points.yaml: notificaciones > conserva contacto, recuperación, agrupación y frecuencias 1`] = `
+{
+  "apiVersion": 1,
+  "contactPoints": [
+    {
+      "name": "sipeg-email",
+      "orgId": 1,
+      "receivers": [
+        {
+          "disableResolveMessage": false,
+          "settings": {
+            "addresses": "$ALERT_EMAIL_TO",
+            "singleEmail": true,
+          },
+          "type": "email",
+          "uid": "sipeg-email",
+        },
+      ],
+    },
+  ],
+}
+`;
+
+exports[`metrics.yaml: contrato previo > conserva toda la configuración excepto anotaciones 1`] = `
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "folder": "SIPEG UTP",
+      "interval": "1m",
+      "name": "sipeg-metrics-collectors",
+      "orgId": 1,
+      "rules": [
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-operations-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "(up{job=~"node|sipeg-api|postgres|docker|blackbox|blackbox-internal|blackbox-public|prometheus"} == bool 0) or label_replace(absent(up{job="node"}), "job", "node", "", "") or label_replace(absent(up{job="sipeg-api"}), "job", "sipeg-api", "", "") or label_replace(absent(up{job="postgres"}), "job", "postgres", "", "") or label_replace(absent(up{job="docker"}), "job", "docker", "", "") or label_replace(absent(up{job="blackbox"}), "job", "blackbox", "", "") or label_replace(absent(up{job="blackbox-internal"}), "job", "blackbox-internal", "", "") or label_replace(absent(up{job="blackbox-public"}), "job", "blackbox-public", "", "") or label_replace(absent(up{job="prometheus"}), "job", "prometheus", "", "")",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "2m",
+          "labels": {
+            "component": "monitoring",
+            "severity": "critical",
+          },
+          "noDataState": "OK",
+          "panelId": 1,
+          "title": "Target de recolección caído o ausente",
+          "uid": "sipeg-target-down",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-vps-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "time() - sipeg_host_network_collection_timestamp_seconds",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        180,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "2m",
+          "labels": {
+            "component": "host",
+            "severity": "warning",
+          },
+          "noDataState": "Alerting",
+          "panelId": 2,
+          "title": "Red del host sin actualizar",
+          "uid": "sipeg-host-network-stale",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-postgres-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "(pg_exporter_last_scrape_error{job="postgres"} > 0) or (pg_scrape_collector_success{job="postgres"} == bool 0)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "5m",
+          "labels": {
+            "component": "postgres",
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 3,
+          "title": "Errores del PostgreSQL Exporter",
+          "uid": "sipeg-postgres-exporter-errors",
+        },
+      ],
+    },
+    {
+      "folder": "SIPEG UTP",
+      "interval": "1m",
+      "name": "sipeg-metrics-host",
+      "orgId": 1,
+      "rules": [
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-vps-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{job="node",mode="idle"}[5m])))",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        90,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "15m",
+          "labels": {
+            "component": "host",
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 4,
+          "title": "CPU del VPS alta",
+          "uid": "sipeg-host-cpu-high",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-vps-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "100 * node_memory_MemAvailable_bytes{job="node"} / node_memory_MemTotal_bytes{job="node"}",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        10,
+                      ],
+                      "type": "lt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "10m",
+          "labels": {
+            "component": "host",
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 8,
+          "title": "Memoria disponible baja",
+          "uid": "sipeg-host-memory-low",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-vps-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "100 * node_filesystem_files_free{job="node",mountpoint="/"} / node_filesystem_files{job="node",mountpoint="/"}",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        10,
+                      ],
+                      "type": "lt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "15m",
+          "labels": {
+            "component": "host",
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 11,
+          "title": "Inodos del disco raíz bajos",
+          "uid": "sipeg-host-inodes-low",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-vps-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "100 * (1 - node_filesystem_avail_bytes{job="node",mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{job="node",mountpoint="/",fstype!="tmpfs"})",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        90,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "10m",
+          "labels": {
+            "component": "host",
+            "severity": "critical",
+          },
+          "noDataState": "OK",
+          "panelId": 9,
+          "title": "Disco raíz crítico",
+          "uid": "sipeg-disk-critical",
+        },
+      ],
+    },
+    {
+      "folder": "SIPEG UTP",
+      "interval": "1m",
+      "name": "sipeg-metrics-dependencies",
+      "orgId": 1,
+      "rules": [
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-postgres-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "1 - pg_up{job="postgres"}",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "2m",
+          "labels": {
+            "component": "postgres",
+            "severity": "critical",
+          },
+          "noDataState": "Alerting",
+          "panelId": 1,
+          "title": "PostgreSQL caído",
+          "uid": "sipeg-postgres-down",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-postgres-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "100 * sum(pg_stat_database_numbackends{job="postgres"}) / clamp_min(max(pg_settings_max_connections{job="postgres"}), 1)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        85,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "5m",
+          "labels": {
+            "component": "postgres",
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 5,
+          "title": "Conexiones de PostgreSQL altas",
+          "uid": "sipeg-postgres-connections-high",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-docker-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "count by (project, service) (docker_container_status_state_code{job="docker",service!~"migrate|seed"} != 1) > 0",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "2m",
+          "labels": {
+            "component": "docker",
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 1,
+          "title": "Servicio Docker no operativo",
+          "uid": "sipeg-docker-service-not-running",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-docker-overview",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "label_replace(absent(docker_container_status_state_code{service="api"}), "service", "api", "", "") or label_replace(absent(docker_container_status_state_code{service="db"}), "service", "db", "", "") or label_replace(absent(docker_container_status_state_code{service="cloudflared"}), "service", "cloudflared", "", "") or vector(0)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "2m",
+          "labels": {
+            "component": "docker",
+            "severity": "critical",
+          },
+          "noDataState": "Alerting",
+          "panelId": 1,
+          "title": "Servicio Docker crítico ausente",
+          "uid": "sipeg-docker-critical-service-missing",
+        },
+      ],
+    },
+    {
+      "folder": "SIPEG UTP",
+      "interval": "1m",
+      "name": "sipeg-metrics-availability",
+      "orgId": 1,
+      "rules": [
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-availability",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "(probe_success{job=~"blackbox-internal|blackbox-public"} == bool 0) or absent(probe_success{job=~"blackbox-internal|blackbox-public"}) or vector(0)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "2m",
+          "labels": {
+            "component": "availability",
+            "severity": "warning",
+          },
+          "noDataState": "Alerting",
+          "panelId": 1,
+          "title": "Probe de disponibilidad fallido",
+          "uid": "sipeg-probe-failing",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-availability",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "(probe_ssl_earliest_cert_expiry{job="blackbox-public"} - time()) / 86400",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        7,
+                      ],
+                      "type": "lt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "1h",
+          "labels": {
+            "component": "availability",
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 8,
+          "title": "Certificado TLS público por vencer",
+          "uid": "sipeg-tls-expiring",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-api-http",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "histogram_quantile(0.95, sum by (le) (rate(sipeg_http_request_duration_seconds_bucket{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m]))) and on() (sum(increase(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])) > 20)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        1,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "10m",
+          "labels": {
+            "component": "api",
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 7,
+          "title": "Latencia p95 de la API alta",
+          "uid": "sipeg-api-latency-high",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-api-http",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "(100 * sum(rate(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health",status_code=~"5.."}[5m])) / clamp_min(sum(rate(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])), 0.000000001)) and on() (sum(increase(sipeg_http_requests_total{job="sipeg-api",outcome="completed",request_kind="matched",route=~"/api/v1/.*",route!="/api/v1/health"}[5m])) > 20)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        5,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "5m",
+          "labels": {
+            "component": "api",
+            "severity": "critical",
+          },
+          "noDataState": "OK",
+          "panelId": 2,
+          "title": "Ratio de errores 5xx de la API alto",
+          "uid": "sipeg-http-5xx-ratio",
+        },
+      ],
+    },
+  ],
+}
+`;
+
+exports[`notification-policies.yaml: notificaciones > conserva contacto, recuperación, agrupación y frecuencias 1`] = `
+{
+  "apiVersion": 1,
+  "policies": [
+    {
+      "group_by": [
+        "grafana_folder",
+        "alertname",
+      ],
+      "group_interval": "5m",
+      "group_wait": "30s",
+      "orgId": 1,
+      "receiver": "sipeg-email",
+      "repeat_interval": "4h",
+    },
+  ],
+}
+`;
+
+exports[`rules.yaml: contrato previo > conserva toda la configuración excepto anotaciones 1`] = `
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "folder": "SIPEG UTP",
+      "interval": "1m",
+      "name": "sipeg-api",
+      "orgId": 1,
+      "rules": [
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-errors",
+          "data": [
+            {
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki",
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service="sipeg-utp-backend", log_type="infrastructure"} | event=~"app[.]fatal|app[.]jwks[.]failed" [5m])) or vector(0)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        0,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "0s",
+          "labels": {
+            "severity": "critical",
+          },
+          "noDataState": "OK",
+          "panelId": 4,
+          "title": "Proceso: evento fatal",
+          "uid": "sipeg-fatal",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-errors",
+          "data": [
+            {
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki",
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service="sipeg-utp-backend", log_type="application"} | event="http.error.unexpected" [5m])) or vector(0)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        5,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "0s",
+          "labels": {
+            "severity": "critical",
+          },
+          "noDataState": "OK",
+          "panelId": 1,
+          "title": "Errores inesperados de la aplicacion",
+          "uid": "sipeg-unexpected-errors",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-errors",
+          "data": [
+            {
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki",
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service="sipeg-utp-backend", log_type="access"} | statusCode=~"5.." [5m])) or vector(0)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        10,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "0s",
+          "labels": {
+            "severity": "critical",
+          },
+          "noDataState": "OK",
+          "panelId": 7,
+          "title": "Respuestas 5xx",
+          "uid": "sipeg-5xx",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-security",
+          "data": [
+            {
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki",
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service="sipeg-utp-backend", log_type="security"} | event="auth.login.failed" [5m])) or vector(0)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        20,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "0s",
+          "labels": {
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 6,
+          "title": "Fallos de autenticacion",
+          "uid": "sipeg-auth-failures",
+        },
+        {
+          "condition": "B",
+          "dashboardUid": "sipeg-security",
+          "data": [
+            {
+              "datasourceUid": "loki",
+              "model": {
+                "datasource": {
+                  "type": "loki",
+                  "uid": "loki",
+                },
+                "editorMode": "code",
+                "expr": "sum(count_over_time({service="sipeg-utp-backend", log_type="security"} | event="rate_limit.exceeded" [5m])) or vector(0)",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "queryType": "instant",
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 300,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        30,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "2m",
+          "labels": {
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "panelId": 4,
+          "title": "Rate limits excedidos",
+          "uid": "sipeg-rate-limits",
+        },
+      ],
+    },
+    {
+      "folder": "SIPEG UTP",
+      "interval": "5m",
+      "name": "sipeg-host",
+      "orgId": 1,
+      "rules": [
+        {
+          "condition": "B",
+          "data": [
+            {
+              "datasourceUid": "prometheus",
+              "model": {
+                "datasource": {
+                  "type": "prometheus",
+                  "uid": "prometheus",
+                },
+                "editorMode": "code",
+                "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"})",
+                "instant": true,
+                "intervalMs": 1000,
+                "maxDataPoints": 43200,
+                "refId": "A",
+              },
+              "queryType": "instant",
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 900,
+                "to": 0,
+              },
+            },
+            {
+              "datasourceUid": "__expr__",
+              "model": {
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "params": [
+                        80,
+                      ],
+                      "type": "gt",
+                    },
+                    "operator": {
+                      "type": "and",
+                    },
+                    "query": {
+                      "params": [
+                        "A",
+                      ],
+                    },
+                    "reducer": {
+                      "params": [],
+                      "type": "last",
+                    },
+                    "type": "query",
+                  },
+                ],
+                "datasource": {
+                  "type": "__expr__",
+                  "uid": "__expr__",
+                },
+                "expression": "A",
+                "refId": "B",
+                "type": "classic_conditions",
+              },
+              "queryType": "",
+              "refId": "B",
+              "relativeTimeRange": {
+                "from": 0,
+                "to": 0,
+              },
+            },
+          ],
+          "execErrState": "Alerting",
+          "for": "15m",
+          "labels": {
+            "severity": "warning",
+          },
+          "noDataState": "OK",
+          "title": "Host: disco por encima del 80%",
+          "uid": "sipeg-disk-full",
+        },
+      ],
+    },
+  ],
+}
+`;
